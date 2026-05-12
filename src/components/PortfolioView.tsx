@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Percent, Target, AlertCircle, Calendar, MapPin, Activity } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Percent, Target, AlertCircle, Calendar, MapPin } from 'lucide-react';
 import { supabase, Location, PLLineItem } from '../lib/supabase';
 import { useCurrentFiscalPeriod } from '../lib/useFiscalCalendar';
 import { useLocationFilter } from '../lib/useLocationFilter';
@@ -25,17 +25,6 @@ type PortfolioMetrics = {
   ytdEbitdaBudget: number;
 };
 
-type WTDMetrics = {
-  wtdSales: number;
-  wtdSalesVsProjections: number;
-  bohLabourActualPct: number;
-  bohLabourBudgetPct: number;
-  bohLabourDollarsVsSales: number;
-  substandardDollars: number;
-  substandardPct: number;
-  slpDate: string;
-} | null;
-
 type RegionalMetrics = {
   region: string;
   foodSales: number;
@@ -52,61 +41,13 @@ type PortfolioViewProps = {
 export default function PortfolioView({ weekEndingDate }: PortfolioViewProps) {
   const [metrics, setMetrics] = useState<PortfolioMetrics | null>(null);
   const [regionalMetrics, setRegionalMetrics] = useState<RegionalMetrics[]>([]);
-  const [wtdMetrics, setWtdMetrics] = useState<WTDMetrics>(null);
   const [loading, setLoading] = useState(true);
   const { currentPeriod } = useCurrentFiscalPeriod();
   const locationFilter = useLocationFilter('portfolio');
 
   useEffect(() => {
     loadPortfolioData();
-    loadWTDMetrics();
   }, [weekEndingDate, locationFilter.isFiltered, locationFilter.preferredLocations]);
-
-  const loadWTDMetrics = async () => {
-    const { data: latestReport } = await supabase
-      .from('slp_reports')
-      .select('id, report_date')
-      .order('report_date', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (!latestReport) return;
-
-    const [{ data: salesData }, { data: labourData }, { data: promoData }] = await Promise.all([
-      supabase
-        .from('slp_sales_data')
-        .select('total_wtd_sales, wtd_sales_vs_projections')
-        .eq('report_id', latestReport.id)
-        .eq('location_name', '__TOTAL__')
-        .maybeSingle(),
-      supabase
-        .from('slp_labor_data')
-        .select('wtd_labour_actual_pct, labour_budget_pct, wtd_labour_dollars_vs_sales')
-        .eq('report_id', latestReport.id)
-        .eq('location_name', '__TOTAL__')
-        .eq('department', 'BOH')
-        .maybeSingle(),
-      supabase
-        .from('slp_promo_data')
-        .select('substandard_dollars, total_promo_pct')
-        .eq('report_id', latestReport.id)
-        .eq('location_name', '__TOTAL__')
-        .maybeSingle(),
-    ]);
-
-    if (!salesData || !labourData || !promoData) return;
-
-    setWtdMetrics({
-      wtdSales: Number(salesData.total_wtd_sales) || 0,
-      wtdSalesVsProjections: Number(salesData.wtd_sales_vs_projections) || 0,
-      bohLabourActualPct: Number(labourData.wtd_labour_actual_pct) || 0,
-      bohLabourBudgetPct: Number(labourData.labour_budget_pct) || 0,
-      bohLabourDollarsVsSales: Number(labourData.wtd_labour_dollars_vs_sales) || 0,
-      substandardDollars: Number(promoData.substandard_dollars) || 0,
-      substandardPct: Number(promoData.total_promo_pct) || 0,
-      slpDate: latestReport.report_date,
-    });
-  };
 
   const loadPortfolioData = async () => {
     setLoading(true);
@@ -366,70 +307,6 @@ export default function PortfolioView({ weekEndingDate }: PortfolioViewProps) {
           )}
         </div>
       </div>
-
-      {wtdMetrics && (
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-semibold text-slate-800">Week to Date (WTD)</h3>
-            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-md">
-              SLP {new Date(wtdMetrics.slpDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-sm font-medium text-slate-500">WTD Food Sales</div>
-                <DollarSign className="w-4 h-4 text-slate-400" />
-              </div>
-              <div className="text-2xl font-bold text-slate-800 mb-1">
-                {formatCurrency(wtdMetrics.wtdSales)}
-              </div>
-              <div className={`flex items-center gap-1 text-xs font-semibold mt-1 ${wtdMetrics.wtdSalesVsProjections >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {wtdMetrics.wtdSalesVsProjections >= 0
-                  ? <TrendingUp className="w-3 h-3" />
-                  : <TrendingDown className="w-3 h-3" />}
-                <span>{wtdMetrics.wtdSalesVsProjections >= 0 ? '+' : ''}{formatCurrency(wtdMetrics.wtdSalesVsProjections)} vs projected</span>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-sm font-medium text-slate-500">WTD BOH Labour</div>
-                <Activity className="w-4 h-4 text-slate-400" />
-              </div>
-              <div className="flex items-baseline gap-2 mb-1">
-                <div className={`text-2xl font-bold ${wtdMetrics.bohLabourActualPct > wtdMetrics.bohLabourBudgetPct ? 'text-red-600' : 'text-green-600'}`}>
-                  {formatPercent(wtdMetrics.bohLabourActualPct)}
-                </div>
-                <div className="text-sm text-slate-400">vs {formatPercent(wtdMetrics.bohLabourBudgetPct)} budget</div>
-              </div>
-              <div className={`flex items-center gap-1 text-xs font-semibold mt-1 ${wtdMetrics.bohLabourDollarsVsSales <= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {wtdMetrics.bohLabourDollarsVsSales <= 0
-                  ? <TrendingDown className="w-3 h-3" />
-                  : <TrendingUp className="w-3 h-3" />}
-                <span>
-                  {wtdMetrics.bohLabourDollarsVsSales >= 0 ? '+' : ''}{formatCurrency(wtdMetrics.bohLabourDollarsVsSales)} $ variance
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-sm font-medium text-slate-500">WTD Substandard Promos</div>
-                <Percent className="w-4 h-4 text-slate-400" />
-              </div>
-              <div className="flex items-baseline gap-2 mb-1">
-                <div className={`text-2xl font-bold ${wtdMetrics.substandardPct > 0.5 ? 'text-red-600' : 'text-slate-800'}`}>
-                  {formatCurrency(wtdMetrics.substandardDollars)}
-                </div>
-              </div>
-              <div className="text-xs text-slate-500 mt-1">
-                {formatPercent(wtdMetrics.substandardPct)} of sales
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div>
         <h3 className="text-lg font-semibold text-slate-800 mb-3">Period to Date (PTD)</h3>

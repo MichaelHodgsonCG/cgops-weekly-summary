@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
-import { Settings, Users, MapPin, LogOut, Shield, ChefHat, Link2, Calendar, Lock, DollarSign, FileUp } from 'lucide-react';
+import { Settings, Users, MapPin, LogOut, Shield, ChefHat, Calendar, Lock, DollarSign } from 'lucide-react';
 import { UsersManager } from './UsersManager';
 import LocationsManager from './LocationsManager';
 import { RolesManager } from './RolesManager';
 import { ChefSummariesManager } from './ChefSummariesManager';
-import LocationMappingsManager from './LocationMappingsManager';
 import FiscalCalendarManager from './FiscalCalendarManager';
 import PermissionsManager from './PermissionsManager';
 import { PLAdjustments } from './PLAdjustments';
-import ReviewCSVImporter from './ReviewCSVImporter';
 import { useAuth } from '../lib/auth';
 
 interface AdminMenuProps {
@@ -17,7 +15,7 @@ interface AdminMenuProps {
 
 export function AdminMenu({ onClose }: AdminMenuProps) {
   const { logout } = useAuth();
-  const [activeSection, setActiveSection] = useState<'users' | 'locations' | 'roles' | 'permissions' | 'chef-summaries' | 'location-mappings' | 'fiscal-calendar' | 'pl-adjustments' | 'import-reviews'>('users');
+  const [activeSection, setActiveSection] = useState<'users' | 'locations' | 'roles' | 'permissions' | 'chef-summaries' | 'fiscal-calendar' | 'pl-adjustments'>('users');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleSignOut = () => {
@@ -100,17 +98,6 @@ export function AdminMenu({ onClose }: AdminMenuProps) {
             <span className="font-medium">Chef Summaries</span>
           </button>
           <button
-            onClick={() => setActiveSection('location-mappings')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-              activeSection === 'location-mappings'
-                ? 'bg-slate-800 text-white'
-                : 'text-slate-700 hover:bg-slate-100'
-            }`}
-          >
-            <Link2 className="w-5 h-5" />
-            <span className="font-medium">Location Mappings</span>
-          </button>
-          <button
             onClick={() => setActiveSection('fiscal-calendar')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
               activeSection === 'fiscal-calendar'
@@ -132,17 +119,6 @@ export function AdminMenu({ onClose }: AdminMenuProps) {
             <DollarSign className="w-5 h-5" />
             <span className="font-medium">P&L Adjustments</span>
           </button>
-          <button
-            onClick={() => setActiveSection('import-reviews')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-              activeSection === 'import-reviews'
-                ? 'bg-slate-800 text-white'
-                : 'text-slate-700 hover:bg-slate-100'
-            }`}
-          >
-            <FileUp className="w-5 h-5" />
-            <span className="font-medium">Import Reviews</span>
-          </button>
         </nav>
 
         <div className={`p-4 border-t border-slate-200 ${mobileMenuOpen ? 'block' : 'hidden'} md:block`}>
@@ -163,10 +139,8 @@ export function AdminMenu({ onClose }: AdminMenuProps) {
           {activeSection === 'roles' && <RolesManager />}
           {activeSection === 'permissions' && <PermissionsManager />}
           {activeSection === 'chef-summaries' && <ChefSummariesManager />}
-          {activeSection === 'location-mappings' && <LocationMappingsManager />}
           {activeSection === 'fiscal-calendar' && <FiscalCalendarManager />}
           {activeSection === 'pl-adjustments' && <PLAdjustments />}
-          {activeSection === 'import-reviews' && <ReviewCSVImporter />}
         </div>
       </div>
     </div>

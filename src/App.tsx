@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, BarChart3, Trophy, TrendingUp, Menu, X, Briefcase, FileText, LogOut, Settings, MessageSquare, User, Book, Home } from 'lucide-react';
+import { LayoutDashboard, BarChart3, Trophy, TrendingUp, Menu, X, LogOut, Settings, User, Book } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import LocationDetail from './components/LocationDetail';
 import UploadPage from './components/UploadPage';
@@ -7,10 +7,6 @@ import ComparisonView from './components/ComparisonView';
 import RankingsView from './components/RankingsView';
 import TrendsView from './components/TrendsView';
 import PortfolioView from './components/PortfolioView';
-import SLPView from './components/SLPView';
-import LogsView from './components/LogsView';
-import GuestFeedbackView from './components/GuestFeedbackView';
-import HQHomeDashboard from './components/HQHomeDashboard';
 import { LoginPage } from './components/LoginPage';
 import { AdminMenu } from './components/AdminMenu';
 import { LocationDashboard } from './components/LocationDashboard';
@@ -20,163 +16,8 @@ import UserSettings from './components/UserSettings';
 import { useAuth } from './lib/auth';
 import { supabase } from './lib/supabase';
 
-type View = 'dashboard' | 'upload' | 'detail' | 'portfolio' | 'compare' | 'rankings' | 'trends' | 'slp' | 'logs' | 'feedback' | 'admin' | 'settings' | 'chef-summary' | 'chef';
-type HQView = 'home' | 'slp' | 'logs' | 'feedback' | 'settings';
+type View = 'dashboard' | 'upload' | 'detail' | 'portfolio' | 'compare' | 'rankings' | 'trends' | 'admin' | 'settings' | 'chef-summary' | 'chef';
 
-function HQAppContent() {
-  const { user, logout } = useAuth();
-  const [view, setView] = useState<HQView>('home');
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  const navigationItems = [
-    { id: 'home' as HQView, label: 'Home', icon: Home, mobile: true },
-    { id: 'slp' as HQView, label: 'SLP', icon: Briefcase, mobile: true },
-    { id: 'logs' as HQView, label: 'Logs', icon: FileText, mobile: true },
-    { id: 'feedback' as HQView, label: 'Reviews', icon: MessageSquare, mobile: true },
-  ];
-
-  const handleViewChange = (newView: HQView) => {
-    setView(newView);
-    setMobileMenuOpen(false);
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-50 pb-20 md:pb-0">
-      <nav className="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm">
-        <div className="hidden md:block bg-slate-50 border-b border-slate-200">
-          <div className="max-w-7xl mx-auto px-6">
-            <div className="flex items-center justify-between h-12">
-              <h1 className="text-lg font-bold text-slate-800">Restaurant Analytics</h1>
-              {user && (
-                <div className="text-sm text-slate-600">
-                  Welcome, <span className="font-medium">{user.name}</span>
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleViewChange('settings')}
-                  className="flex items-center gap-2 px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium transition-colors"
-                >
-                  <User className="w-4 h-4" />
-                  <span>Settings</span>
-                </button>
-                <button
-                  onClick={logout}
-                  className="flex items-center gap-2 px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium transition-colors"
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span>Sign Out</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="flex items-center justify-between h-16 md:h-14">
-            <div className="flex items-center gap-3 md:hidden">
-              <h1 className="text-base font-bold text-slate-800">Restaurant Analytics</h1>
-            </div>
-
-            <div className="hidden md:flex items-center justify-center gap-2 flex-1">
-              {navigationItems.map(item => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => handleViewChange(item.id)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                      view === item.id
-                        ? 'bg-slate-800 text-white shadow-sm'
-                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden ml-auto p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
-            >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
-          </div>
-        </div>
-
-        {mobileMenuOpen && (
-          <div className="md:hidden border-t border-slate-200 bg-white">
-            <div className="px-4 py-3 space-y-1">
-              {navigationItems.map(item => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => handleViewChange(item.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                      view === item.id
-                        ? 'bg-slate-800 text-white'
-                        : 'text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Icon className="w-5 h-5" />
-                    {item.label}
-                  </button>
-                );
-              })}
-              <button
-                onClick={() => handleViewChange('settings')}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
-              >
-                <User className="w-5 h-5" />
-                Settings
-              </button>
-              <button
-                onClick={logout}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
-              >
-                <LogOut className="w-5 h-5" />
-                Sign Out
-              </button>
-            </div>
-          </div>
-        )}
-      </nav>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        {view === 'home' && <HQHomeDashboard onNavigate={handleViewChange} />}
-        {view === 'slp' && <SLPView />}
-        {view === 'logs' && <LogsView />}
-        {view === 'feedback' && <GuestFeedbackView />}
-        {view === 'settings' && <UserSettings />}
-      </div>
-
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-20">
-        <div className="grid grid-cols-4 gap-1 p-2">
-          {navigationItems.map(item => {
-            const Icon = item.icon;
-            const isActive = view === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleViewChange(item.id)}
-                className={`flex flex-col items-center gap-1 px-2 py-2 rounded-lg text-xs font-medium transition-colors ${
-                  isActive ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                <span className="truncate">{item.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function AppContent() {
   const { user, logout, isAdmin, isHQ } = useAuth();
@@ -187,7 +28,7 @@ function AppContent() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   if (isHQ) {
-    return <HQAppContent />;
+    return <LocationDashboard />;
   }
 
   if (!isAdmin) {
@@ -234,11 +75,8 @@ function AppContent() {
     { id: 'portfolio' as View, label: 'Home', icon: BarChart3, mobile: true },
     { id: 'rankings' as View, label: 'Leaderboard', icon: Trophy, mobile: true },
     { id: 'dashboard' as View, label: 'P&L', icon: LayoutDashboard, mobile: true },
-    { id: 'trends' as View, label: 'Trends', icon: TrendingUp, mobile: false },
-    { id: 'slp' as View, label: 'SLP', icon: Briefcase, mobile: true },
+    { id: 'trends' as View, label: 'Trends', icon: TrendingUp, mobile: true },
     { id: 'chef' as View, label: 'Chef', icon: Book, mobile: true },
-    { id: 'logs' as View, label: 'Logs', icon: FileText, mobile: true },
-    { id: 'feedback' as View, label: 'Reviews', icon: MessageSquare, mobile: true }
   ];
 
   return (
@@ -382,11 +220,8 @@ function AppContent() {
         {view === 'compare' && selectedWeek && <ComparisonView weekEndingDate={selectedWeek} />}
         {view === 'rankings' && selectedWeek && <RankingsView weekEndingDate={selectedWeek} />}
         {view === 'trends' && selectedWeek && <TrendsView weekEndingDate={selectedWeek} />}
-        {view === 'slp' && <SLPView />}
         {view === 'chef' && <ChefConsolidationView />}
         {view === 'chef-summary' && <ChefSummaryDashboard />}
-        {view === 'logs' && <LogsView />}
-        {view === 'feedback' && <GuestFeedbackView />}
         {view === 'dashboard' && (
           <Dashboard
             onLocationClick={handleLocationClick}
@@ -408,7 +243,7 @@ function AppContent() {
       </div>
 
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-20">
-        <div className="grid grid-cols-7 gap-1 p-2">
+        <div className="grid grid-cols-5 gap-1 p-2">
           {navigationItems.filter(item => item.mobile).map(item => {
             const Icon = item.icon;
             const isActive = view === item.id || (view === 'detail' && item.id === 'dashboard');
