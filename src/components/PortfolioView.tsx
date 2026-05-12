@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Percent, Target, AlertCircle, Calendar, MapPin } from 'lucide-react';
-import { supabase, Location, PLLineItem } from '../lib/supabase';
+import { supabase, Location, PLLineItem, getRegionDisplayName } from '../lib/supabase';
 import { useCurrentFiscalPeriod } from '../lib/useFiscalCalendar';
 import { useLocationFilter } from '../lib/useLocationFilter';
 
@@ -482,7 +482,7 @@ export default function PortfolioView({ weekEndingDate }: PortfolioViewProps) {
             {regionalMetrics.map(region => (
               <div key={region.region} className="p-4 bg-slate-50 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-semibold text-slate-800">{region.region} Region</h4>
+                  <h4 className="font-semibold text-slate-800">{getRegionDisplayName(region.region)}</h4>
                   <span className="text-xs text-slate-500">{region.locationCount} locations</span>
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-sm">

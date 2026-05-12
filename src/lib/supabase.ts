@@ -63,3 +63,12 @@ export type RolePermission = {
   permission_id: string;
   created_at: string;
 };
+
+const regionDisplayNames: Record<string, string> = {
+  Beertown: 'Beertown/SKT',
+  Signature: 'Trinity',
+};
+
+export function getRegionDisplayName(region: string): string {
+  return regionDisplayNames[region] || region;
+}

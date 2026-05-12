@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, Calendar, ChevronRight, Upload, AlertCircle, CheckCircle, ChevronDown } from 'lucide-react';
-import { supabase, Location, PLLineItem } from '../lib/supabase';
+import { supabase, Location, PLLineItem, getRegionDisplayName } from '../lib/supabase';
 import { parseCSV, ParsedLineItem } from '../lib/csvParser';
 import { parseExcel } from '../lib/excelParser';
 
@@ -632,7 +632,7 @@ export default function Dashboard({
                       />
                       <span className="text-sm font-medium text-slate-800">{location.name}</span>
                       {location.region && (
-                        <span className="ml-auto text-xs text-slate-500">{location.region}</span>
+                        <span className="ml-auto text-xs text-slate-500">{getRegionDisplayName(location.region)}</span>
                       )}
                     </label>
                   ))}
@@ -669,7 +669,7 @@ export default function Dashboard({
                   <div className="bg-slate-800 px-4 py-3">
                     <h3 className="text-base font-semibold text-white truncate">{location.name}</h3>
                     {location.region && (
-                      <span className="text-xs text-slate-300">{location.region} Region</span>
+                      <span className="text-xs text-slate-300">{getRegionDisplayName(location.region)}</span>
                     )}
                   </div>
 
@@ -736,7 +736,7 @@ export default function Dashboard({
                     <div>
                       <h3 className="text-base font-semibold text-white">{location.name}</h3>
                       {location.region && (
-                        <span className="text-xs text-slate-300">{location.region} Region</span>
+                        <span className="text-xs text-slate-300">{getRegionDisplayName(location.region)}</span>
                       )}
                     </div>
                   </div>

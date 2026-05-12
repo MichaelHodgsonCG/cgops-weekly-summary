@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, ChevronDown, TrendingUp, TrendingDown } from 'lucide-react';
-import { supabase, Location, PLLineItem } from '../lib/supabase';
+import { supabase, Location, PLLineItem, getRegionDisplayName } from '../lib/supabase';
 
 type LocationComparison = {
   location: Location;
@@ -188,7 +188,7 @@ export default function ComparisonView({ weekEndingDate }: ComparisonViewProps) 
                   />
                   <span className="text-sm font-medium text-slate-800">{location.name}</span>
                   {location.region && (
-                    <span className="ml-auto text-xs text-slate-500">{location.region}</span>
+                    <span className="ml-auto text-xs text-slate-500">{getRegionDisplayName(location.region)}</span>
                   )}
                 </label>
               ))}
@@ -218,7 +218,7 @@ export default function ComparisonView({ weekEndingDate }: ComparisonViewProps) 
               <div className="bg-slate-800 px-4 py-3">
                 <h3 className="text-base font-semibold text-white truncate">{location.name}</h3>
                 {location.region && (
-                  <span className="text-xs text-slate-300">{location.region} Region</span>
+                  <span className="text-xs text-slate-300">{getRegionDisplayName(location.region)}</span>
                 )}
               </div>
 
@@ -280,7 +280,7 @@ export default function ComparisonView({ weekEndingDate }: ComparisonViewProps) 
                 <div>
                   <h3 className="text-base font-semibold text-white">{location.name}</h3>
                   {location.region && (
-                    <span className="text-xs text-slate-300">{location.region} Region</span>
+                    <span className="text-xs text-slate-300">{getRegionDisplayName(location.region)}</span>
                   )}
                 </div>
               </div>
