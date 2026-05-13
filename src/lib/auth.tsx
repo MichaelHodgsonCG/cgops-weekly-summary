@@ -42,9 +42,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('user');
   };
 
-  const isAdmin = user?.role?.toLowerCase() === 'admin';
-  const isHQ = user?.role?.toLowerCase() === 'hq';
-  const isExecChef = user?.role?.toLowerCase() === 'exec chef';
+  const normalizedRole = (user?.role || '').toLowerCase().trim();
+  const isAdmin = normalizedRole === 'admin';
+  const isHQ = normalizedRole === 'hq';
+  const isExecChef = normalizedRole.includes('exec');
 
   return (
     <AuthContext.Provider value={{ user, login, logout, isAdmin, isHQ, isExecChef }}>
