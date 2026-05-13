@@ -73,8 +73,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const locationName = selectedLocationName.toLowerCase().trim();
       const isAdmin = user.role?.toLowerCase() === 'admin';
       const isHQ = user.role?.toLowerCase() === 'hq';
+      const isExecChef = user.role?.toLowerCase() === 'exec chef';
 
-      if (!isAdmin && !isHQ && userRestaurant !== locationName) {
+      if (!isAdmin && !isHQ && !isExecChef && userRestaurant !== locationName) {
         setError('PIN does not match the selected location.');
         setPin('');
         setLoading(false);

@@ -20,14 +20,14 @@ type View = 'dashboard' | 'upload' | 'detail' | 'portfolio' | 'compare' | 'ranki
 
 
 function AppContent() {
-  const { user, logout, isAdmin, isHQ } = useAuth();
+  const { user, logout, isAdmin, isHQ, isExecChef } = useAuth();
   const [view, setView] = useState<View>('portfolio');
   const [selectedLocation, setSelectedLocation] = useState<string>('');
   const [selectedWeek, setSelectedWeek] = useState<string>('');
   const [availableWeeks, setAvailableWeeks] = useState<string[]>([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  if (isHQ) {
+  if (isHQ || isExecChef) {
     return <LocationDashboard />;
   }
 
