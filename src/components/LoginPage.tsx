@@ -52,7 +52,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     setLoading(true);
 
     try {
-      const selectedLocationName = locations.find(l => l.id === selectedLocation)?.name || '';
+      const selectedLocationName = selectedLocation === 'hq' ? 'HQ' : (locations.find(l => l.id === selectedLocation)?.name || '');
 
       const { data: user, error: dbError } = await supabase
         .from('users')
@@ -71,9 +71,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
       const userRestaurant = (user.restaurant || '').toLowerCase().trim();
       const locationName = selectedLocationName.toLowerCase().trim();
-      const isAdmin = user.role?.toLowerCase() === 'admin';
-      const isHQ = user.role?.toLowerCase() === 'hq';
-      const isExecChef = user.role?.toLowerCase() === 'exec chef';
+      const userRole = (user.role || '').toLowerCase().trim();
+      const isAdmin = userRole === 'admin';
+      const isHQ = userRole === 'hq';
+      const isExecChef = userRole.includes('exec') || userRole.includes('chef');
 
       if (!isAdmin && !isHQ && !isExecChef && userRestaurant !== locationName) {
         setError('PIN does not match the selected location.');
@@ -131,6 +132,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                     className="w-full appearance-none px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-gray-800 cursor-pointer"
                   >
                     <option value="">Select your location...</option>
+                    <option value="hq">HQ</option>
                     {locations.map((loc) => (
                       <option key={loc.id} value={loc.id}>
                         {loc.name}
