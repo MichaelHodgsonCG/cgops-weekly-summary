@@ -27,17 +27,13 @@ function AppContent() {
   const [availableWeeks, setAvailableWeeks] = useState<string[]>([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  if (isHQ || isExecChef) {
-    return <LocationDashboard />;
-  }
-
-  if (!isAdmin) {
-    return <LocationDashboard />;
-  }
+  const hasHQAccess = isAdmin || isHQ || isExecChef;
 
   useEffect(() => {
-    loadAvailableWeeks();
-  }, []);
+    if (hasHQAccess) {
+      loadAvailableWeeks();
+    }
+  }, [hasHQAccess]);
 
   const loadAvailableWeeks = async () => {
     const { data, error } = await supabase
@@ -53,6 +49,10 @@ function AppContent() {
       }
     }
   };
+
+  if (!hasHQAccess) {
+    return <LocationDashboard />;
+  }
 
   const handleLocationClick = (locationId: string, weekEndingDate: string) => {
     setSelectedLocation(locationId);
@@ -103,14 +103,16 @@ function AppContent() {
                   <span>Settings</span>
                 </button>
 
-                <button
-                  onClick={() => handleViewChange('admin')}
-                  className="flex items-center gap-2 px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium transition-colors"
-                  title="Admin Panel"
-                >
-                  <Settings className="w-4 h-4" />
-                  <span>Admin</span>
-                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => handleViewChange('admin')}
+                    className="flex items-center gap-2 px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium transition-colors"
+                    title="Admin Panel"
+                  >
+                    <Settings className="w-4 h-4" />
+                    <span>Admin</span>
+                  </button>
+                )}
 
                 {view !== 'admin' && view !== 'settings' && (
                   <button
@@ -194,13 +196,15 @@ function AppContent() {
                 <User className="w-5 h-5" />
                 Settings
               </button>
-              <button
-                onClick={() => handleViewChange('admin')}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
-              >
-                <Settings className="w-5 h-5" />
-                Admin Panel
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => handleViewChange('admin')}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  <Settings className="w-5 h-5" />
+                  Admin Panel
+                </button>
+              )}
               {view !== 'admin' && view !== 'settings' && (
                 <button
                   onClick={logout}
