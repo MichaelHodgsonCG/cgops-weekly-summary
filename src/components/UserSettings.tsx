@@ -4,7 +4,8 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 
 export default function UserSettings() {
-  const { user } = useAuth();
+  const { user, isAdmin, isHQ, isExecChef } = useAuth();
+  const hasHQAccess = isAdmin || isHQ || isExecChef;
   const [name, setName] = useState('');
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -283,107 +284,109 @@ export default function UserSettings() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="bg-gradient-to-r from-slate-700 to-slate-600 px-6 py-4">
-            <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-              <MapPin className="w-5 h-5" />
-              My Locations
-            </h2>
-            <p className="text-slate-300 text-sm mt-1">
-              Select your preferred locations to enable quick filtering across views
-            </p>
-          </div>
+        {hasHQAccess && (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="bg-gradient-to-r from-slate-700 to-slate-600 px-6 py-4">
+              <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+                <MapPin className="w-5 h-5" />
+                My Locations
+              </h2>
+              <p className="text-slate-300 text-sm mt-1">
+                Select your preferred locations to enable quick filtering across views
+              </p>
+            </div>
 
-          <div className="p-6">
-            {locationMessage && (
-              <div
-                className={`rounded-lg p-3 mb-4 ${
-                  locationMessage.type === 'success'
-                    ? 'bg-green-50 text-green-800 border border-green-200'
-                    : 'bg-red-50 text-red-800 border border-red-200'
-                }`}
-              >
-                <div className="flex items-center gap-2 text-sm">
-                  {locationMessage.type === 'success' ? (
-                    <CheckCircle className="w-4 h-4" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4" />
-                  )}
-                  <span className="font-medium">{locationMessage.text}</span>
+            <div className="p-6">
+              {locationMessage && (
+                <div
+                  className={`rounded-lg p-3 mb-4 ${
+                    locationMessage.type === 'success'
+                      ? 'bg-green-50 text-green-800 border border-green-200'
+                      : 'bg-red-50 text-red-800 border border-red-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 text-sm">
+                    {locationMessage.type === 'success' ? (
+                      <CheckCircle className="w-4 h-4" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4" />
+                    )}
+                    <span className="font-medium">{locationMessage.text}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm text-slate-600">
+                  {selectedLocations.size} of {allLocations.length} selected
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSelectAll}
+                    className="text-xs text-slate-600 hover:text-slate-800 underline"
+                  >
+                    Select all
+                  </button>
+                  <span className="text-slate-300">|</span>
+                  <button
+                    onClick={handleClearAll}
+                    className="text-xs text-slate-600 hover:text-slate-800 underline"
+                  >
+                    Clear all
+                  </button>
                 </div>
               </div>
-            )}
 
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm text-slate-600">
-                {selectedLocations.size} of {allLocations.length} selected
-              </p>
-              <div className="flex items-center gap-2">
+              {allLocations.length === 0 ? (
+                <p className="text-sm text-slate-500 py-4 text-center">No locations available</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
+                  {allLocations.map(loc => (
+                    <label
+                      key={loc}
+                      className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
+                        selectedLocations.has(loc)
+                          ? 'border-slate-700 bg-slate-50'
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedLocations.has(loc)}
+                        onChange={() => toggleLocation(loc)}
+                        className="w-4 h-4 rounded border-slate-300 accent-slate-800"
+                      />
+                      <span className="text-sm font-medium text-slate-800 truncate">{loc}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-200">
+                <p className="text-xs text-slate-500">
+                  When saved, a "My Locations" toggle appears in each view
+                </p>
                 <button
-                  onClick={handleSelectAll}
-                  className="text-xs text-slate-600 hover:text-slate-800 underline"
+                  onClick={handleSaveLocations}
+                  disabled={savingLocations}
+                  className="flex items-center gap-2 px-5 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm"
                 >
-                  Select all
-                </button>
-                <span className="text-slate-300">|</span>
-                <button
-                  onClick={handleClearAll}
-                  className="text-xs text-slate-600 hover:text-slate-800 underline"
-                >
-                  Clear all
+                  {savingLocations ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Save Preferences
+                    </>
+                  )}
                 </button>
               </div>
-            </div>
-
-            {allLocations.length === 0 ? (
-              <p className="text-sm text-slate-500 py-4 text-center">No locations available</p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
-                {allLocations.map(loc => (
-                  <label
-                    key={loc}
-                    className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
-                      selectedLocations.has(loc)
-                        ? 'border-slate-700 bg-slate-50'
-                        : 'border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedLocations.has(loc)}
-                      onChange={() => toggleLocation(loc)}
-                      className="w-4 h-4 rounded border-slate-300 accent-slate-800"
-                    />
-                    <span className="text-sm font-medium text-slate-800 truncate">{loc}</span>
-                  </label>
-                ))}
-              </div>
-            )}
-
-            <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-200">
-              <p className="text-xs text-slate-500">
-                When saved, a "My Locations" toggle appears in each view
-              </p>
-              <button
-                onClick={handleSaveLocations}
-                disabled={savingLocations}
-                className="flex items-center gap-2 px-5 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm"
-              >
-                {savingLocations ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    Save Preferences
-                  </>
-                )}
-              </button>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
