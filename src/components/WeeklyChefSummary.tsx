@@ -185,7 +185,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
   const actualFoodCostPct = formData.food_sales_silverware > 0 ? (formData.usage_amount / formData.food_sales_silverware) * 100 : 0;
   const fcVariance = actualFoodCostPct - formData.budget_food_cost_pct;
   const theoreticalFoodCostPct = formData.food_sales_silverware > 0 ? (formData.ideal_usage_amount / formData.food_sales_silverware) * 100 : 0;
-  const theoreticalVariance = theoreticalFoodCostPct - actualFoodCostPct;
+  const theoreticalVariance = actualFoodCostPct - theoreticalFoodCostPct;
   const labourCostPct = formData.food_sales_silverware > 0 ? (formData.labour_spent / formData.food_sales_silverware) * 100 : 0;
   const lcVariance = labourCostPct - formData.labour_budget_pct;
   const foodSalesSWvsOC = formData.food_sales_oc - formData.food_sales_silverware;
