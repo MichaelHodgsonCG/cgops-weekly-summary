@@ -325,13 +325,25 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
       let sage_food_sales_qtd = 0;
       let sage_sales_budget_qtd = 0;
 
-      for (const upload of uploads) {
-        const foodSalesItem = lineItems.find(
-          i => i.upload_id === upload.id && i.line_item_name === 'Food Sales'
-        );
-        if (foodSalesItem) {
-          sage_food_sales_qtd += foodSalesItem.current_actual || 0;
-          sage_sales_budget_qtd += foodSalesItem.current_budget || 0;
+      const periodsInQtr = [...new Set(uploads.map(u => {
+        const cal = calWeeks.find(c => c.end_date === u.week_ending_date);
+        return cal?.period;
+      }).filter(Boolean))] as number[];
+
+      for (const p of periodsInQtr) {
+        const periodUploads = uploads.filter(u => {
+          const cal = calWeeks.find(c => c.end_date === u.week_ending_date);
+          return cal && cal.period === p;
+        });
+        if (periodUploads.length > 0) {
+          const latestUpload = periodUploads[periodUploads.length - 1];
+          const foodSalesItem = lineItems.find(
+            i => i.upload_id === latestUpload.id && i.line_item_name === 'Food Sales'
+          );
+          if (foodSalesItem) {
+            sage_food_sales_qtd += foodSalesItem.current_actual || 0;
+            sage_sales_budget_qtd += foodSalesItem.current_budget || 0;
+          }
         }
       }
 

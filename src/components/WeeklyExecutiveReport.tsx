@@ -412,18 +412,39 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
     loadRestaurantData();
   }, [fiscalYear, period, week]);
 
+  const getQuarterPeriods = (p: number): number[] => {
+    if (p <= 3) return [1, 2, 3];
+    if (p <= 6) return [4, 5, 6];
+    if (p <= 9) return [7, 8, 9];
+    return [10, 11, 12, 13];
+  };
+
   const loadRestaurantData = async () => {
     setLoading(true);
 
+    const quarterPeriods = getQuarterPeriods(period);
+
     const { data: fiscalData } = await supabase
       .from('fiscal_calendar')
-      .select('end_date')
+      .select('end_date, period, week')
       .eq('fiscal_year', fiscalYear)
       .eq('period', period)
       .eq('week', week)
       .single();
 
     const weekEndingDate = fiscalData?.end_date;
+
+    const { data: quarterCalWeeks } = await supabase
+      .from('fiscal_calendar')
+      .select('end_date, period, week')
+      .eq('fiscal_year', fiscalYear)
+      .in('period', quarterPeriods)
+      .order('period', { ascending: true })
+      .order('week', { ascending: true });
+
+    const qtdEndDates = (quarterCalWeeks || [])
+      .filter(w => w.period < period || (w.period === period && w.week <= week))
+      .map(w => w.end_date);
 
     const { data: currentWeekData } = await supabase
       .from('weekly_chef_summary')
@@ -441,16 +462,62 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
       .eq('locations.exclude_from_reporting', false)
       : { data: null };
 
+    const { data: qtdPLDataRaw } = qtdEndDates.length > 0 ? await supabase
+      .from('pl_line_items')
+      .select('location_id, line_item_name, current_actual, current_budget, week_ending_date')
+      .in('week_ending_date', qtdEndDates)
+      .eq('line_item_name', 'Food Sales')
+      : { data: null };
+
+    const qtdByLocation = new Map<string, { qtdSales: number; qtdBudget: number }>();
+    if (qtdPLDataRaw && quarterCalWeeks) {
+      const locationIds = [...new Set(qtdPLDataRaw.map(pl => pl.location_id))];
+      for (const locId of locationIds) {
+        const locItems = qtdPLDataRaw.filter(pl => pl.location_id === locId);
+        let totalSales = 0;
+        let totalBudget = 0;
+
+        const periodsInQtd = [...new Set(qtdEndDates.map(d => {
+          const cal = quarterCalWeeks.find(c => c.end_date === d);
+          return cal?.period;
+        }).filter(Boolean))] as number[];
+
+        for (const p of periodsInQtd) {
+          const periodEndDates = quarterCalWeeks
+            .filter(c => c.period === p)
+            .map(c => c.end_date)
+            .filter(d => qtdEndDates.includes(d));
+
+          const periodItems = locItems
+            .filter(pl => periodEndDates.includes(pl.week_ending_date))
+            .sort((a, b) => a.week_ending_date.localeCompare(b.week_ending_date));
+
+          if (periodItems.length > 0) {
+            const latest = periodItems[periodItems.length - 1];
+            totalSales += latest.current_actual || 0;
+            totalBudget += latest.current_budget || 0;
+          }
+        }
+
+        qtdByLocation.set(locId, { qtdSales: totalSales, qtdBudget: totalBudget });
+      }
+    }
+
     if (currentWeekData) {
       const restaurantMetrics = currentWeekData.map(current => {
         const weekSales = current.food_sales_silverware || 0;
-        const weekSalesVariance = current.week_variance_amount || 0;
-
-        const qtdSales = current.sage_food_sales_qtd || 0;
-        const qtdSalesVariance = current.qtd_variance_amount || 0;
 
         const locationPL = plData?.filter(pl => pl.location_id === current.location_id) || [];
         const foodSalesPL = locationPL.find(pl => pl.line_item_name === 'Food Sales');
+
+        const weekBudgetPeriod = foodSalesPL?.current_budget || current.budget_food_sales_period || 0;
+        const computedWeekBudget = weekBudgetPeriod > 0 ? weekBudgetPeriod / 4 : 0;
+        const weekSalesVariance = weekSales > 0 ? weekSales - computedWeekBudget : 0;
+
+        const locQtd = qtdByLocation.get(current.location_id);
+        const qtdSales = locQtd ? locQtd.qtdSales : (current.sage_food_sales_qtd || 0);
+        const qtdBudget = locQtd ? locQtd.qtdBudget : (current.sage_sales_budget_qtd || 0);
+        const qtdSalesVariance = qtdSales - qtdBudget;
 
         const weekFoodCost = current.actual_food_cost_pct || 0;
         const weekBudgetFoodCost = current.budget_food_cost_pct || 0;
