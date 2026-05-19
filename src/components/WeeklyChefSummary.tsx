@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, LogOut, ChevronDown, FileText, AlertTriangle, Download, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
@@ -181,6 +181,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
   } | null>(null);
 
   const weekBudget = formData.budget_food_sales_period > 0 ? formData.budget_food_sales_period / 4 : 0;
+  const weekVarianceAmount = formData.food_sales_silverware > 0 ? formData.food_sales_silverware - weekBudget : 0;
   const actualFoodCostPct = formData.food_sales_silverware > 0 ? (formData.usage_amount / formData.food_sales_silverware) * 100 : 0;
   const fcVariance = actualFoodCostPct - formData.budget_food_cost_pct;
   const theoreticalFoodCostPct = formData.food_sales_silverware > 0 ? (formData.ideal_usage_amount / formData.food_sales_silverware) * 100 : 0;
@@ -243,6 +244,103 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     }
   };
 
+  const getQuarterPeriods = (period: number): number[] => {
+    if (period <= 3) return [1, 2, 3];
+    if (period <= 6) return [4, 5, 6];
+    if (period <= 9) return [7, 8, 9];
+    return [10, 11, 12, 13];
+  };
+
+  const fetchPLDataForPeriod = async (
+    locId: string,
+    fiscalYear: number,
+    periodNumber: number
+  ): Promise<{ budget_food_sales_period: number; sage_food_sales_qtd: number; sage_sales_budget_qtd: number; budget_food_cost_pct: number; labour_budget_pct: number } | null> => {
+    try {
+      const quarterPeriods = getQuarterPeriods(periodNumber);
+
+      const { data: calWeeks } = await supabase
+        .from('fiscal_calendar')
+        .select('end_date, period, week')
+        .eq('fiscal_year', fiscalYear)
+        .in('period', quarterPeriods)
+        .order('period', { ascending: true })
+        .order('week', { ascending: true });
+
+      if (!calWeeks || calWeeks.length === 0) return null;
+
+      const quarterEndDates = calWeeks.map(w => w.end_date);
+
+      const { data: uploads } = await supabase
+        .from('pl_uploads')
+        .select('id, week_ending_date')
+        .eq('location_id', locId)
+        .in('week_ending_date', quarterEndDates)
+        .order('week_ending_date', { ascending: true });
+
+      if (!uploads || uploads.length === 0) return null;
+
+      const uploadIds = uploads.map(u => u.id);
+
+      const { data: lineItems } = await supabase
+        .from('pl_line_items')
+        .select('upload_id, line_item_name, current_actual, current_budget, current_actual_pct, current_budget_pct')
+        .in('upload_id', uploadIds)
+        .in('line_item_name', ['Food Sales', 'Cost of Sales (Food)', 'Kitchen Labour']);
+
+      if (!lineItems || lineItems.length === 0) return null;
+
+      const currentPeriodUploads = uploads.filter(u => {
+        const matchingCal = calWeeks.find(c => c.end_date === u.week_ending_date);
+        return matchingCal && matchingCal.period === periodNumber;
+      });
+
+      let budget_food_sales_period = 0;
+      let budget_food_cost_pct = 0;
+      let labour_budget_pct = 0;
+
+      if (currentPeriodUploads.length > 0) {
+        const latestUploadId = currentPeriodUploads[currentPeriodUploads.length - 1].id;
+        const latestFoodSales = lineItems.find(
+          i => i.upload_id === latestUploadId && i.line_item_name === 'Food Sales'
+        );
+        const latestFoodCost = lineItems.find(
+          i => i.upload_id === latestUploadId && i.line_item_name === 'Cost of Sales (Food)'
+        );
+        const latestLabour = lineItems.find(
+          i => i.upload_id === latestUploadId && i.line_item_name === 'Kitchen Labour'
+        );
+
+        if (latestFoodSales) {
+          budget_food_sales_period = latestFoodSales.current_budget || 0;
+        }
+        if (latestFoodCost) {
+          budget_food_cost_pct = latestFoodCost.current_budget_pct || 0;
+        }
+        if (latestLabour) {
+          labour_budget_pct = latestLabour.current_budget_pct || 0;
+        }
+      }
+
+      let sage_food_sales_qtd = 0;
+      let sage_sales_budget_qtd = 0;
+
+      for (const upload of uploads) {
+        const foodSalesItem = lineItems.find(
+          i => i.upload_id === upload.id && i.line_item_name === 'Food Sales'
+        );
+        if (foodSalesItem) {
+          sage_food_sales_qtd += foodSalesItem.current_actual || 0;
+          sage_sales_budget_qtd += foodSalesItem.current_budget || 0;
+        }
+      }
+
+      return { budget_food_sales_period, sage_food_sales_qtd, sage_sales_budget_qtd, budget_food_cost_pct, labour_budget_pct };
+    } catch {
+      return null;
+    }
+  };
+
   const buildAutofillData = async (): Promise<Partial<WeeklySummaryData>> => {
     try {
       const { data: prev, error } = await supabase
@@ -255,44 +353,59 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
         .limit(1)
         .maybeSingle();
 
-      if (error || !prev) return {};
+      let nextFiscalYear: number;
+      let nextPeriod: number;
+      let nextWeek: number;
 
-      const prevWeek: number = prev.week_number;
-      const prevPeriod: number = prev.period_number;
-      const prevFiscalYear: number = prev.fiscal_year;
+      if (error || !prev) {
+        const { data: currentCal } = await supabase
+          .from('fiscal_calendar')
+          .select('fiscal_year, period, week')
+          .eq('is_current', true)
+          .maybeSingle();
 
-      const nextWeek = prevWeek >= 4 ? 1 : prevWeek + 1;
-      const nextPeriod = prevWeek >= 4 ? prevPeriod + 1 : prevPeriod;
-      const nextFiscalYear = prevFiscalYear;
-      const isNewPeriod = nextPeriod !== prevPeriod;
+        if (!currentCal) return {};
 
-      let sage_food_sales_qtd = 0;
-      if (!isNewPeriod) {
-        const { data: periodWeeks } = await supabase
-          .from('weekly_chef_summary')
-          .select('food_sales_silverware')
-          .eq('location_id', locationId)
-          .eq('fiscal_year', nextFiscalYear)
-          .eq('period_number', nextPeriod);
+        nextFiscalYear = currentCal.fiscal_year;
+        nextPeriod = currentCal.period;
+        nextWeek = currentCal.week;
+      } else {
+        const prevWeek: number = prev.week_number;
+        const prevPeriod: number = prev.period_number;
 
-        if (periodWeeks && periodWeeks.length > 0) {
-          sage_food_sales_qtd = periodWeeks.reduce((sum, w) => sum + (w.food_sales_silverware || 0), 0);
-        }
+        nextWeek = prevWeek >= 4 ? 1 : prevWeek + 1;
+        nextPeriod = prevWeek >= 4 ? prevPeriod + 1 : prevPeriod;
+        nextFiscalYear = prev.fiscal_year;
       }
 
-      return {
+      const plData = await fetchPLDataForPeriod(locationId, nextFiscalYear, nextPeriod);
+
+      const result: Partial<WeeklySummaryData> = {
         fiscal_year: nextFiscalYear,
         period_number: nextPeriod,
         week_number: nextWeek,
-        budget_food_sales_period: isNewPeriod ? prev.budget_food_sales_period : prev.budget_food_sales_period,
-        budget_food_cost_pct: prev.budget_food_cost_pct,
-        labour_budget_pct: prev.labour_budget_pct,
-        sage_food_sales_qtd,
-        ideal_cooks: prev.ideal_cooks,
-        ideal_prep: prev.ideal_prep,
-        ideal_dish: prev.ideal_dish,
-        ideal_other: prev.ideal_other,
       };
+
+      if (plData) {
+        result.budget_food_sales_period = plData.budget_food_sales_period;
+        result.sage_food_sales_qtd = plData.sage_food_sales_qtd;
+        result.sage_sales_budget_qtd = plData.sage_sales_budget_qtd;
+        result.budget_food_cost_pct = plData.budget_food_cost_pct;
+        result.labour_budget_pct = plData.labour_budget_pct;
+      } else if (prev) {
+        result.budget_food_sales_period = prev.budget_food_sales_period;
+        result.budget_food_cost_pct = prev.budget_food_cost_pct;
+        result.labour_budget_pct = prev.labour_budget_pct;
+      }
+
+      if (prev) {
+        result.ideal_cooks = prev.ideal_cooks;
+        result.ideal_prep = prev.ideal_prep;
+        result.ideal_dish = prev.ideal_dish;
+        result.ideal_other = prev.ideal_other;
+      }
+
+      return result;
     } catch {
       return {};
     }
@@ -449,6 +562,8 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
         .upsert({
           ...formData,
           week_budget: weekBudget,
+          week_variance_amount: weekVarianceAmount,
+          qtd_variance_amount: formData.sage_food_sales_qtd - formData.sage_sales_budget_qtd,
           actual_food_cost_pct: actualFoodCostPct,
           fc_variance: fcVariance,
           theoretical_food_cost_pct: theoreticalFoodCostPct,
@@ -715,6 +830,12 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 </div>
               </div>
               <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">+/- Budget <span className="text-xs text-slate-400">(calculated)</span></label>
+                <div className={`w-full px-3 py-2 border rounded-lg font-medium ${weekVarianceAmount >= 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                  {weekVarianceAmount >= 0 ? '+' : ''}${weekVarianceAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Sage Food Sales QTD</label>
                 <input
                   type="number"
@@ -723,6 +844,22 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   onChange={(e) => handleInputChange('sage_food_sales_qtd', parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Sage Sales Budget QTD</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.sage_sales_budget_qtd || ''}
+                  onChange={(e) => handleInputChange('sage_sales_budget_qtd', parseFloat(e.target.value) || 0)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">QTD Sales Variance <span className="text-xs text-slate-400">(calculated)</span></label>
+                <div className={`w-full px-3 py-2 border rounded-lg font-medium ${(formData.sage_food_sales_qtd - formData.sage_sales_budget_qtd) >= 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                  {(formData.sage_food_sales_qtd - formData.sage_sales_budget_qtd) >= 0 ? '+' : ''}${(formData.sage_food_sales_qtd - formData.sage_sales_budget_qtd).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
               </div>
             </div>
           </div>
