@@ -564,10 +564,51 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     }
   };
 
+  const fetchPTDFromPL = async (): Promise<{ food_cost_ptd_pct: number; labour_cost_ptd_pct: number }> => {
+    try {
+      const { data: calWeek } = await supabase
+        .from('fiscal_calendar')
+        .select('end_date')
+        .eq('fiscal_year', formData.fiscal_year)
+        .eq('period', formData.period_number)
+        .eq('week', formData.week_number)
+        .maybeSingle();
+
+      if (!calWeek) return { food_cost_ptd_pct: 0, labour_cost_ptd_pct: 0 };
+
+      const { data: upload } = await supabase
+        .from('pl_uploads')
+        .select('id')
+        .eq('location_id', locationId)
+        .eq('week_ending_date', calWeek.end_date)
+        .maybeSingle();
+
+      if (!upload) return { food_cost_ptd_pct: 0, labour_cost_ptd_pct: 0 };
+
+      const { data: items } = await supabase
+        .from('pl_line_items')
+        .select('line_item_name, current_actual_pct')
+        .eq('upload_id', upload.id)
+        .in('line_item_name', ['Cost of Sales (Food)', 'Kitchen Labour']);
+
+      const foodCost = items?.find(i => i.line_item_name === 'Cost of Sales (Food)');
+      const labour = items?.find(i => i.line_item_name === 'Kitchen Labour');
+
+      return {
+        food_cost_ptd_pct: foodCost?.current_actual_pct || 0,
+        labour_cost_ptd_pct: labour?.current_actual_pct || 0,
+      };
+    } catch {
+      return { food_cost_ptd_pct: 0, labour_cost_ptd_pct: 0 };
+    }
+  };
+
   const handleSave = async () => {
     try {
       setSaving(true);
       setMessage(null);
+
+      const ptdData = await fetchPTDFromPL();
 
       const { error } = await supabase
         .from('weekly_chef_summary')
@@ -576,6 +617,8 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
           week_budget: weekBudget,
           week_variance_amount: weekVarianceAmount,
           qtd_variance_amount: formData.sage_food_sales_qtd - formData.sage_sales_budget_qtd,
+          food_cost_ptd_pct: ptdData.food_cost_ptd_pct,
+          labour_cost_ptd_pct: ptdData.labour_cost_ptd_pct,
           actual_food_cost_pct: actualFoodCostPct,
           fc_variance: fcVariance,
           theoretical_food_cost_pct: theoreticalFoodCostPct,

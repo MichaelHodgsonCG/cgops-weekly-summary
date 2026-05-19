@@ -519,13 +519,16 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
         const qtdBudget = locQtd ? locQtd.qtdBudget : (current.sage_sales_budget_qtd || 0);
         const qtdSalesVariance = qtdSales - qtdBudget;
 
+        const foodCostPL = locationPL.find(pl => pl.line_item_name === 'Cost of Sales (Food)');
+        const labourPL = locationPL.find(pl => pl.line_item_name === 'Kitchen Labour' || pl.line_item_name === 'Labour');
+
         const weekFoodCost = current.actual_food_cost_pct || 0;
         const weekBudgetFoodCost = current.budget_food_cost_pct || 0;
         const weekFoodCostVariance = weekFoodCost - weekBudgetFoodCost;
         const weekFoodCostVarianceDollar = (weekSales * weekFoodCostVariance) / 100;
 
-        const ptdFoodCost = current.food_cost_ptd_pct || 0;
-        const ptdBudgetFoodCost = current.budget_food_cost_pct || 0;
+        const ptdFoodCost = foodCostPL?.current_actual_pct || current.food_cost_ptd_pct || 0;
+        const ptdBudgetFoodCost = foodCostPL?.current_budget_pct || current.budget_food_cost_pct || 0;
         const ptdFoodCostVariance = ptdFoodCost - ptdBudgetFoodCost;
         const ptdFoodCostVarianceDollar = (qtdSales * ptdFoodCostVariance) / 100;
 
@@ -534,8 +537,8 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
         const weekLabourVariance = weekLabour - weekBudgetLabour;
         const weekLabourVarianceDollar = (weekSales * weekLabourVariance) / 100;
 
-        const ptdLabour = current.labour_cost_ptd_pct || 0;
-        const ptdBudgetLabour = current.labour_budget_pct || 0;
+        const ptdLabour = labourPL?.current_actual_pct || current.labour_cost_ptd_pct || 0;
+        const ptdBudgetLabour = labourPL?.current_budget_pct || current.labour_budget_pct || 0;
         const ptdLabourVariance = ptdLabour - ptdBudgetLabour;
         const ptdLabourVarianceDollar = (qtdSales * ptdLabourVariance) / 100;
 
@@ -550,9 +553,6 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
 
         const expoTime = current.qsr_expo_time || '';
         const brunchTime = current.qsr_weekend_lunch_time || '';
-
-        const foodCostPL = locationPL.find(pl => pl.line_item_name === 'Cost of Sales (Food)');
-        const labourPL = locationPL.find(pl => pl.line_item_name === 'Kitchen Labour' || pl.line_item_name === 'Labour');
 
         const ytdSales = foodSalesPL?.ytd_actual || 0;
         const ytdSalesBudget = foodSalesPL?.ytd_budget || 0;
