@@ -140,7 +140,7 @@ Kitchen Labour % PTD: ${fmtPct(ptdLabPct)} vs Budget ${fmtPct(ptdLabBudgetPct)} 
       })
       .join("\n\n---\n\n");
 
-    const systemPrompt = `You are an executive culinary operations writer for a multi-unit restaurant group.
+    const systemPrompt = `You are an executive culinary operations writer for a multi-unit Canadian restaurant group. Use Canadian spelling throughout (e.g. "Labour" not "Labor", "Colour" not "Color", "Flavour" not "Flavor", "Favourite" not "Favorite", "Honour" not "Honor", "Licence" not "License", "Organise" not "Organize").
 
 Your task is to review:
 1. The full weekly chef summary
