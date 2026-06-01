@@ -604,10 +604,10 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Weekly Executive Report — FY ${fiscalYear} P${period} W${week}</title>
+  <title>Weekly Culinary Report — FY ${fiscalYear} P${period} W${week}</title>
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; max-width: 960px; margin: 0 auto; padding: 32px 24px; line-height: 1.5;">
-  <h1 style="font-size: 22px; font-weight: 700; color: #1e293b; margin: 0 0 4px 0;">Weekly Executive Report</h1>
+  <h1 style="font-size: 22px; font-weight: 700; color: #1e293b; margin: 0 0 4px 0;">Weekly Culinary Report</h1>
   <p style="font-size: 13px; color: #1e293b; margin: 0 0 28px 0;">FY ${fiscalYear} — Period ${period}, Week ${week}${weekEndingDate ? ` &nbsp;|&nbsp; Week Ending ${weekEndingDate}` : ''}</p>
 
   ${openingHtml}
@@ -695,7 +695,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Weekly Executive Report</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Weekly Culinary Report</h1>
           <div className="flex items-center gap-2 mt-1 text-sm text-slate-600">
             <Calendar className="w-4 h-4" />
             <span>FY {currentPeriod?.fiscal_year} - Period {currentPeriod?.period}, Week {currentPeriod?.week}</span>
