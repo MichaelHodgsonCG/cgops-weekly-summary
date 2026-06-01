@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { FileText, Loader2, Download, Sparkles, Calendar, ChevronRight, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useCurrentFiscalPeriod, useFiscalCalendar } from '../lib/useFiscalCalendar';
@@ -49,6 +49,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
   const [generatingStatements, setGeneratingStatements] = useState(false);
 
   const isUsingProps = !!(propFiscalYear && propPeriod && propWeek);
+  const calculateConsolidatedMetricsRef = useRef(calculateConsolidatedMetrics);
 
   const currentPeriod = isUsingProps
     ? { fiscal_year: propFiscalYear!, period: propPeriod!, week: propWeek!, id: '', start_date: '', end_date: '', is_current: false }
@@ -119,6 +120,10 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
     };
   }, [currentPeriod?.fiscal_year, currentPeriod?.period, currentPeriod?.week, weeks]);
 
+  useEffect(() => {
+    calculateConsolidatedMetricsRef.current = calculateConsolidatedMetrics;
+  });
+
   const loadOrCreateReport = useCallback(async () => {
     if (!currentPeriod) return;
 
@@ -135,7 +140,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
     if (existingReport) {
       setReport(existingReport);
     } else {
-      const metrics = await calculateConsolidatedMetrics();
+      const metrics = await calculateConsolidatedMetricsRef.current();
       const { data: newReport, error } = await supabase
         .from('weekly_executive_reports')
         .insert({
@@ -154,7 +159,8 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
     }
 
     setLoading(false);
-  }, [currentPeriod?.fiscal_year, currentPeriod?.period, currentPeriod?.week, calculateConsolidatedMetrics]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPeriod?.fiscal_year, currentPeriod?.period, currentPeriod?.week]);
 
   useEffect(() => {
     if (isUsingProps && propFiscalYear && propPeriod && propWeek) {
@@ -582,18 +588,18 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
             <p style="margin: 0;">Food Sales: Week ${fmtCurrency(r.weekSales)} <span style="color: ${varianceColor(r.weekSalesVariance, false)}; font-weight: 600;">(${r.weekSalesVariance >= 0 ? '+' : '–'}${fmtCurrency(Math.abs(r.weekSalesVariance))})</span> | QTD ${fmtCurrency(r.qtdSales)} <span style="color: ${varianceColor(r.qtdSalesVariance, false)}; font-weight: 600;">(${r.qtdSalesVariance >= 0 ? '+' : '–'}${fmtCurrency(Math.abs(r.qtdSalesVariance))})</span> | YTD ${fmtCurrency(r.ytdSales)} <span style="color: ${varianceColor(r.ytdSalesVariance, false)}; font-weight: 600;">(${r.ytdSalesVariance >= 0 ? '+' : '–'}${fmtCurrency(Math.abs(r.ytdSalesVariance))})</span></p>
             <p style="margin: 0;">Food Cost: ${fmtPct(r.weekFoodCost)} <span style="color: ${varianceColor(r.weekFoodCostVariance)}; font-weight: 600;">(${r.weekFoodCostVariance >= 0 ? '+' : '–'}${Math.abs(r.weekFoodCostVariance).toFixed(2)} pts)</span> | PTD ${fmtPct(r.ptdFoodCost)} <span style="color: ${varianceColor(r.ptdFoodCostVariance)}; font-weight: 600;">(${r.ptdFoodCostVariance >= 0 ? '+' : '–'}${Math.abs(r.ptdFoodCostVariance).toFixed(2)} pts)</span> | YTD ${fmtPct(r.ytdFoodCostPct)} <span style="color: ${varianceColor(r.ytdFoodCostVariance)}; font-weight: 600;">(${r.ytdFoodCostVariance >= 0 ? '+' : '–'}${Math.abs(r.ytdFoodCostVariance).toFixed(2)} pts)</span></p>
             <p style="margin: 0;">Labour: ${fmtPct(r.weekLabour)} <span style="color: ${varianceColor(r.weekLabourVariance)}; font-weight: 600;">(${r.weekLabourVariance >= 0 ? '+' : '–'}${Math.abs(r.weekLabourVariance).toFixed(2)} pts)</span> | PTD ${fmtPct(r.ptdLabour)} <span style="color: ${varianceColor(r.ptdLabourVariance)}; font-weight: 600;">(${r.ptdLabourVariance >= 0 ? '+' : '–'}${Math.abs(r.ptdLabourVariance).toFixed(2)} pts)</span> | YTD ${fmtPct(r.ytdLabourPct)} <span style="color: ${varianceColor(r.ytdLabourVariance)}; font-weight: 600;">(${r.ytdLabourVariance >= 0 ? '+' : '–'}${Math.abs(r.ytdLabourVariance).toFixed(2)} pts)</span></p>
-            ${r.aiSummary ? `<div style="margin-top: 8px; padding: 10px 12px; background-color: #f8fafc; border-radius: 6px; color: #1e293b; font-size: 12px; line-height: 1.6;">${r.aiSummary}</div>` : ''}
+            ${r.aiSummary ? `<div style="margin-top: 6px; font-size: 12px; line-height: 1.6; color: #1e293b;">${r.aiSummary}</div>` : ''}
           </div>
         </div>`).join('');
 
       const openingHtml = report?.opening_statement
-        ? `<div style="margin-bottom: 28px; padding: 20px 24px; background-color: #f8fafc; border-left: 4px solid #334155; border-radius: 0 6px 6px 0;">
+        ? `<div style="margin-bottom: 28px;">
             <div style="font-size: 14px; color: #1e293b; line-height: 1.75; white-space: pre-wrap;">${report.opening_statement}</div>
           </div>`
         : '';
 
       const closingHtml = report?.closing_statement
-        ? `<div style="margin-top: 28px; padding: 20px 24px; background-color: #f8fafc; border-left: 4px solid #334155; border-radius: 0 6px 6px 0;">
+        ? `<div style="margin-top: 28px;">
             <div style="font-size: 14px; color: #1e293b; line-height: 1.75; white-space: pre-wrap;">${report.closing_statement}</div>
           </div>`
         : '';
