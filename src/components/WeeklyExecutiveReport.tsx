@@ -15,6 +15,9 @@ type WeeklyReport = {
   sole_summary: string;
   action_plan: string;
   consolidated_metrics: any;
+  leadership_notes: string;
+  opening_statement: string;
+  closing_statement: string;
   status: 'draft' | 'final';
   created_at: string;
   updated_at: string;
@@ -43,6 +46,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
   const [generating, setGenerating] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'report' | 'summaries' | 'journals'>('report');
+  const [generatingStatements, setGeneratingStatements] = useState(false);
 
   const isUsingProps = !!(propFiscalYear && propPeriod && propWeek);
 
@@ -220,6 +224,57 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
       showMessage('error', 'Failed to generate AI summary');
     } finally {
       setGenerating(null);
+    }
+  };
+
+  const generateStatements = async () => {
+    if (!report || !currentPeriod) return;
+
+    setGeneratingStatements(true);
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-executive-statements`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+          },
+          body: JSON.stringify({
+            fiscalYear: currentPeriod.fiscal_year,
+            period: currentPeriod.period,
+            week: currentPeriod.week,
+            leadershipNotes: report.leadership_notes || ''
+          })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to generate statements');
+      }
+
+      const { opening, closing } = await response.json();
+
+      const updates: Partial<WeeklyReport> = {};
+      if (opening) updates.opening_statement = opening;
+      if (closing) updates.closing_statement = closing;
+
+      if (Object.keys(updates).length > 0) {
+        const { error } = await supabase
+          .from('weekly_executive_reports')
+          .update({ ...updates, updated_at: new Date().toISOString() })
+          .eq('id', report.id);
+
+        if (error) throw error;
+        setReport({ ...report, ...updates });
+        showMessage('success', 'Opening and closing statements generated');
+      }
+    } catch (error) {
+      console.error('Error generating statements:', error);
+      showMessage('error', 'Failed to generate statements');
+    } finally {
+      setGeneratingStatements(false);
     }
   };
 
@@ -530,6 +585,20 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
           </div>
         </div>`).join('');
 
+      const openingHtml = report?.opening_statement
+        ? `<div style="margin-bottom: 28px; padding: 20px 24px; background-color: #f8fafc; border-left: 4px solid #334155; border-radius: 0 6px 6px 0;">
+            <p style="font-size: 13px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 10px 0;">Opening</p>
+            <div style="font-size: 14px; color: #1e293b; line-height: 1.75; white-space: pre-wrap;">${report.opening_statement}</div>
+          </div>`
+        : '';
+
+      const closingHtml = report?.closing_statement
+        ? `<div style="margin-top: 28px; padding: 20px 24px; background-color: #f8fafc; border-left: 4px solid #334155; border-radius: 0 6px 6px 0;">
+            <p style="font-size: 13px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 10px 0;">Closing</p>
+            <div style="font-size: 14px; color: #1e293b; line-height: 1.75; white-space: pre-wrap;">${report.closing_statement}</div>
+          </div>`
+        : '';
+
       const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -539,6 +608,8 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; max-width: 960px; margin: 0 auto; padding: 32px 24px; line-height: 1.5;">
   <h1 style="font-size: 22px; font-weight: 700; color: #1e293b; margin: 0 0 4px 0;">Weekly Executive Report</h1>
   <p style="font-size: 13px; color: #475569; margin: 0 0 28px 0;">FY ${fiscalYear} — Period ${period}, Week ${week}${weekEndingDate ? ` &nbsp;|&nbsp; Week Ending ${weekEndingDate}` : ''}</p>
+
+  ${openingHtml}
 
   <h2 style="font-size: 16px; font-weight: 700; color: #1e293b; margin: 0 0 16px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">Budget Variance Summary</h2>
   ${consolidatedSectionHtml('CG Consolidated — All Restaurants', allMetrics, true)}
@@ -550,6 +621,8 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
 
   <h2 style="font-size: 16px; font-weight: 700; color: #1e293b; margin: 28px 0 16px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">Restaurant Performance using P&amp;L Data</h2>
   ${restaurants.length > 0 ? restaurantPerformanceHtml() : '<p style="color: #64748b; font-size: 13px;">No data available.</p>'}
+
+  ${closingHtml}
 </body>
 </html>`;
 
@@ -646,6 +719,24 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
           )}
 
           <button
+            onClick={generateStatements}
+            disabled={generatingStatements}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {generatingStatements ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                Generate Statements
+              </>
+            )}
+          </button>
+
+          <button
             onClick={exportReport}
             className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
           >
@@ -692,7 +783,52 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
       </div>
 
       {activeTab === 'report' && (
-        <RestaurantMetricsList fiscalYear={currentPeriod!.fiscal_year} period={currentPeriod!.period} week={currentPeriod!.week} />
+        <div className="space-y-6">
+          {/* Opening Statement */}
+          <div className="bg-white rounded-lg border border-slate-200 p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold text-slate-800">Opening Statement</h2>
+              {!report.opening_statement && (
+                <span className="text-xs text-slate-400 italic">Generate using the button above</span>
+              )}
+            </div>
+            {report.opening_statement ? (
+              <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{report.opening_statement}</div>
+            ) : (
+              <div className="text-sm text-slate-400 italic py-4 text-center">No opening statement generated yet</div>
+            )}
+          </div>
+
+          {/* Leadership Notes */}
+          <div className="bg-white rounded-lg border border-slate-200 p-6">
+            <h2 className="text-base font-semibold text-slate-800 mb-1">Leadership Notes</h2>
+            <p className="text-xs text-slate-500 mb-3">Add context for AI generation — operational notes, weather, upcoming events, specific callouts, etc.</p>
+            <textarea
+              value={report.leadership_notes || ''}
+              onChange={(e) => handleFieldChange('leadership_notes', e.target.value)}
+              rows={5}
+              placeholder="e.g. Long weekend coming up, patio season starting, new menu launching week 3, labour pressure at BT Burlington..."
+              className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none text-sm text-slate-700 placeholder-slate-400"
+            />
+          </div>
+
+          <RestaurantMetricsList fiscalYear={currentPeriod!.fiscal_year} period={currentPeriod!.period} week={currentPeriod!.week} />
+
+          {/* Closing Statement */}
+          <div className="bg-white rounded-lg border border-slate-200 p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold text-slate-800">Closing Statement</h2>
+              {!report.closing_statement && (
+                <span className="text-xs text-slate-400 italic">Generate using the button above</span>
+              )}
+            </div>
+            {report.closing_statement ? (
+              <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{report.closing_statement}</div>
+            ) : (
+              <div className="text-sm text-slate-400 italic py-4 text-center">No closing statement generated yet</div>
+            )}
+          </div>
+        </div>
       )}
 
       {activeTab === 'summaries' && (
