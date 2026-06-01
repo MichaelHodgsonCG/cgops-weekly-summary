@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FileText, Loader2, Download, Sparkles, Calendar, ChevronRight } from 'lucide-react';
+import { FileText, Loader2, Download, Sparkles, Calendar, ChevronRight, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useCurrentFiscalPeriod, useFiscalCalendar } from '../lib/useFiscalCalendar';
 import { ChefSummariesTable } from './ChefSummariesTable';
@@ -227,40 +227,342 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
     if (!currentPeriod) return;
 
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/export-executive-report`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
-          },
-          body: JSON.stringify({
-            fiscalYear: currentPeriod.fiscal_year,
-            period: currentPeriod.period,
-            week: currentPeriod.week
-          })
-        }
-      );
+      const { fiscal_year: fiscalYear, period, week } = currentPeriod;
 
-      if (!response.ok) {
-        throw new Error('Failed to export report');
+      // Helpers
+      const fmtCurrency = (v: number) => `$${Math.round(v).toLocaleString()}`;
+      const fmtPct = (v: number) => `${v.toFixed(2)}%`;
+      const fmtVarianceCurrency = (v: number) => {
+        const sign = v >= 0 ? '+' : '';
+        return `${sign}${fmtCurrency(v)}`;
+      };
+      const fmtVariancePct = (v: number) => {
+        const sign = v >= 0 ? '+' : '';
+        return `${sign}${v.toFixed(2)}%`;
+      };
+      const varianceColor = (v: number, higherIsBad = true) => {
+        if (higherIsBad) return v > 0 ? '#dc2626' : v < 0 ? '#16a34a' : '#1e293b';
+        return v < 0 ? '#dc2626' : v > 0 ? '#16a34a' : '#1e293b';
+      };
+      const salesVarianceColor = (v: number) => v > 0.1 ? '#16a34a' : v < -0.1 ? '#dc2626' : '#475569';
+      const costVarianceColor = (v: number) => v > 0.1 ? '#dc2626' : v < -0.1 ? '#16a34a' : '#475569';
+      const theoreticalColor = (v: number) => Math.abs(v) <= 0.5 ? '#16a34a' : '#dc2626';
+
+      // Fetch fiscal calendar
+      const { data: fiscalData } = await supabase
+        .from('fiscal_calendar')
+        .select('end_date, period, week')
+        .eq('fiscal_year', fiscalYear)
+        .eq('period', period)
+        .eq('week', week)
+        .single();
+
+      const weekEndingDate = fiscalData?.end_date;
+
+      const getQuarterPeriods = (p: number): number[] => {
+        if (p <= 3) return [1, 2, 3];
+        if (p <= 6) return [4, 5, 6];
+        if (p <= 9) return [7, 8, 9];
+        return [10, 11, 12, 13];
+      };
+      const quarterPeriods = getQuarterPeriods(period);
+
+      const { data: quarterCalWeeks } = await supabase
+        .from('fiscal_calendar')
+        .select('end_date, period, week')
+        .eq('fiscal_year', fiscalYear)
+        .in('period', quarterPeriods)
+        .order('period', { ascending: true })
+        .order('week', { ascending: true });
+
+      const qtdEndDates = (quarterCalWeeks || [])
+        .filter(w => w.period < period || (w.period === period && w.week <= week))
+        .map(w => w.end_date);
+
+      // Fetch P&L data
+      const { data: plData } = weekEndingDate ? await supabase
+        .from('pl_line_items')
+        .select('*, locations!inner(*)')
+        .eq('week_ending_date', weekEndingDate)
+        .eq('locations.exclude_from_reporting', false)
+        : { data: null };
+
+      // Fetch weekly chef summaries
+      const { data: currentWeekData } = await supabase
+        .from('weekly_chef_summary')
+        .select('*, locations!inner(*)')
+        .eq('fiscal_year', fiscalYear)
+        .eq('period_number', period)
+        .eq('week_number', week)
+        .eq('locations.exclude_from_reporting', false)
+        .order('locations(code)');
+
+      // Fetch QTD P&L sales
+      const { data: qtdPLDataRaw } = qtdEndDates.length > 0 ? await supabase
+        .from('pl_line_items')
+        .select('location_id, line_item_name, current_actual, current_budget, week_ending_date')
+        .in('week_ending_date', qtdEndDates)
+        .eq('line_item_name', 'Food Sales')
+        : { data: null };
+
+      // Build QTD by location
+      const qtdByLocation = new Map<string, { qtdSales: number; qtdBudget: number }>();
+      if (qtdPLDataRaw && quarterCalWeeks) {
+        const locationIds = [...new Set(qtdPLDataRaw.map(pl => pl.location_id))];
+        for (const locId of locationIds) {
+          const locItems = qtdPLDataRaw.filter(pl => pl.location_id === locId);
+          let totalSales = 0, totalBudget = 0;
+          const periodsInQtd = [...new Set(qtdEndDates.map(d => {
+            const cal = quarterCalWeeks.find(c => c.end_date === d);
+            return cal?.period;
+          }).filter(Boolean))] as number[];
+          for (const p of periodsInQtd) {
+            const periodEndDates = quarterCalWeeks
+              .filter(c => c.period === p).map(c => c.end_date)
+              .filter(d => qtdEndDates.includes(d));
+            const periodItems = locItems
+              .filter(pl => periodEndDates.includes(pl.week_ending_date))
+              .sort((a, b) => a.week_ending_date.localeCompare(b.week_ending_date));
+            if (periodItems.length > 0) {
+              const latest = periodItems[periodItems.length - 1];
+              totalSales += latest.current_actual || 0;
+              totalBudget += latest.current_budget || 0;
+            }
+          }
+          qtdByLocation.set(locId, { qtdSales: totalSales, qtdBudget: totalBudget });
+        }
       }
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `executive-report-fy${currentPeriod.fiscal_year}-p${currentPeriod.period}-w${currentPeriod.week}.docx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      // Build restaurant metrics
+      const restaurants = (currentWeekData || []).map(current => {
+        const weekSales = current.food_sales_silverware || 0;
+        const locationPL = plData?.filter(pl => pl.location_id === current.location_id) || [];
+        const foodSalesPL = locationPL.find(pl => pl.line_item_name === 'Food Sales');
+        const weekBudgetPeriod = foodSalesPL?.current_budget || current.budget_food_sales_period || 0;
+        const computedWeekBudget = weekBudgetPeriod > 0 ? weekBudgetPeriod / 4 : 0;
+        const weekSalesVariance = weekSales > 0 ? weekSales - computedWeekBudget : 0;
+        const locQtd = qtdByLocation.get(current.location_id);
+        const qtdSales = locQtd ? locQtd.qtdSales : (current.sage_food_sales_qtd || 0);
+        const qtdBudget = locQtd ? locQtd.qtdBudget : (current.sage_sales_budget_qtd || 0);
+        const qtdSalesVariance = qtdSales - qtdBudget;
+        const foodCostPL = locationPL.find(pl => pl.line_item_name === 'Cost of Sales (Food)');
+        const labourPL = locationPL.find(pl => pl.line_item_name === 'Kitchen Labour' || pl.line_item_name === 'Labour');
+        const weekFoodCost = current.actual_food_cost_pct || 0;
+        const weekBudgetFoodCost = current.budget_food_cost_pct || 0;
+        const weekFoodCostVariance = weekFoodCost - weekBudgetFoodCost;
+        const weekFoodCostVarianceDollar = (weekSales * weekFoodCostVariance) / 100;
+        const ptdFoodCost = foodCostPL?.current_actual_pct || current.food_cost_ptd_pct || 0;
+        const ptdBudgetFoodCost = foodCostPL?.current_budget_pct || current.budget_food_cost_pct || 0;
+        const ptdFoodCostVariance = ptdFoodCost - ptdBudgetFoodCost;
+        const ptdFoodCostVarianceDollar = (qtdSales * ptdFoodCostVariance) / 100;
+        const weekLabour = current.labour_cost_pct || 0;
+        const weekBudgetLabour = current.labour_budget_pct || 0;
+        const weekLabourVariance = weekLabour - weekBudgetLabour;
+        const weekLabourVarianceDollar = (weekSales * weekLabourVariance) / 100;
+        const ptdLabour = labourPL?.current_actual_pct || current.labour_cost_ptd_pct || 0;
+        const ptdBudgetLabour = labourPL?.current_budget_pct || current.labour_budget_pct || 0;
+        const ptdLabourVariance = ptdLabour - ptdBudgetLabour;
+        const ptdLabourVarianceDollar = (qtdSales * ptdLabourVariance) / 100;
+        const weekTheoreticalFoodCost = current.theoretical_food_cost_pct || 0;
+        const weekTheoreticalVariance = weekFoodCost - weekTheoreticalFoodCost;
+        const ptdTheoreticalVariance = ptdFoodCost - weekTheoreticalFoodCost;
+        const weekPromo = current.boh_promo_amount || 0;
+        const ptdPromo = current.promo_ptd || 0;
+        const expoTime = current.qsr_expo_time || '';
+        const brunchTime = current.qsr_weekend_lunch_time || '';
+        const ytdSales = foodSalesPL?.ytd_actual || 0;
+        const ytdSalesBudget = foodSalesPL?.ytd_budget || 0;
+        const ytdSalesVariance = ytdSales - ytdSalesBudget;
+        const ytdFoodCostPct = foodCostPL?.ytd_actual_pct || 0;
+        const ytdFoodCostBudgetPct = foodCostPL?.ytd_budget_pct || 0;
+        const ytdFoodCostVariance = ytdFoodCostPct - ytdFoodCostBudgetPct;
+        const ytdLabourPct = labourPL?.ytd_actual_pct || 0;
+        const ytdLabourBudgetPct = labourPL?.ytd_budget_pct || 0;
+        const ytdLabourVariance = ytdLabourPct - ytdLabourBudgetPct;
+        const shouldHighlightPromo = weekSales > 0 && (weekPromo / weekSales) * 100 > 0.25;
+        const parseTime = (t: string) => { const m = t.match(/(\d+):(\d+)/); return m ? { h: parseInt(m[1]), m: parseInt(m[2]) } : null; };
+        const expoT = parseTime(expoTime);
+        const brunchT = parseTime(brunchTime);
+        const code = current.locations.code;
+        const highlightExpo = expoT ? ((code === 'BTBA' || code === 'SKT') ? expoT.h >= 10 : expoT.h >= 12) : false;
+        const highlightBrunch = brunchT ? (brunchT.h > 10 || (brunchT.h === 10 && brunchT.m > 0)) : false;
+        return {
+          name: current.locations.name, code,
+          weekSales, weekSalesVariance, qtdSales, qtdSalesVariance, ytdSales, ytdSalesVariance,
+          weekFoodCost, weekFoodCostVariance, weekFoodCostVarianceDollar,
+          ptdFoodCost, ptdFoodCostVariance, ptdFoodCostVarianceDollar,
+          ytdFoodCostPct, ytdFoodCostVariance,
+          weekTheoreticalVariance, ptdTheoreticalVariance,
+          weekLabour, weekLabourVariance, weekLabourVarianceDollar,
+          ptdLabour, ptdLabourVariance, ptdLabourVarianceDollar,
+          ytdLabourPct, ytdLabourVariance,
+          weekPromo, ptdPromo, expoTime, brunchTime,
+          shouldHighlightPromo, highlightExpo, highlightBrunch,
+          aiSummary: current.ai_summary
+        };
+      });
 
-      showMessage('success', 'Report exported successfully');
+      // Build consolidated metrics from P&L
+      const buildConsolidated = (codes: string[]) => {
+        if (!plData) return null;
+        const filtered = plData.filter(pl => codes.includes(pl.locations.code));
+        const locIds = [...new Set(filtered.map(pl => pl.location_id))];
+        const getVal = (locId: string, name: string, field: string) => {
+          const item = plData.find(pl => pl.location_id === locId && pl.line_item_name === name);
+          return item ? (parseFloat(item[field]) || 0) : 0;
+        };
+        const ptdSales = locIds.reduce((s, id) => s + getVal(id, 'Food Sales', 'current_actual'), 0);
+        const ptdBudget = locIds.reduce((s, id) => s + getVal(id, 'Food Sales', 'current_budget'), 0);
+        const ytdSales = locIds.reduce((s, id) => s + getVal(id, 'Food Sales', 'ytd_actual'), 0);
+        const ytdBudget = locIds.reduce((s, id) => s + getVal(id, 'Food Sales', 'ytd_budget'), 0);
+        const ptdFC = locIds.reduce((s, id) => s + getVal(id, 'Cost of Sales (Food)', 'current_actual'), 0);
+        const ptdFCBudget = locIds.reduce((s, id) => s + getVal(id, 'Cost of Sales (Food)', 'current_budget'), 0);
+        const ytdFC = locIds.reduce((s, id) => s + getVal(id, 'Cost of Sales (Food)', 'ytd_actual'), 0);
+        const ytdFCBudget = locIds.reduce((s, id) => s + getVal(id, 'Cost of Sales (Food)', 'ytd_budget'), 0);
+        const ptdLab = locIds.reduce((s, id) => s + getVal(id, 'Kitchen Labour', 'current_actual'), 0);
+        const ptdLabBudget = locIds.reduce((s, id) => s + getVal(id, 'Kitchen Labour', 'current_budget'), 0);
+        const ytdLab = locIds.reduce((s, id) => s + getVal(id, 'Kitchen Labour', 'ytd_actual'), 0);
+        const ytdLabBudget = locIds.reduce((s, id) => s + getVal(id, 'Kitchen Labour', 'ytd_budget'), 0);
+        const ptdFCPct = ptdSales > 0 ? (ptdFC / ptdSales) * 100 : 0;
+        const ptdFCBudgetPct = ptdBudget > 0 ? (ptdFCBudget / ptdBudget) * 100 : 0;
+        const ytdFCPct = ytdSales > 0 ? (ytdFC / ytdSales) * 100 : 0;
+        const ytdFCBudgetPct = ytdBudget > 0 ? (ytdFCBudget / ytdBudget) * 100 : 0;
+        const ptdLabPct = ptdSales > 0 ? (ptdLab / ptdSales) * 100 : 0;
+        const ptdLabBudgetPct = ptdBudget > 0 ? (ptdLabBudget / ptdBudget) * 100 : 0;
+        const ytdLabPct = ytdSales > 0 ? (ytdLab / ytdSales) * 100 : 0;
+        const ytdLabBudgetPct = ytdBudget > 0 ? (ytdLabBudget / ytdBudget) * 100 : 0;
+        return {
+          ptdSales, ptdSalesVariance: ptdSales - ptdBudget,
+          ytdSales, ytdSalesVariance: ytdSales - ytdBudget,
+          ptdFCPct, ptdFCVariance: ptdFCPct - ptdFCBudgetPct,
+          ytdFCPct, ytdFCVariance: ytdFCPct - ytdFCBudgetPct,
+          ptdLabPct, ptdLabVariance: ptdLabPct - ptdLabBudgetPct,
+          ytdLabPct, ytdLabVariance: ytdLabPct - ytdLabBudgetPct,
+        };
+      };
+
+      const allCodes = plData ? [...new Set(plData.map(pl => pl.locations.code))] : [];
+      const btCodes = allCodes.filter(c => c.startsWith('BT') || c === 'SKT');
+      const trinityCodes = allCodes.filter(c => ['WC', 'TBK', 'SOLE'].includes(c));
+      const allMetrics = buildConsolidated(allCodes);
+      const btMetrics = buildConsolidated(btCodes);
+      const trinityMetrics = buildConsolidated(trinityCodes);
+
+      // CSS helpers
+      const cell = 'padding: 8px 16px; font-size: 13px;';
+      const headerCell = `${cell} font-weight: 600; color: #334155; text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em; background-color: #f1f5f9;`;
+
+      const consolidatedSectionHtml = (title: string, data: ReturnType<typeof buildConsolidated>, bold = false) => {
+        if (!data) return '';
+        const titleStyle = bold ? 'font-weight: 700; font-size: 15px; color: #1e293b; margin: 0 0 6px 0;' : 'font-weight: 600; font-size: 14px; color: #1e293b; margin: 0 0 6px 0;';
+        const salesVar = data.ptdSales > 0 ? data.ptdSalesVariance / data.ptdSales * 100 : 0;
+        const ytdSalesVar = data.ytdSales > 0 ? data.ytdSalesVariance / data.ytdSales * 100 : 0;
+        return `
+          <div style="margin-bottom: ${bold ? '20px' : '16px'};">
+            <p style="${titleStyle}">${title}</p>
+            <div style="margin-left: 16px; color: #334155; font-size: 13px; line-height: 1.8;">
+              <p style="margin: 0;">Food Sales — PTD: ${fmtCurrency(data.ptdSales)} <span style="color: ${salesVarianceColor(salesVar)};">${fmtVarianceCurrency(data.ptdSalesVariance)}</span> | YTD: ${fmtCurrency(data.ytdSales)} <span style="color: ${salesVarianceColor(ytdSalesVar)};">${fmtVarianceCurrency(data.ytdSalesVariance)}</span></p>
+              <p style="margin: 0;">COGS (Food) % — PTD: ${fmtPct(data.ptdFCPct)} <span style="color: ${costVarianceColor(data.ptdFCVariance)};">${fmtVariancePct(data.ptdFCVariance)}</span> | YTD: ${fmtPct(data.ytdFCPct)} <span style="color: ${costVarianceColor(data.ytdFCVariance)};">${fmtVariancePct(data.ytdFCVariance)}</span></p>
+              <p style="margin: 0;">Labour % — PTD: ${fmtPct(data.ptdLabPct)} <span style="color: ${costVarianceColor(data.ptdLabVariance)};">${fmtVariancePct(data.ptdLabVariance)}</span> | YTD: ${fmtPct(data.ytdLabPct)} <span style="color: ${costVarianceColor(data.ytdLabVariance)};">${fmtVariancePct(data.ytdLabVariance)}</span></p>
+            </div>
+          </div>`;
+      };
+
+      const varianceTableHtml = () => {
+        const rows = [
+          { label: 'Food Cost +/- Budget $ Week', values: restaurants.map(r => ({ v: r.weekFoodCostVarianceDollar, isCurrency: true })) },
+          { label: 'Food Cost +/- Budget $ Period', values: restaurants.map(r => ({ v: r.ptdFoodCostVarianceDollar, isCurrency: true })) },
+          { label: 'Food Cost vs Theoretical % Week', values: restaurants.map(r => ({ v: r.weekTheoreticalVariance, isTheoretical: true })) },
+          { label: 'Food Cost vs Theoretical % Period', values: restaurants.map(r => ({ v: r.ptdTheoreticalVariance, isTheoretical: true })) },
+          { label: 'Labour Cost +/- Budget $ Week', values: restaurants.map(r => ({ v: r.weekLabourVarianceDollar, isCurrency: true })) },
+          { label: 'Labour Cost +/- Budget $ Period', values: restaurants.map(r => ({ v: r.ptdLabourVarianceDollar, isCurrency: true })) },
+          { label: 'Promos $ Week', values: restaurants.map(r => ({ v: r.weekPromo, isPromo: true, highlight: r.shouldHighlightPromo })) },
+          { label: 'Promos $ Period', values: restaurants.map(r => ({ v: r.ptdPromo, isPromo: true })) },
+          { label: 'Expo Time', values: restaurants.map(r => ({ text: r.expoTime, highlight: r.highlightExpo })) },
+          { label: 'Brunch Time', values: restaurants.map(r => ({ text: r.brunchTime, highlight: r.highlightBrunch })) },
+        ];
+        const colWidth = `${Math.floor(75 / restaurants.length)}%`;
+        return `
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <thead>
+              <tr>
+                <th style="${headerCell} text-align: left; width: 25%;">Metric</th>
+                ${restaurants.map(r => `<th style="${headerCell} text-align: center; width: ${colWidth};">${r.code}</th>`).join('')}
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map((row, ri) => {
+                const bg = ri % 2 === 0 ? '#ffffff' : '#f8fafc';
+                return `<tr style="background-color: ${bg};">
+                  <td style="${cell} font-weight: 500; color: #334155; width: 25%;">${row.label}</td>
+                  ${row.values.map((val: any) => {
+                    let display = '';
+                    let color = '#334155';
+                    if (val.text !== undefined) {
+                      display = val.text;
+                      color = val.highlight ? '#dc2626' : '#334155';
+                    } else if (val.isPromo) {
+                      display = fmtCurrency(val.v);
+                      color = val.highlight ? '#dc2626' : '#334155';
+                    } else if (val.isTheoretical) {
+                      display = fmtVariancePct(val.v);
+                      color = theoreticalColor(val.v);
+                    } else {
+                      display = fmtVarianceCurrency(val.v);
+                      color = varianceColor(val.v, true);
+                    }
+                    return `<td style="${cell} text-align: center; color: ${color}; font-weight: ${color !== '#334155' ? '600' : '400'};">${display}</td>`;
+                  }).join('')}
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>`;
+      };
+
+      const restaurantPerformanceHtml = () => restaurants.map(r => `
+        <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0;">
+          <p style="font-weight: 600; color: #1e293b; margin: 0 0 8px 0; font-size: 14px;">${r.name}</p>
+          <div style="font-size: 13px; line-height: 1.8; color: #334155;">
+            <p style="margin: 0;"><span style="color: #475569;">Food Sales:</span> Week ${fmtCurrency(r.weekSales)} <span style="color: ${varianceColor(r.weekSalesVariance, false)};">(${r.weekSalesVariance >= 0 ? '+' : '–'}${fmtCurrency(Math.abs(r.weekSalesVariance))})</span> | QTD ${fmtCurrency(r.qtdSales)} <span style="color: ${varianceColor(r.qtdSalesVariance, false)};">(${r.qtdSalesVariance >= 0 ? '+' : '–'}${fmtCurrency(Math.abs(r.qtdSalesVariance))})</span> | YTD ${fmtCurrency(r.ytdSales)} <span style="color: ${varianceColor(r.ytdSalesVariance, false)};">(${r.ytdSalesVariance >= 0 ? '+' : '–'}${fmtCurrency(Math.abs(r.ytdSalesVariance))})</span></p>
+            <p style="margin: 0;"><span style="color: #475569;">Food Cost:</span> ${fmtPct(r.weekFoodCost)} <span style="color: ${varianceColor(r.weekFoodCostVariance)};">(${r.weekFoodCostVariance >= 0 ? '+' : '–'}${Math.abs(r.weekFoodCostVariance).toFixed(2)} pts)</span> | PTD ${fmtPct(r.ptdFoodCost)} <span style="color: ${varianceColor(r.ptdFoodCostVariance)};">(${r.ptdFoodCostVariance >= 0 ? '+' : '–'}${Math.abs(r.ptdFoodCostVariance).toFixed(2)} pts)</span> | YTD ${fmtPct(r.ytdFoodCostPct)} <span style="color: ${varianceColor(r.ytdFoodCostVariance)};">(${r.ytdFoodCostVariance >= 0 ? '+' : '–'}${Math.abs(r.ytdFoodCostVariance).toFixed(2)} pts)</span></p>
+            <p style="margin: 0;"><span style="color: #475569;">Labour:</span> ${fmtPct(r.weekLabour)} <span style="color: ${varianceColor(r.weekLabourVariance)};">(${r.weekLabourVariance >= 0 ? '+' : '–'}${Math.abs(r.weekLabourVariance).toFixed(2)} pts)</span> | PTD ${fmtPct(r.ptdLabour)} <span style="color: ${varianceColor(r.ptdLabourVariance)};">(${r.ptdLabourVariance >= 0 ? '+' : '–'}${Math.abs(r.ptdLabourVariance).toFixed(2)} pts)</span> | YTD ${fmtPct(r.ytdLabourPct)} <span style="color: ${varianceColor(r.ytdLabourVariance)};">(${r.ytdLabourVariance >= 0 ? '+' : '–'}${Math.abs(r.ytdLabourVariance).toFixed(2)} pts)</span></p>
+            ${r.aiSummary ? `<div style="margin-top: 8px; padding: 10px 12px; background-color: #eff6ff; border-radius: 6px; color: #334155; font-size: 12px; line-height: 1.6;">${r.aiSummary}</div>` : ''}
+          </div>
+        </div>`).join('');
+
+      const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Weekly Executive Report — FY ${fiscalYear} P${period} W${week}</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; max-width: 960px; margin: 0 auto; padding: 32px 24px; line-height: 1.5;">
+  <h1 style="font-size: 22px; font-weight: 700; color: #1e293b; margin: 0 0 4px 0;">Weekly Executive Report</h1>
+  <p style="font-size: 13px; color: #475569; margin: 0 0 28px 0;">FY ${fiscalYear} — Period ${period}, Week ${week}${weekEndingDate ? ` &nbsp;|&nbsp; Week Ending ${weekEndingDate}` : ''}</p>
+
+  <h2 style="font-size: 16px; font-weight: 700; color: #1e293b; margin: 0 0 16px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">Budget Variance Summary</h2>
+  ${consolidatedSectionHtml('CG Consolidated — All Restaurants', allMetrics, true)}
+  ${consolidatedSectionHtml('Beertown + Sociable', btMetrics, true)}
+  ${consolidatedSectionHtml('Trinity (WC/TBK/Sole)', trinityMetrics)}
+
+  <h2 style="font-size: 16px; font-weight: 700; color: #1e293b; margin: 28px 0 16px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">Budget Variance by Restaurant</h2>
+  ${restaurants.length > 0 ? varianceTableHtml() : '<p style="color: #64748b; font-size: 13px;">No data available.</p>'}
+
+  <h2 style="font-size: 16px; font-weight: 700; color: #1e293b; margin: 28px 0 16px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">Restaurant Performance using P&amp;L Data</h2>
+  ${restaurants.length > 0 ? restaurantPerformanceHtml() : '<p style="color: #64748b; font-size: 13px;">No data available.</p>'}
+</body>
+</html>`;
+
+      const win = window.open('', '_blank');
+      if (!win) {
+        throw new Error('Popup blocked — please allow popups for this site.');
+      }
+      win.document.write(html);
+      win.document.close();
+      showMessage('success', 'Report opened — select all and copy to paste into email');
     } catch (error) {
       console.error('Error exporting report:', error);
-      showMessage('error', 'Failed to export report');
+      showMessage('error', error instanceof Error ? error.message : 'Failed to export report');
     }
   };
 
