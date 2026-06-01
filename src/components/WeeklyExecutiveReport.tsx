@@ -49,7 +49,6 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
   const [generatingStatements, setGeneratingStatements] = useState(false);
 
   const isUsingProps = !!(propFiscalYear && propPeriod && propWeek);
-  const calculateConsolidatedMetricsRef = useRef(calculateConsolidatedMetrics);
 
   const currentPeriod = isUsingProps
     ? { fiscal_year: propFiscalYear!, period: propPeriod!, week: propWeek!, id: '', start_date: '', end_date: '', is_current: false }
@@ -119,6 +118,8 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
       locationCount: uniqueLocations.size
     };
   }, [currentPeriod?.fiscal_year, currentPeriod?.period, currentPeriod?.week, weeks]);
+
+  const calculateConsolidatedMetricsRef = useRef(calculateConsolidatedMetrics);
 
   useEffect(() => {
     calculateConsolidatedMetricsRef.current = calculateConsolidatedMetrics;
