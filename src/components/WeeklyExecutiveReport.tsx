@@ -588,14 +588,12 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
 
       const openingHtml = report?.opening_statement
         ? `<div style="margin-bottom: 28px; padding: 20px 24px; background-color: #f8fafc; border-left: 4px solid #334155; border-radius: 0 6px 6px 0;">
-            <p style="font-size: 11px; font-weight: 600; color: #1e293b; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 10px 0;">Opening</p>
             <div style="font-size: 14px; color: #1e293b; line-height: 1.75; white-space: pre-wrap;">${report.opening_statement}</div>
           </div>`
         : '';
 
       const closingHtml = report?.closing_statement
         ? `<div style="margin-top: 28px; padding: 20px 24px; background-color: #f8fafc; border-left: 4px solid #334155; border-radius: 0 6px 6px 0;">
-            <p style="font-size: 11px; font-weight: 600; color: #1e293b; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 10px 0;">Closing</p>
             <div style="font-size: 14px; color: #1e293b; line-height: 1.75; white-space: pre-wrap;">${report.closing_statement}</div>
           </div>`
         : '';
@@ -612,7 +610,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
 
   ${openingHtml}
 
-  <h2 style="font-size: 16px; font-weight: 700; color: #1e293b; margin: 0 0 16px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">Budget Variance Summary</h2>
+  <h2 style="font-size: 16px; font-weight: 700; color: #1e293b; margin: 0 0 16px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">Variance Summary</h2>
   ${consolidatedSectionHtml('CG Consolidated — All Restaurants', allMetrics, true)}
   ${consolidatedSectionHtml('Beertown + Sociable', btMetrics, true)}
   ${consolidatedSectionHtml('Trinity (WC/TBK/Sole)', trinityMetrics)}
@@ -620,7 +618,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
   <h2 style="font-size: 16px; font-weight: 700; color: #1e293b; margin: 28px 0 16px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">Budget Variance by Restaurant</h2>
   ${restaurants.length > 0 ? varianceTableHtml() : '<p style="color: #64748b; font-size: 13px;">No data available.</p>'}
 
-  <h2 style="font-size: 16px; font-weight: 700; color: #1e293b; margin: 28px 0 16px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">Restaurant Performance using P&amp;L Data</h2>
+  <h2 style="font-size: 16px; font-weight: 700; color: #1e293b; margin: 28px 0 16px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">Restaurant Performance</h2>
   ${restaurants.length > 0 ? restaurantPerformanceHtml() : '<p style="color: #64748b; font-size: 13px;">No data available.</p>'}
 
   ${closingHtml}
