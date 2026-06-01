@@ -15,6 +15,9 @@ type WeeklyReport = {
   sole_summary: string;
   action_plan: string;
   consolidated_metrics: any;
+  leadership_notes: string;
+  opening_statement: string;
+  closing_statement: string;
   status: 'draft' | 'final';
   created_at: string;
   updated_at: string;
@@ -43,6 +46,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
   const [generating, setGenerating] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'report' | 'summaries' | 'journals'>('report');
+  const [generatingStatements, setGeneratingStatements] = useState(false);
 
   const isUsingProps = !!(propFiscalYear && propPeriod && propWeek);
 
@@ -220,6 +224,57 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
       showMessage('error', 'Failed to generate AI summary');
     } finally {
       setGenerating(null);
+    }
+  };
+
+  const generateStatements = async () => {
+    if (!report || !currentPeriod) return;
+
+    setGeneratingStatements(true);
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-executive-statements`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+          },
+          body: JSON.stringify({
+            fiscalYear: currentPeriod.fiscal_year,
+            period: currentPeriod.period,
+            week: currentPeriod.week,
+            leadershipNotes: report.leadership_notes || ''
+          })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to generate statements');
+      }
+
+      const { opening, closing } = await response.json();
+
+      const updates: Partial<WeeklyReport> = {};
+      if (opening) updates.opening_statement = opening;
+      if (closing) updates.closing_statement = closing;
+
+      if (Object.keys(updates).length > 0) {
+        const { error } = await supabase
+          .from('weekly_executive_reports')
+          .update({ ...updates, updated_at: new Date().toISOString() })
+          .eq('id', report.id);
+
+        if (error) throw error;
+        setReport({ ...report, ...updates });
+        showMessage('success', 'Opening and closing statements generated');
+      }
+    } catch (error) {
+      console.error('Error generating statements:', error);
+      showMessage('error', 'Failed to generate statements');
+    } finally {
+      setGeneratingStatements(false);
     }
   };
 
@@ -449,8 +504,8 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
       const trinityMetrics = buildConsolidated(trinityCodes);
 
       // CSS helpers
-      const cell = 'padding: 8px 16px; font-size: 13px;';
-      const headerCell = `${cell} font-weight: 600; color: #334155; text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em; background-color: #f1f5f9;`;
+      const cell = 'padding: 8px 16px; font-size: 13px; color: #1e293b;';
+      const headerCell = `padding: 8px 16px; font-size: 11px; font-weight: 600; color: #1e293b; text-transform: uppercase; letter-spacing: 0.05em; background-color: #f1f5f9;`;
 
       const consolidatedSectionHtml = (title: string, data: ReturnType<typeof buildConsolidated>, bold = false) => {
         if (!data) return '';
@@ -460,10 +515,10 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
         return `
           <div style="margin-bottom: ${bold ? '20px' : '16px'};">
             <p style="${titleStyle}">${title}</p>
-            <div style="margin-left: 16px; color: #334155; font-size: 13px; line-height: 1.8;">
-              <p style="margin: 0;">Food Sales — PTD: ${fmtCurrency(data.ptdSales)} <span style="color: ${salesVarianceColor(salesVar)};">${fmtVarianceCurrency(data.ptdSalesVariance)}</span> | YTD: ${fmtCurrency(data.ytdSales)} <span style="color: ${salesVarianceColor(ytdSalesVar)};">${fmtVarianceCurrency(data.ytdSalesVariance)}</span></p>
-              <p style="margin: 0;">COGS (Food) % — PTD: ${fmtPct(data.ptdFCPct)} <span style="color: ${costVarianceColor(data.ptdFCVariance)};">${fmtVariancePct(data.ptdFCVariance)}</span> | YTD: ${fmtPct(data.ytdFCPct)} <span style="color: ${costVarianceColor(data.ytdFCVariance)};">${fmtVariancePct(data.ytdFCVariance)}</span></p>
-              <p style="margin: 0;">Labour % — PTD: ${fmtPct(data.ptdLabPct)} <span style="color: ${costVarianceColor(data.ptdLabVariance)};">${fmtVariancePct(data.ptdLabVariance)}</span> | YTD: ${fmtPct(data.ytdLabPct)} <span style="color: ${costVarianceColor(data.ytdLabVariance)};">${fmtVariancePct(data.ytdLabVariance)}</span></p>
+            <div style="margin-left: 16px; font-size: 13px; line-height: 1.8; color: #1e293b;">
+              <p style="margin: 0;">Food Sales — PTD: ${fmtCurrency(data.ptdSales)} <span style="color: ${salesVarianceColor(salesVar)}; font-weight: 600;">${fmtVarianceCurrency(data.ptdSalesVariance)}</span> | YTD: ${fmtCurrency(data.ytdSales)} <span style="color: ${salesVarianceColor(ytdSalesVar)}; font-weight: 600;">${fmtVarianceCurrency(data.ytdSalesVariance)}</span></p>
+              <p style="margin: 0;">COGS (Food) % — PTD: ${fmtPct(data.ptdFCPct)} <span style="color: ${costVarianceColor(data.ptdFCVariance)}; font-weight: 600;">${fmtVariancePct(data.ptdFCVariance)}</span> | YTD: ${fmtPct(data.ytdFCPct)} <span style="color: ${costVarianceColor(data.ytdFCVariance)}; font-weight: 600;">${fmtVariancePct(data.ytdFCVariance)}</span></p>
+              <p style="margin: 0;">Labour % — PTD: ${fmtPct(data.ptdLabPct)} <span style="color: ${costVarianceColor(data.ptdLabVariance)}; font-weight: 600;">${fmtVariancePct(data.ptdLabVariance)}</span> | YTD: ${fmtPct(data.ytdLabPct)} <span style="color: ${costVarianceColor(data.ytdLabVariance)}; font-weight: 600;">${fmtVariancePct(data.ytdLabVariance)}</span></p>
             </div>
           </div>`;
       };
@@ -494,24 +549,25 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
               ${rows.map((row, ri) => {
                 const bg = ri % 2 === 0 ? '#ffffff' : '#f8fafc';
                 return `<tr style="background-color: ${bg};">
-                  <td style="${cell} font-weight: 500; color: #334155; width: 25%;">${row.label}</td>
+                  <td style="${cell} font-weight: 500; width: 25%;">${row.label}</td>
                   ${row.values.map((val: any) => {
                     let display = '';
-                    let color = '#334155';
+                    let color = '#1e293b';
+                    let fw = '400';
                     if (val.text !== undefined) {
                       display = val.text;
-                      color = val.highlight ? '#dc2626' : '#334155';
+                      if (val.highlight) { color = '#dc2626'; fw = '600'; }
                     } else if (val.isPromo) {
                       display = fmtCurrency(val.v);
-                      color = val.highlight ? '#dc2626' : '#334155';
+                      if (val.highlight) { color = '#dc2626'; fw = '600'; }
                     } else if (val.isTheoretical) {
                       display = fmtVariancePct(val.v);
-                      color = theoreticalColor(val.v);
+                      color = theoreticalColor(val.v); fw = '600';
                     } else {
                       display = fmtVarianceCurrency(val.v);
-                      color = varianceColor(val.v, true);
+                      color = varianceColor(val.v, true); fw = '600';
                     }
-                    return `<td style="${cell} text-align: center; color: ${color}; font-weight: ${color !== '#334155' ? '600' : '400'};">${display}</td>`;
+                    return `<td style="${cell} text-align: center; color: ${color}; font-weight: ${fw};">${display}</td>`;
                   }).join('')}
                 </tr>`;
               }).join('')}
@@ -522,23 +578,39 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
       const restaurantPerformanceHtml = () => restaurants.map(r => `
         <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0;">
           <p style="font-weight: 600; color: #1e293b; margin: 0 0 8px 0; font-size: 14px;">${r.name}</p>
-          <div style="font-size: 13px; line-height: 1.8; color: #334155;">
-            <p style="margin: 0;"><span style="color: #475569;">Food Sales:</span> Week ${fmtCurrency(r.weekSales)} <span style="color: ${varianceColor(r.weekSalesVariance, false)};">(${r.weekSalesVariance >= 0 ? '+' : '–'}${fmtCurrency(Math.abs(r.weekSalesVariance))})</span> | QTD ${fmtCurrency(r.qtdSales)} <span style="color: ${varianceColor(r.qtdSalesVariance, false)};">(${r.qtdSalesVariance >= 0 ? '+' : '–'}${fmtCurrency(Math.abs(r.qtdSalesVariance))})</span> | YTD ${fmtCurrency(r.ytdSales)} <span style="color: ${varianceColor(r.ytdSalesVariance, false)};">(${r.ytdSalesVariance >= 0 ? '+' : '–'}${fmtCurrency(Math.abs(r.ytdSalesVariance))})</span></p>
-            <p style="margin: 0;"><span style="color: #475569;">Food Cost:</span> ${fmtPct(r.weekFoodCost)} <span style="color: ${varianceColor(r.weekFoodCostVariance)};">(${r.weekFoodCostVariance >= 0 ? '+' : '–'}${Math.abs(r.weekFoodCostVariance).toFixed(2)} pts)</span> | PTD ${fmtPct(r.ptdFoodCost)} <span style="color: ${varianceColor(r.ptdFoodCostVariance)};">(${r.ptdFoodCostVariance >= 0 ? '+' : '–'}${Math.abs(r.ptdFoodCostVariance).toFixed(2)} pts)</span> | YTD ${fmtPct(r.ytdFoodCostPct)} <span style="color: ${varianceColor(r.ytdFoodCostVariance)};">(${r.ytdFoodCostVariance >= 0 ? '+' : '–'}${Math.abs(r.ytdFoodCostVariance).toFixed(2)} pts)</span></p>
-            <p style="margin: 0;"><span style="color: #475569;">Labour:</span> ${fmtPct(r.weekLabour)} <span style="color: ${varianceColor(r.weekLabourVariance)};">(${r.weekLabourVariance >= 0 ? '+' : '–'}${Math.abs(r.weekLabourVariance).toFixed(2)} pts)</span> | PTD ${fmtPct(r.ptdLabour)} <span style="color: ${varianceColor(r.ptdLabourVariance)};">(${r.ptdLabourVariance >= 0 ? '+' : '–'}${Math.abs(r.ptdLabourVariance).toFixed(2)} pts)</span> | YTD ${fmtPct(r.ytdLabourPct)} <span style="color: ${varianceColor(r.ytdLabourVariance)};">(${r.ytdLabourVariance >= 0 ? '+' : '–'}${Math.abs(r.ytdLabourVariance).toFixed(2)} pts)</span></p>
-            ${r.aiSummary ? `<div style="margin-top: 8px; padding: 10px 12px; background-color: #eff6ff; border-radius: 6px; color: #334155; font-size: 12px; line-height: 1.6;">${r.aiSummary}</div>` : ''}
+          <div style="font-size: 13px; line-height: 1.8; color: #1e293b;">
+            <p style="margin: 0;">Food Sales: Week ${fmtCurrency(r.weekSales)} <span style="color: ${varianceColor(r.weekSalesVariance, false)}; font-weight: 600;">(${r.weekSalesVariance >= 0 ? '+' : '–'}${fmtCurrency(Math.abs(r.weekSalesVariance))})</span> | QTD ${fmtCurrency(r.qtdSales)} <span style="color: ${varianceColor(r.qtdSalesVariance, false)}; font-weight: 600;">(${r.qtdSalesVariance >= 0 ? '+' : '–'}${fmtCurrency(Math.abs(r.qtdSalesVariance))})</span> | YTD ${fmtCurrency(r.ytdSales)} <span style="color: ${varianceColor(r.ytdSalesVariance, false)}; font-weight: 600;">(${r.ytdSalesVariance >= 0 ? '+' : '–'}${fmtCurrency(Math.abs(r.ytdSalesVariance))})</span></p>
+            <p style="margin: 0;">Food Cost: ${fmtPct(r.weekFoodCost)} <span style="color: ${varianceColor(r.weekFoodCostVariance)}; font-weight: 600;">(${r.weekFoodCostVariance >= 0 ? '+' : '–'}${Math.abs(r.weekFoodCostVariance).toFixed(2)} pts)</span> | PTD ${fmtPct(r.ptdFoodCost)} <span style="color: ${varianceColor(r.ptdFoodCostVariance)}; font-weight: 600;">(${r.ptdFoodCostVariance >= 0 ? '+' : '–'}${Math.abs(r.ptdFoodCostVariance).toFixed(2)} pts)</span> | YTD ${fmtPct(r.ytdFoodCostPct)} <span style="color: ${varianceColor(r.ytdFoodCostVariance)}; font-weight: 600;">(${r.ytdFoodCostVariance >= 0 ? '+' : '–'}${Math.abs(r.ytdFoodCostVariance).toFixed(2)} pts)</span></p>
+            <p style="margin: 0;">Labour: ${fmtPct(r.weekLabour)} <span style="color: ${varianceColor(r.weekLabourVariance)}; font-weight: 600;">(${r.weekLabourVariance >= 0 ? '+' : '–'}${Math.abs(r.weekLabourVariance).toFixed(2)} pts)</span> | PTD ${fmtPct(r.ptdLabour)} <span style="color: ${varianceColor(r.ptdLabourVariance)}; font-weight: 600;">(${r.ptdLabourVariance >= 0 ? '+' : '–'}${Math.abs(r.ptdLabourVariance).toFixed(2)} pts)</span> | YTD ${fmtPct(r.ytdLabourPct)} <span style="color: ${varianceColor(r.ytdLabourVariance)}; font-weight: 600;">(${r.ytdLabourVariance >= 0 ? '+' : '–'}${Math.abs(r.ytdLabourVariance).toFixed(2)} pts)</span></p>
+            ${r.aiSummary ? `<div style="margin-top: 8px; padding: 10px 12px; background-color: #f8fafc; border-radius: 6px; color: #1e293b; font-size: 12px; line-height: 1.6;">${r.aiSummary}</div>` : ''}
           </div>
         </div>`).join('');
+
+      const openingHtml = report?.opening_statement
+        ? `<div style="margin-bottom: 28px; padding: 20px 24px; background-color: #f8fafc; border-left: 4px solid #334155; border-radius: 0 6px 6px 0;">
+            <p style="font-size: 11px; font-weight: 600; color: #1e293b; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 10px 0;">Opening</p>
+            <div style="font-size: 14px; color: #1e293b; line-height: 1.75; white-space: pre-wrap;">${report.opening_statement}</div>
+          </div>`
+        : '';
+
+      const closingHtml = report?.closing_statement
+        ? `<div style="margin-top: 28px; padding: 20px 24px; background-color: #f8fafc; border-left: 4px solid #334155; border-radius: 0 6px 6px 0;">
+            <p style="font-size: 11px; font-weight: 600; color: #1e293b; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 10px 0;">Closing</p>
+            <div style="font-size: 14px; color: #1e293b; line-height: 1.75; white-space: pre-wrap;">${report.closing_statement}</div>
+          </div>`
+        : '';
 
       const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Weekly Executive Report — FY ${fiscalYear} P${period} W${week}</title>
+  <title>Weekly Culinary Report — FY ${fiscalYear} P${period} W${week}</title>
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; max-width: 960px; margin: 0 auto; padding: 32px 24px; line-height: 1.5;">
-  <h1 style="font-size: 22px; font-weight: 700; color: #1e293b; margin: 0 0 4px 0;">Weekly Executive Report</h1>
-  <p style="font-size: 13px; color: #475569; margin: 0 0 28px 0;">FY ${fiscalYear} — Period ${period}, Week ${week}${weekEndingDate ? ` &nbsp;|&nbsp; Week Ending ${weekEndingDate}` : ''}</p>
+  <h1 style="font-size: 22px; font-weight: 700; color: #1e293b; margin: 0 0 4px 0;">Weekly Culinary Report</h1>
+  <p style="font-size: 13px; color: #1e293b; margin: 0 0 28px 0;">FY ${fiscalYear} — Period ${period}, Week ${week}${weekEndingDate ? ` &nbsp;|&nbsp; Week Ending ${weekEndingDate}` : ''}</p>
+
+  ${openingHtml}
 
   <h2 style="font-size: 16px; font-weight: 700; color: #1e293b; margin: 0 0 16px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">Budget Variance Summary</h2>
   ${consolidatedSectionHtml('CG Consolidated — All Restaurants', allMetrics, true)}
@@ -550,6 +622,8 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
 
   <h2 style="font-size: 16px; font-weight: 700; color: #1e293b; margin: 28px 0 16px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">Restaurant Performance using P&amp;L Data</h2>
   ${restaurants.length > 0 ? restaurantPerformanceHtml() : '<p style="color: #64748b; font-size: 13px;">No data available.</p>'}
+
+  ${closingHtml}
 </body>
 </html>`;
 
@@ -621,7 +695,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Weekly Executive Report</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Weekly Culinary Report</h1>
           <div className="flex items-center gap-2 mt-1 text-sm text-slate-600">
             <Calendar className="w-4 h-4" />
             <span>FY {currentPeriod?.fiscal_year} - Period {currentPeriod?.period}, Week {currentPeriod?.week}</span>
@@ -644,6 +718,24 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
               {message.text}
             </span>
           )}
+
+          <button
+            onClick={generateStatements}
+            disabled={generatingStatements}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {generatingStatements ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                Generate Statements
+              </>
+            )}
+          </button>
 
           <button
             onClick={exportReport}
@@ -692,7 +784,52 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
       </div>
 
       {activeTab === 'report' && (
-        <RestaurantMetricsList fiscalYear={currentPeriod!.fiscal_year} period={currentPeriod!.period} week={currentPeriod!.week} />
+        <div className="space-y-6">
+          {/* Opening Statement */}
+          <div className="bg-white rounded-lg border border-slate-200 p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold text-slate-800">Opening Statement</h2>
+              {!report.opening_statement && (
+                <span className="text-xs text-slate-400 italic">Generate using the button above</span>
+              )}
+            </div>
+            {report.opening_statement ? (
+              <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{report.opening_statement}</div>
+            ) : (
+              <div className="text-sm text-slate-400 italic py-4 text-center">No opening statement generated yet</div>
+            )}
+          </div>
+
+          {/* Leadership Notes */}
+          <div className="bg-white rounded-lg border border-slate-200 p-6">
+            <h2 className="text-base font-semibold text-slate-800 mb-1">Leadership Notes</h2>
+            <p className="text-xs text-slate-500 mb-3">Add context for AI generation — operational notes, weather, upcoming events, specific callouts, etc.</p>
+            <textarea
+              value={report.leadership_notes || ''}
+              onChange={(e) => handleFieldChange('leadership_notes', e.target.value)}
+              rows={5}
+              placeholder="e.g. Long weekend coming up, patio season starting, new menu launching week 3, labour pressure at BT Burlington..."
+              className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none text-sm text-slate-700 placeholder-slate-400"
+            />
+          </div>
+
+          <RestaurantMetricsList fiscalYear={currentPeriod!.fiscal_year} period={currentPeriod!.period} week={currentPeriod!.week} />
+
+          {/* Closing Statement */}
+          <div className="bg-white rounded-lg border border-slate-200 p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold text-slate-800">Closing Statement</h2>
+              {!report.closing_statement && (
+                <span className="text-xs text-slate-400 italic">Generate using the button above</span>
+              )}
+            </div>
+            {report.closing_statement ? (
+              <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{report.closing_statement}</div>
+            ) : (
+              <div className="text-sm text-slate-400 italic py-4 text-center">No closing statement generated yet</div>
+            )}
+          </div>
+        </div>
       )}
 
       {activeTab === 'summaries' && (
