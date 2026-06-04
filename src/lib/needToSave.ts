@@ -30,6 +30,7 @@ function getPeriodsInQuarter(quarter: number): number[] {
 }
 
 async function getWeeksRemainingInYear(fiscalYear: number, currentPeriod: number, currentWeek: number): Promise<number> {
+  const safeWeek = Math.max(1, currentWeek);
   const { data } = await supabase
     .from('fiscal_calendar')
     .select('id, period, week')
@@ -40,11 +41,12 @@ async function getWeeksRemainingInYear(fiscalYear: number, currentPeriod: number
   if (!data) return 1;
 
   return data.filter(w =>
-    w.period > currentPeriod || (w.period === currentPeriod && w.week > currentWeek)
+    w.period > currentPeriod || (w.period === currentPeriod && w.week > safeWeek)
   ).length;
 }
 
 async function getWeeksRemainingInQuarter(fiscalYear: number, currentPeriod: number, currentWeek: number): Promise<number> {
+  const safeWeek = Math.max(1, currentWeek);
   const quarter = getQuarterForPeriod(currentPeriod);
   const qtrPeriods = getPeriodsInQuarter(quarter);
 
@@ -59,11 +61,12 @@ async function getWeeksRemainingInQuarter(fiscalYear: number, currentPeriod: num
   if (!data) return 1;
 
   return data.filter(w =>
-    w.period > currentPeriod || (w.period === currentPeriod && w.week > currentWeek)
+    w.period > currentPeriod || (w.period === currentPeriod && w.week > safeWeek)
   ).length;
 }
 
 async function getWeeksRemainingInPeriod(fiscalYear: number, currentPeriod: number, currentWeek: number): Promise<number> {
+  const safeWeek = Math.max(1, currentWeek);
   const { data } = await supabase
     .from('fiscal_calendar')
     .select('id, week')
@@ -73,7 +76,7 @@ async function getWeeksRemainingInPeriod(fiscalYear: number, currentPeriod: numb
 
   if (!data) return 1;
 
-  return data.filter(w => w.week > currentWeek).length;
+  return data.filter(w => w.week > safeWeek).length;
 }
 
 function calcVarianceDollars(

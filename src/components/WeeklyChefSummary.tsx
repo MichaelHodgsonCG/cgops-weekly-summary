@@ -832,7 +832,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 <input
                   type="number"
                   value={formData.week_number || ''}
-                  onChange={(e) => handleInputChange('week_number', parseInt(e.target.value) || 0)}
+                  onChange={(e) => handleInputChange('week_number', parseInt(e.target.value) || 1)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
