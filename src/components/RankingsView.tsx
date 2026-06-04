@@ -475,7 +475,7 @@ export default function RankingsView({ weekEndingDate }: RankingsViewProps) {
                   className="pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white text-slate-700 focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                 >
                   {availableWeeks.map(w => (
-                    <option key={w} value={w}>{new Date(w).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</option>
+                    <option key={w} value={w}>{new Date(w + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</option>
                   ))}
                 </select>
               </div>
@@ -567,7 +567,7 @@ export default function RankingsView({ weekEndingDate }: RankingsViewProps) {
                 className="pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg bg-white text-slate-700 focus:ring-2 focus:ring-slate-500 focus:border-transparent appearance-none cursor-pointer"
               >
                 {availableWeeks.map(w => (
-                  <option key={w} value={w}>Week ending {new Date(w).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</option>
+                  <option key={w} value={w}>Week ending {new Date(w + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</option>
                 ))}
               </select>
             </div>
