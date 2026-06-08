@@ -446,7 +446,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
         const expoT = parseTime(expoTime);
         const brunchT = parseTime(brunchTime);
         const code = current.locations.code;
-        const highlightExpo = expoT ? ((code === 'BTBA' || code === 'SKT') ? expoT.h >= 10 : expoT.h >= 12) : false;
+        const highlightExpo = expoT ? ((code.startsWith('BT') || code === 'SKT') ? expoT.h >= 10 : expoT.h >= 12) : false;
         const highlightBrunch = brunchT ? (brunchT.h > 10 || (brunchT.h === 10 && brunchT.m > 0)) : false;
         return {
           name: current.locations.name, code,
@@ -1096,7 +1096,7 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
       return time.hours > 10 || (time.hours === 10 && time.minutes > 0);
     }
 
-    if (restaurantCode === 'BTBA' || restaurantCode === 'SKT') {
+    if (restaurantCode.startsWith('BT') || restaurantCode === 'SKT') {
       return time.hours >= 10;
     }
     return time.hours >= 12;
