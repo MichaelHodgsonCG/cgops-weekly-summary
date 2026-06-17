@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 
 const LOCATION_NAME = 'Test Package';
 
-type GuidedStep = 'start' | 'sales' | 'transfers' | 'discounts';
+type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'discounts';
 
 type StepMeta = {
   section: number;
@@ -21,7 +21,7 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     section: 1,
     sectionLabel: 'Sales and Labour',
     sectionStepIndex: 1,
-    sectionStepCount: 2,
+    sectionStepCount: 3,
     overallIndex: 1,
     stepLabel: 'Budget and Sales Upload',
   },
@@ -29,16 +29,24 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     section: 1,
     sectionLabel: 'Sales and Labour',
     sectionStepIndex: 2,
-    sectionStepCount: 2,
+    sectionStepCount: 3,
     overallIndex: 2,
     stepLabel: 'Labour Transfers',
+  },
+  overtime: {
+    section: 1,
+    sectionLabel: 'Sales and Labour',
+    sectionStepIndex: 3,
+    sectionStepCount: 3,
+    overallIndex: 3,
+    stepLabel: 'Overtime',
   },
   discounts: {
     section: 2,
     sectionLabel: 'Discounts',
     sectionStepIndex: 1,
     sectionStepCount: 1,
-    overallIndex: 3,
+    overallIndex: 4,
     stepLabel: 'Discounts',
   },
 };
@@ -50,6 +58,10 @@ type ProfitCenterParseResult = {
   salesTotal: number;
   labourDaily: number[];
   labourTotal: number;
+  overtimeDaily: number[];
+  overtimeTotal: number;
+  doubletimeDaily: number[];
+  doubletimeTotal: number;
 };
 
 const DISCOUNT_REASON_CATEGORIES = [
@@ -133,6 +145,8 @@ function parseProfitCenterReport(buffer: ArrayBuffer): ProfitCenterParseResult {
 
   const salesRow = findRow(rows, 'Sales Total');
   const labourRow = findRow(rows, 'Labor Total');
+  const overtimeRow = findRow(rows, 'Overtime');
+  const doubletimeRow = findRow(rows, 'Doubletime');
 
   if (!salesRow || !labourRow) {
     throw new Error('Could not find "Sales Total" or "Labor Total" rows on the BOH sheet.');
@@ -146,6 +160,10 @@ function parseProfitCenterReport(buffer: ArrayBuffer): ProfitCenterParseResult {
     salesTotal: parseFloat(String(salesRow[8] ?? 0)) || 0,
     labourDaily: toNumbers(labourRow),
     labourTotal: parseFloat(String(labourRow[8] ?? 0)) || 0,
+    overtimeDaily: overtimeRow ? toNumbers(overtimeRow) : [0, 0, 0, 0, 0, 0, 0],
+    overtimeTotal: overtimeRow ? parseFloat(String(overtimeRow[8] ?? 0)) || 0 : 0,
+    doubletimeDaily: doubletimeRow ? toNumbers(doubletimeRow) : [0, 0, 0, 0, 0, 0, 0],
+    doubletimeTotal: doubletimeRow ? parseFloat(String(doubletimeRow[8] ?? 0)) || 0 : 0,
   };
 }
 
@@ -259,6 +277,8 @@ export type GuidedFieldUpdates = {
   labour_budget_pct?: number;
   food_sales_labour_push?: number;
   labour_spent?: number;
+  overtime_amount?: number;
+  overtime_notes?: string;
   boh_promo_amount?: number;
   labour_transfer_vacation?: number;
   labour_transfer_management?: number;
@@ -285,6 +305,7 @@ export function GuidedWeeklyPackage({ initialValues, onFieldsChange, onClose }: 
   const [salesResult, setSalesResult] = useState<ProfitCenterParseResult | null>(null);
   const [salesError, setSalesError] = useState('');
   const [transferEntries, setTransferEntries] = useState<TransferEntry[]>([createBlankTransferEntry()]);
+  const [overtimeNotes, setOvertimeNotes] = useState(initialValues?.overtime_notes ?? '');
   const [discountsFile, setDiscountsFile] = useState<File | null>(null);
   const [discountsResult, setDiscountsResult] = useState<DiscountsParseResult | null>(null);
   const [discountsError, setDiscountsError] = useState('');
@@ -327,6 +348,7 @@ export function GuidedWeeklyPackage({ initialValues, onFieldsChange, onClose }: 
       onFieldsChange?.({
         food_sales_labour_push: result.salesTotal,
         labour_spent: result.labourTotal,
+        overtime_amount: result.overtimeTotal,
       });
     } catch (err) {
       setSalesError(err instanceof Error ? err.message : 'Failed to parse this report.');
@@ -342,6 +364,11 @@ export function GuidedWeeklyPackage({ initialValues, onFieldsChange, onClose }: 
       labour_transfer_other: summary.other,
       labour_transfer_notes: summary.notes,
     });
+  };
+
+  const handleOvertimeNotesChange = (value: string) => {
+    setOvertimeNotes(value);
+    onFieldsChange?.({ overtime_notes: value });
   };
 
   const handleDiscountsFileSelect = async (file: File) => {
@@ -383,6 +410,16 @@ export function GuidedWeeklyPackage({ initialValues, onFieldsChange, onClose }: 
         entries={transferEntries}
         onEntriesChange={handleTransferEntriesChange}
         onBack={() => setStep('sales')}
+        onNext={() => setStep('overtime')}
+      />
+    );
+  } else if (step === 'overtime') {
+    content = (
+      <GuidedOvertimeStep
+        result={salesResult}
+        notes={overtimeNotes}
+        onNotesChange={handleOvertimeNotesChange}
+        onBack={() => setStep('transfers')}
         onNext={() => setStep('discounts')}
       />
     );
@@ -393,7 +430,7 @@ export function GuidedWeeklyPackage({ initialValues, onFieldsChange, onClose }: 
         result={discountsResult}
         error={discountsError}
         onFileSelect={handleDiscountsFileSelect}
-        onBack={() => setStep('transfers')}
+        onBack={() => setStep('overtime')}
       />
     );
   } else {
@@ -821,6 +858,127 @@ function GuidedTransfersStep({
           </div>
         ))}
       </div>
+
+      <div className="mt-8 flex justify-between">
+        <button
+          onClick={onBack}
+          className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+        >
+          Back
+        </button>
+        <button
+          onClick={onNext}
+          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GuidedOvertimeStep({
+  result,
+  notes,
+  onNotesChange,
+  onBack,
+  onNext,
+}: {
+  result: ProfitCenterParseResult | null;
+  notes: string;
+  onNotesChange: (value: string) => void;
+  onBack: () => void;
+  onNext: () => void;
+}) {
+  const days = [1, 2, 3, 4, 5, 6, 7];
+  const formatCurrency = (value: number) =>
+    value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const hasOvertime = !!result && result.overtimeTotal > 0;
+  const hasDoubletime = !!result && result.doubletimeTotal > 0;
+
+  return (
+    <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+      <StepProgressHeader meta={STEP_META.overtime} />
+
+      <p className="mt-4 text-sm text-slate-600 leading-relaxed">
+        Overtime and doubletime are pulled from the Profit Center Report uploaded in Step 1.
+      </p>
+
+      {!result && (
+        <p className="mt-6 text-sm text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
+          Upload the Sales Report in Step 1 to see overtime and doubletime here.
+        </p>
+      )}
+
+      {result && (
+        <div className="mt-6 border border-slate-200 rounded-lg overflow-hidden overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium text-slate-500">Metric</th>
+                {days.map((day) => (
+                  <th key={day} className="px-3 py-2 text-right font-medium text-slate-500">
+                    Day {day}
+                  </th>
+                ))}
+                <th className="px-3 py-2 text-right font-medium text-slate-500">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-t border-slate-200">
+                <td className="px-3 py-2 text-slate-700 whitespace-nowrap">Overtime</td>
+                {result.overtimeDaily.map((value, i) => (
+                  <td key={i} className="px-3 py-2 text-right text-slate-700">
+                    {formatCurrency(value)}
+                  </td>
+                ))}
+                <td className="px-3 py-2 text-right font-semibold text-slate-800">
+                  {formatCurrency(result.overtimeTotal)}
+                </td>
+              </tr>
+              <tr className="border-t border-slate-200">
+                <td className="px-3 py-2 text-slate-700 whitespace-nowrap">Doubletime</td>
+                {result.doubletimeDaily.map((value, i) => (
+                  <td key={i} className="px-3 py-2 text-right text-slate-700">
+                    {formatCurrency(value)}
+                  </td>
+                ))}
+                <td className="px-3 py-2 text-right font-semibold text-slate-800">
+                  {formatCurrency(result.doubletimeTotal)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {hasDoubletime && (
+        <p className="mt-3 text-xs text-slate-500">
+          Doubletime detected — this is expected on a statutory holiday, no explanation needed.
+        </p>
+      )}
+
+      {hasOvertime && (
+        <div className="mt-6">
+          <label className="block text-sm font-medium text-slate-700 mb-2">
+            Overtime Explanation
+          </label>
+          <textarea
+            value={notes}
+            onChange={(e) => onNotesChange(e.target.value)}
+            rows={3}
+            placeholder="Explain why overtime occurred this week"
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
+          />
+        </div>
+      )}
+
+      {result && !hasOvertime && (
+        <p className="mt-6 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+          No overtime this period.
+        </p>
+      )}
 
       <div className="mt-8 flex justify-between">
         <button

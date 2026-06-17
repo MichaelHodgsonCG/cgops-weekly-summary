@@ -43,6 +43,7 @@ interface WeeklySummaryData {
   qtd_labour_variance_pct: number;
   labour_spent: number;
   overtime_amount: number;
+  overtime_notes: string;
   lab_qtd_var_amount: number;
   labour_transfer_vacation: number;
   labour_transfer_management: number;
@@ -130,6 +131,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     qtd_labour_variance_pct: 0,
     labour_spent: 0,
     overtime_amount: 0,
+    overtime_notes: '',
     lab_qtd_var_amount: 0,
     labour_transfer_vacation: 0,
     labour_transfer_management: 0,
@@ -463,6 +465,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     qtd_labour_variance_pct: 0,
     labour_spent: 0,
     overtime_amount: 0,
+    overtime_notes: '',
     lab_qtd_var_amount: 0,
     labour_transfer_vacation: 0,
     labour_transfer_management: 0,
@@ -831,6 +834,8 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 labour_budget_pct: formData.labour_budget_pct,
                 food_sales_labour_push: formData.food_sales_labour_push,
                 labour_spent: formData.labour_spent,
+                overtime_amount: formData.overtime_amount,
+                overtime_notes: formData.overtime_notes,
                 boh_promo_amount: formData.boh_promo_amount,
                 labour_transfer_vacation: formData.labour_transfer_vacation,
                 labour_transfer_management: formData.labour_transfer_management,
@@ -1122,6 +1127,15 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 <textarea
                   value={formData.labour_transfer_notes}
                   onChange={(e) => handleInputChange('labour_transfer_notes', e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                />
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Overtime Explanation <span className="text-xs text-slate-400">(from guide)</span></label>
+                <textarea
+                  value={formData.overtime_notes}
+                  onChange={(e) => handleInputChange('overtime_notes', e.target.value)}
                   rows={3}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
                 />
