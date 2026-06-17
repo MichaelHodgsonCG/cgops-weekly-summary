@@ -3,10 +3,10 @@ import { ClipboardCheck, Upload, CheckCircle2, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase';
 
 const LOCATION_NAME = 'Test Package';
-const TOTAL_STEPS = 1;
+const TOTAL_STEPS = 2;
 const FOOD_CLASSES = ['FOOD-ADD-ONS', 'FOOD-APPS', 'FOOD-DESSERTS', 'FOOD-ENTREES'];
 
-type GuidedStep = 'start' | 'sales';
+type GuidedStep = 'start' | 'sales' | 'discounts';
 
 type DailySales = {
   day: number;
@@ -89,6 +89,7 @@ export function GuidedWeeklyPackage() {
   const [salesFile, setSalesFile] = useState<File | null>(null);
   const [salesResult, setSalesResult] = useState<SalesParseResult | null>(null);
   const [salesError, setSalesError] = useState('');
+  const [discountsFile, setDiscountsFile] = useState<File | null>(null);
 
   useEffect(() => {
     loadLocation();
@@ -130,6 +131,17 @@ export function GuidedWeeklyPackage() {
         error={salesError}
         onFileSelect={handleSalesFileSelect}
         onBack={() => setStep('start')}
+        onNext={() => setStep('discounts')}
+      />
+    );
+  }
+
+  if (step === 'discounts') {
+    return (
+      <GuidedDiscountsStep
+        file={discountsFile}
+        onFileSelect={setDiscountsFile}
+        onBack={() => setStep('sales')}
       />
     );
   }
@@ -213,6 +225,7 @@ function GuidedSalesStep({
   error,
   onFileSelect,
   onBack,
+  onNext,
 }: {
   salesBudget: string;
   onSalesBudgetChange: (value: string) => void;
@@ -221,6 +234,7 @@ function GuidedSalesStep({
   error: string;
   onFileSelect: (file: File) => void;
   onBack: () => void;
+  onNext: () => void;
 }) {
   const [dragActive, setDragActive] = useState(false);
   const stepNumber = 1;
@@ -335,6 +349,105 @@ function GuidedSalesStep({
             </table>
           </div>
         )}
+      </div>
+
+      <div className="mt-8 flex justify-between">
+        <button
+          onClick={onBack}
+          className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+        >
+          Back
+        </button>
+        <button
+          onClick={onNext}
+          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GuidedDiscountsStep({
+  file,
+  onFileSelect,
+  onBack,
+}: {
+  file: File | null;
+  onFileSelect: (file: File) => void;
+  onBack: () => void;
+}) {
+  const [dragActive, setDragActive] = useState(false);
+  const stepNumber = 2;
+
+  const handleFiles = (files: FileList | null) => {
+    if (files && files.length > 0) {
+      onFileSelect(files[0]);
+    }
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+      <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+        <span>Step {stepNumber} of {TOTAL_STEPS}</span>
+        <span>{Math.round((stepNumber / TOTAL_STEPS) * 100)}%</span>
+      </div>
+      <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden mb-6">
+        <div
+          className="h-full bg-slate-800 rounded-full"
+          style={{ width: `${(stepNumber / TOTAL_STEPS) * 100}%` }}
+        />
+      </div>
+
+      <h2 className="text-xl font-bold text-slate-800">Step 2: Discounts</h2>
+
+      <div className="mt-6">
+        <h3 className="text-base font-semibold text-slate-800">Upload Discounts Report</h3>
+        <p className="text-sm text-slate-600 mt-1">
+          Loss Prevention &gt; Discounts &gt; Select Dates &gt; Select Major Classes:
+          FOOD-ADD-ONS, FOOD-APPS, FOOD-DESSERTS, FOOD-ENTREES &gt; CSV &gt; Upload below
+        </p>
+
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragActive(true);
+          }}
+          onDragLeave={() => setDragActive(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragActive(false);
+            handleFiles(e.dataTransfer.files);
+          }}
+          className={`mt-4 border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+            dragActive ? 'border-slate-800 bg-slate-50' : 'border-slate-300'
+          }`}
+        >
+          <Upload className="w-8 h-8 text-slate-400 mx-auto mb-3" />
+          <p className="text-slate-600 mb-3">Drag and drop your report here, or</p>
+          <label className="inline-block bg-slate-800 text-white px-4 py-2 rounded-lg cursor-pointer hover:bg-slate-700 transition-colors">
+            Browse Files
+            <input
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={(e) => handleFiles(e.target.files)}
+            />
+          </label>
+        </div>
+
+        {file && (
+          <div className="mt-4 flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+            <CheckCircle2 className="w-5 h-5" />
+            <span className="text-sm font-medium">Uploaded: {file.name}</span>
+          </div>
+        )}
+
+        <p className="text-xs text-slate-500 mt-4">
+          Reason code breakdown (guest did not like, quality issue, slow, steak over/under)
+          will be parsed once an example report is provided.
+        </p>
       </div>
 
       <div className="mt-8 flex justify-between">
