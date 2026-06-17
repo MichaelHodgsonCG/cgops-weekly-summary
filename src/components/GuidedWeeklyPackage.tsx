@@ -18,6 +18,33 @@ type SalesParseResult = {
   grandTotal: number;
 };
 
+const DISCOUNT_REASON_CATEGORIES = [
+  { label: 'Guest Did Not Like', match: 'guest did not like s' },
+  { label: 'Quality Issue', match: 'quality issue s' },
+  { label: 'Slow', match: 'slow s' },
+  { label: 'Steak Over/Under', match: 'steak over under s' },
+];
+
+type DiscountCategoryResult = {
+  label: string;
+  dailyCounts: number[];
+  dailyAmounts: number[];
+  totalCount: number;
+  totalAmount: number;
+};
+
+type DiscountsParseResult = {
+  days: number[];
+  categories: DiscountCategoryResult[];
+};
+
+function normalizeDiscountReason(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
 function parseCsvLine(line: string): string[] {
   const fields: string[] = [];
   let current = '';
@@ -82,6 +109,67 @@ function parseExecutiveSummarySales(csvText: string): SalesParseResult {
   return { dailyTotals, grandTotal };
 }
 
+function parseDiscountsReport(csvText: string): DiscountsParseResult {
+  const lines = csvText.split(/\r?\n/);
+
+  const fromDateLine = lines.find((line) => line.startsWith('From Date:'));
+  const fromDateMatch = fromDateLine?.match(/From Date:,(\d{4}-\d{2}-\d{2})/);
+  if (!fromDateMatch) {
+    throw new Error('Could not find the From Date in this report.');
+  }
+  const fromDate = new Date(`${fromDateMatch[1]}T00:00:00`);
+
+  const sectionIndex = lines.findIndex((line) => line.includes('GenerateDiscountReport'));
+  if (sectionIndex === -1) {
+    throw new Error('Could not find the discount detail section in this report.');
+  }
+
+  const header = parseCsvLine(lines[sectionIndex + 1]);
+  const dateIdx = header.indexOf('date');
+  const discountIdx = header.indexOf('discount');
+  const amountIdx = header.indexOf('discountAmount');
+
+  if (dateIdx === -1 || discountIdx === -1 || amountIdx === -1) {
+    throw new Error('This report is missing expected columns (date, discount, discountAmount).');
+  }
+
+  const days = [1, 2, 3, 4, 5, 6, 7];
+  const categories: DiscountCategoryResult[] = DISCOUNT_REASON_CATEGORIES.map((c) => ({
+    label: c.label,
+    dailyCounts: days.map(() => 0),
+    dailyAmounts: days.map(() => 0),
+    totalCount: 0,
+    totalAmount: 0,
+  }));
+
+  let rowIndex = sectionIndex + 2;
+  while (rowIndex < lines.length && lines[rowIndex].trim() !== '') {
+    const row = parseCsvLine(lines[rowIndex]);
+    const rowDateStr = row[dateIdx];
+    const reason = normalizeDiscountReason(row[discountIdx] ?? '');
+    const amount = parseFloat(row[amountIdx]);
+
+    const categoryIndex = DISCOUNT_REASON_CATEGORIES.findIndex((c) => c.match === reason);
+
+    if (categoryIndex !== -1 && rowDateStr && !isNaN(amount)) {
+      const rowDate = new Date(rowDateStr.split(' ')[0] + 'T00:00:00');
+      const dayNumber = Math.round((rowDate.getTime() - fromDate.getTime()) / 86400000) + 1;
+      const dayPos = days.indexOf(dayNumber);
+
+      if (dayPos !== -1) {
+        categories[categoryIndex].dailyCounts[dayPos] += 1;
+        categories[categoryIndex].dailyAmounts[dayPos] += amount;
+        categories[categoryIndex].totalCount += 1;
+        categories[categoryIndex].totalAmount += amount;
+      }
+    }
+
+    rowIndex++;
+  }
+
+  return { days, categories };
+}
+
 export function GuidedWeeklyPackage() {
   const [step, setStep] = useState<GuidedStep>('start');
   const [locationName, setLocationName] = useState(LOCATION_NAME);
@@ -90,6 +178,8 @@ export function GuidedWeeklyPackage() {
   const [salesResult, setSalesResult] = useState<SalesParseResult | null>(null);
   const [salesError, setSalesError] = useState('');
   const [discountsFile, setDiscountsFile] = useState<File | null>(null);
+  const [discountsResult, setDiscountsResult] = useState<DiscountsParseResult | null>(null);
+  const [discountsError, setDiscountsError] = useState('');
 
   useEffect(() => {
     loadLocation();
@@ -121,6 +211,20 @@ export function GuidedWeeklyPackage() {
     }
   };
 
+  const handleDiscountsFileSelect = async (file: File) => {
+    setDiscountsFile(file);
+    setDiscountsError('');
+    setDiscountsResult(null);
+
+    try {
+      const text = await file.text();
+      const result = parseDiscountsReport(text);
+      setDiscountsResult(result);
+    } catch (err) {
+      setDiscountsError(err instanceof Error ? err.message : 'Failed to parse this report.');
+    }
+  };
+
   if (step === 'sales') {
     return (
       <GuidedSalesStep
@@ -140,7 +244,9 @@ export function GuidedWeeklyPackage() {
     return (
       <GuidedDiscountsStep
         file={discountsFile}
-        onFileSelect={setDiscountsFile}
+        result={discountsResult}
+        error={discountsError}
+        onFileSelect={handleDiscountsFileSelect}
         onBack={() => setStep('sales')}
       />
     );
@@ -371,10 +477,14 @@ function GuidedSalesStep({
 
 function GuidedDiscountsStep({
   file,
+  result,
+  error,
   onFileSelect,
   onBack,
 }: {
   file: File | null;
+  result: DiscountsParseResult | null;
+  error: string;
   onFileSelect: (file: File) => void;
   onBack: () => void;
 }) {
@@ -437,17 +547,59 @@ function GuidedDiscountsStep({
           </label>
         </div>
 
-        {file && (
+        {file && !error && result && (
           <div className="mt-4 flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
             <CheckCircle2 className="w-5 h-5" />
             <span className="text-sm font-medium">Uploaded: {file.name}</span>
           </div>
         )}
 
-        <p className="text-xs text-slate-500 mt-4">
-          Reason code breakdown (guest did not like, quality issue, slow, steak over/under)
-          will be parsed once an example report is provided.
-        </p>
+        {error && (
+          <div className="mt-4 flex items-center gap-2 text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+            <AlertCircle className="w-5 h-5" />
+            <span className="text-sm font-medium">{error}</span>
+          </div>
+        )}
+
+        {result && (
+          <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium text-slate-500">Reason</th>
+                  {result.days.map((day) => (
+                    <th key={day} className="px-3 py-2 text-right font-medium text-slate-500">
+                      Day {day}
+                    </th>
+                  ))}
+                  <th className="px-3 py-2 text-right font-medium text-slate-500">Count</th>
+                  <th className="px-3 py-2 text-right font-medium text-slate-500">Total $</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.categories.map((category) => (
+                  <tr key={category.label} className="border-t border-slate-200">
+                    <td className="px-3 py-2 text-slate-700 whitespace-nowrap">{category.label}</td>
+                    {category.dailyCounts.map((count, i) => (
+                      <td key={i} className="px-3 py-2 text-right text-slate-700">
+                        {count}
+                      </td>
+                    ))}
+                    <td className="px-3 py-2 text-right font-semibold text-slate-800">
+                      {category.totalCount}
+                    </td>
+                    <td className="px-3 py-2 text-right font-semibold text-slate-800">
+                      {category.totalAmount.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="mt-8 flex justify-between">
