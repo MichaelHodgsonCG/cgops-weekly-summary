@@ -22,7 +22,7 @@ interface WeeklySummaryData {
   usage_amount: number;
   ideal_usage_amount: number;
   cogs_qtd: number;
-  food_sales_silverware: number;
+  food_sales_labour_push: number;
   food_sales_oc: number;
   week_variance_amount: number;
   budget_food_sales_period: number;
@@ -103,7 +103,7 @@ export function exportChefSummaryToExcel(
     ['SAGE FOOD SALES QTD', currency(data.sage_food_sales_qtd), 'SAGE FC QTD %', pct(data.sage_fcost_qtd_pct), 'FOOD COST PTD %', pct(data.food_cost_ptd_pct)],
     ['SAGE SALES BUDGET QTD', currency(data.sage_sales_budget_qtd), 'FC QTD %', pct(data.fc_qtd_pct), 'QTD VARIANCE %', pct(data.qtd_variance_pct)],
     ['USAGE', currency(data.usage_amount), 'IDEAL USAGE', currency(data.ideal_usage_amount), 'COGS QTD', currency(data.cogs_qtd)],
-    ['FOOD SALES SILVERWARE', currency(data.food_sales_silverware), 'FOOD SALES OC', currency(data.food_sales_oc), 'WEEK VARIANCE', currency(data.week_variance_amount)],
+    ['FOOD SALES LABOUR PUSH', currency(data.food_sales_labour_push), 'FOOD SALES OC', currency(data.food_sales_oc), 'WEEK VARIANCE', currency(data.week_variance_amount)],
     ['BUDGET FOOD SALES (PERIOD)', currency(data.budget_food_sales_period), 'WEEK BUDGET', currency(weekBudget), 'QTD VARIANCE $', currency(data.qtd_variance_amount)],
     [],
     ['LABOUR'],

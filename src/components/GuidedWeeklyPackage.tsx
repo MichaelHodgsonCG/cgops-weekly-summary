@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ClipboardCheck, Upload, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ClipboardCheck, Upload, CheckCircle2, AlertCircle, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 
@@ -157,11 +157,29 @@ function parseDiscountsReport(csvText: string): DiscountsParseResult {
   return { days, categories };
 }
 
-export function GuidedWeeklyPackage() {
+export type GuidedFieldUpdates = {
+  budget_food_sales_period?: number;
+  labour_budget_pct?: number;
+  food_sales_labour_push?: number;
+  labour_spent?: number;
+  boh_promo_amount?: number;
+};
+
+interface GuidedWeeklyPackageProps {
+  initialValues?: GuidedFieldUpdates;
+  onFieldsChange?: (updates: GuidedFieldUpdates) => void;
+  onClose?: () => void;
+}
+
+export function GuidedWeeklyPackage({ initialValues, onFieldsChange, onClose }: GuidedWeeklyPackageProps) {
   const [step, setStep] = useState<GuidedStep>('start');
   const [locationName, setLocationName] = useState(LOCATION_NAME);
-  const [salesBudget, setSalesBudget] = useState('');
-  const [labourBudgetPct, setLabourBudgetPct] = useState('');
+  const [salesBudget, setSalesBudget] = useState(
+    initialValues?.budget_food_sales_period ? String(initialValues.budget_food_sales_period) : ''
+  );
+  const [labourBudgetPct, setLabourBudgetPct] = useState(
+    initialValues?.labour_budget_pct ? String(initialValues.labour_budget_pct) : ''
+  );
   const [salesFile, setSalesFile] = useState<File | null>(null);
   const [salesResult, setSalesResult] = useState<ProfitCenterParseResult | null>(null);
   const [salesError, setSalesError] = useState('');
@@ -185,6 +203,16 @@ export function GuidedWeeklyPackage() {
     }
   };
 
+  const handleSalesBudgetChange = (value: string) => {
+    setSalesBudget(value);
+    onFieldsChange?.({ budget_food_sales_period: parseFloat(value) || 0 });
+  };
+
+  const handleLabourBudgetPctChange = (value: string) => {
+    setLabourBudgetPct(value);
+    onFieldsChange?.({ labour_budget_pct: parseFloat(value) || 0 });
+  };
+
   const handleSalesFileSelect = async (file: File) => {
     setSalesFile(file);
     setSalesError('');
@@ -194,6 +222,10 @@ export function GuidedWeeklyPackage() {
       const buffer = await file.arrayBuffer();
       const result = parseProfitCenterReport(buffer);
       setSalesResult(result);
+      onFieldsChange?.({
+        food_sales_labour_push: result.salesTotal,
+        labour_spent: result.labourTotal,
+      });
     } catch (err) {
       setSalesError(err instanceof Error ? err.message : 'Failed to parse this report.');
     }
@@ -208,18 +240,22 @@ export function GuidedWeeklyPackage() {
       const text = await file.text();
       const result = parseDiscountsReport(text);
       setDiscountsResult(result);
+      const totalAmount = result.categories.reduce((sum, c) => sum + c.totalAmount, 0);
+      onFieldsChange?.({ boh_promo_amount: totalAmount });
     } catch (err) {
       setDiscountsError(err instanceof Error ? err.message : 'Failed to parse this report.');
     }
   };
 
+  let content;
+
   if (step === 'sales') {
-    return (
+    content = (
       <GuidedSalesStep
         salesBudget={salesBudget}
-        onSalesBudgetChange={setSalesBudget}
+        onSalesBudgetChange={handleSalesBudgetChange}
         labourBudgetPct={labourBudgetPct}
-        onLabourBudgetPctChange={setLabourBudgetPct}
+        onLabourBudgetPctChange={handleLabourBudgetPctChange}
         file={salesFile}
         result={salesResult}
         error={salesError}
@@ -228,10 +264,8 @@ export function GuidedWeeklyPackage() {
         onNext={() => setStep('discounts')}
       />
     );
-  }
-
-  if (step === 'discounts') {
-    return (
+  } else if (step === 'discounts') {
+    content = (
       <GuidedDiscountsStep
         file={discountsFile}
         result={discountsResult}
@@ -240,13 +274,29 @@ export function GuidedWeeklyPackage() {
         onBack={() => setStep('sales')}
       />
     );
+  } else {
+    content = (
+      <GuidedPackageStart
+        locationName={locationName}
+        onStart={() => setStep('sales')}
+      />
+    );
   }
 
   return (
-    <GuidedPackageStart
-      locationName={locationName}
-      onStart={() => setStep('sales')}
-    />
+    <div className="relative">
+      {onClose && (
+        <button
+          onClick={onClose}
+          className="absolute -top-2 right-0 sm:right-2 flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors z-10"
+          title="Close guide"
+        >
+          <X className="w-4 h-4" />
+          Close
+        </button>
+      )}
+      {content}
+    </div>
   );
 }
 

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Save, Plus, Trash2, LogOut, ChevronDown, FileText, AlertTriangle, Download, RefreshCw } from 'lucide-react';
+import { Save, Plus, Trash2, LogOut, ChevronDown, FileText, AlertTriangle, Download, RefreshCw, ClipboardCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { exportChefSummaryToExcel } from '../lib/chefSummaryExport';
 import { calculateNeedToSave, NeedToSaveBasis } from '../lib/needToSave';
+import { GuidedWeeklyPackage, GuidedFieldUpdates } from './GuidedWeeklyPackage';
 
 interface FeatureItem {
   name: string;
@@ -28,7 +29,7 @@ interface WeeklySummaryData {
   usage_amount: number;
   ideal_usage_amount: number;
   cogs_qtd: number;
-  food_sales_silverware: number;
+  food_sales_labour_push: number;
   food_sales_oc: number;
   week_variance_amount: number;
   budget_food_sales_period: number;
@@ -111,7 +112,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     usage_amount: 0,
     ideal_usage_amount: 0,
     cogs_qtd: 0,
-    food_sales_silverware: 0,
+    food_sales_labour_push: 0,
     food_sales_oc: 0,
     week_variance_amount: 0,
     budget_food_sales_period: 0,
@@ -169,6 +170,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
   const [savedSummaries, setSavedSummaries] = useState<SavedSummaryOption[]>([]);
   const [activeSummaryId, setActiveSummaryId] = useState<string | null>(summaryId || null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [calculatingNTS, setCalculatingNTS] = useState(false);
   const [ntsContext, setNtsContext] = useState<{
@@ -181,14 +183,14 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
   } | null>(null);
 
   const weekBudget = formData.budget_food_sales_period > 0 ? formData.budget_food_sales_period / 4 : 0;
-  const weekVarianceAmount = formData.food_sales_silverware > 0 ? formData.food_sales_silverware - weekBudget : 0;
-  const actualFoodCostPct = formData.food_sales_silverware > 0 ? (formData.usage_amount / formData.food_sales_silverware) * 100 : 0;
+  const weekVarianceAmount = formData.food_sales_labour_push > 0 ? formData.food_sales_labour_push - weekBudget : 0;
+  const actualFoodCostPct = formData.food_sales_labour_push > 0 ? (formData.usage_amount / formData.food_sales_labour_push) * 100 : 0;
   const fcVariance = actualFoodCostPct - formData.budget_food_cost_pct;
-  const theoreticalFoodCostPct = formData.food_sales_silverware > 0 ? (formData.ideal_usage_amount / formData.food_sales_silverware) * 100 : 0;
+  const theoreticalFoodCostPct = formData.food_sales_labour_push > 0 ? (formData.ideal_usage_amount / formData.food_sales_labour_push) * 100 : 0;
   const theoreticalVariance = actualFoodCostPct - theoreticalFoodCostPct;
-  const labourCostPct = formData.food_sales_silverware > 0 ? (formData.labour_spent / formData.food_sales_silverware) * 100 : 0;
+  const labourCostPct = formData.food_sales_labour_push > 0 ? (formData.labour_spent / formData.food_sales_labour_push) * 100 : 0;
   const lcVariance = labourCostPct - formData.labour_budget_pct;
-  const foodSalesSWvsOC = formData.food_sales_oc - formData.food_sales_silverware;
+  const foodSalesSWvsOC = formData.food_sales_oc - formData.food_sales_labour_push;
 
   useEffect(() => {
     const init = async () => {
@@ -439,7 +441,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     usage_amount: 0,
     ideal_usage_amount: 0,
     cogs_qtd: 0,
-    food_sales_silverware: 0,
+    food_sales_labour_push: 0,
     food_sales_oc: 0,
     week_variance_amount: 0,
     budget_food_sales_period: 0,
@@ -504,6 +506,10 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
 
   const handleInputChange = (field: keyof WeeklySummaryData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleGuideFieldsChange = (updates: GuidedFieldUpdates) => {
+    setFormData(prev => ({ ...prev, ...updates }));
   };
 
   const addFeatureItem = () => {
@@ -736,6 +742,14 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             </div>
+            <button
+              onClick={() => setShowGuide(true)}
+              className="flex items-center gap-1.5 px-3 py-2 text-slate-700 hover:bg-slate-100 border border-slate-300 rounded-lg transition-colors text-sm shrink-0"
+              title="Open the guided weekly package"
+            >
+              <ClipboardCheck className="w-4 h-4" />
+              <span>Guided Package</span>
+            </button>
             {activeSummaryId && (
               <button
                 onClick={() => setShowDeleteConfirm(true)}
@@ -797,6 +811,22 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
           </div>
         )}
 
+        {showGuide && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 backdrop-blur-sm py-8 px-4">
+            <GuidedWeeklyPackage
+              initialValues={{
+                budget_food_sales_period: formData.budget_food_sales_period,
+                labour_budget_pct: formData.labour_budget_pct,
+                food_sales_labour_push: formData.food_sales_labour_push,
+                labour_spent: formData.labour_spent,
+                boh_promo_amount: formData.boh_promo_amount,
+              }}
+              onFieldsChange={handleGuideFieldsChange}
+              onClose={() => setShowGuide(false)}
+            />
+          </div>
+        )}
+
         {message && (
           <div className={`mb-6 p-4 rounded-lg ${
             message.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'
@@ -843,12 +873,12 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
             <h3 className="text-lg font-semibold text-slate-900 mb-4">Sales Data</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Food Sales Silverware</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Food Sales Labour Push</label>
                 <input
                   type="number"
                   step="0.01"
-                  value={formData.food_sales_silverware || ''}
-                  onChange={(e) => handleInputChange('food_sales_silverware', parseFloat(e.target.value) || 0)}
+                  value={formData.food_sales_labour_push || ''}
+                  onChange={(e) => handleInputChange('food_sales_labour_push', parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
