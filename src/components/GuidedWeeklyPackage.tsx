@@ -1,12 +1,49 @@
 import { useEffect, useState } from 'react';
-import { ClipboardCheck, Upload, CheckCircle2, AlertCircle, X } from 'lucide-react';
+import { ClipboardCheck, Upload, CheckCircle2, AlertCircle, X, Plus, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 
 const LOCATION_NAME = 'Test Package';
-const TOTAL_STEPS = 2;
 
-type GuidedStep = 'start' | 'sales' | 'discounts';
+type GuidedStep = 'start' | 'sales' | 'transfers' | 'discounts';
+
+type StepMeta = {
+  section: number;
+  sectionLabel: string;
+  sectionStepIndex: number;
+  sectionStepCount: number;
+  overallIndex: number;
+  stepLabel: string;
+};
+
+const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
+  sales: {
+    section: 1,
+    sectionLabel: 'Sales and Labour',
+    sectionStepIndex: 1,
+    sectionStepCount: 2,
+    overallIndex: 1,
+    stepLabel: 'Budget and Sales Upload',
+  },
+  transfers: {
+    section: 1,
+    sectionLabel: 'Sales and Labour',
+    sectionStepIndex: 2,
+    sectionStepCount: 2,
+    overallIndex: 2,
+    stepLabel: 'Labour Transfers',
+  },
+  discounts: {
+    section: 2,
+    sectionLabel: 'Discounts',
+    sectionStepIndex: 1,
+    sectionStepCount: 1,
+    overallIndex: 3,
+    stepLabel: 'Discounts',
+  },
+};
+
+const TOTAL_STEPS = Object.keys(STEP_META).length;
 
 type ProfitCenterParseResult = {
   salesDaily: number[];
@@ -33,6 +70,22 @@ type DiscountCategoryResult = {
 type DiscountsParseResult = {
   days: number[];
   categories: DiscountCategoryResult[];
+};
+
+type TransferDestination = 'vacation' | 'management' | 'other';
+
+const TRANSFER_DESTINATIONS: { value: TransferDestination; label: string }[] = [
+  { value: 'vacation', label: 'Transfer to Vacation' },
+  { value: 'management', label: 'Transfer to Management Labour' },
+  { value: 'other', label: 'Transfer to Other' },
+];
+
+type TransferEntry = {
+  id: string;
+  annualWage: string;
+  days: string;
+  destination: TransferDestination;
+  reason: string;
 };
 
 function normalizeDiscountReason(value: string): string {
@@ -157,12 +210,60 @@ function parseDiscountsReport(csvText: string): DiscountsParseResult {
   return { days, categories };
 }
 
+function calculateTransferAmount(entry: TransferEntry): { dayWage: number; amount: number } {
+  const annualWage = parseFloat(entry.annualWage) || 0;
+  const days = parseFloat(entry.days) || 0;
+  const dayWage = annualWage / 52 / 5;
+  return { dayWage, amount: dayWage * days };
+}
+
+function summarizeTransfers(entries: TransferEntry[]) {
+  const totals: Record<TransferDestination, number> = { vacation: 0, management: 0, other: 0 };
+  const noteLines: string[] = [];
+
+  entries.forEach((entry) => {
+    const { dayWage, amount } = calculateTransferAmount(entry);
+    if (amount === 0) return;
+    totals[entry.destination] += amount;
+
+    const destinationLabel = TRANSFER_DESTINATIONS.find((d) => d.value === entry.destination)?.label ?? '';
+    const days = parseFloat(entry.days) || 0;
+    const reason = entry.reason.trim();
+    noteLines.push(
+      `${destinationLabel}: $${amount.toFixed(2)} (${days} day${days === 1 ? '' : 's'} @ $${dayWage.toFixed(2)}/day)${
+        reason ? ` — ${reason}` : ''
+      }`
+    );
+  });
+
+  return {
+    vacation: totals.vacation,
+    management: totals.management,
+    other: totals.other,
+    notes: noteLines.join('\n'),
+  };
+}
+
+function createBlankTransferEntry(): TransferEntry {
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    annualWage: '',
+    days: '',
+    destination: 'vacation',
+    reason: '',
+  };
+}
+
 export type GuidedFieldUpdates = {
   budget_food_sales_period?: number;
   labour_budget_pct?: number;
   food_sales_labour_push?: number;
   labour_spent?: number;
   boh_promo_amount?: number;
+  labour_transfer_vacation?: number;
+  labour_transfer_management?: number;
+  labour_transfer_other?: number;
+  labour_transfer_notes?: string;
 };
 
 interface GuidedWeeklyPackageProps {
@@ -183,6 +284,7 @@ export function GuidedWeeklyPackage({ initialValues, onFieldsChange, onClose }: 
   const [salesFile, setSalesFile] = useState<File | null>(null);
   const [salesResult, setSalesResult] = useState<ProfitCenterParseResult | null>(null);
   const [salesError, setSalesError] = useState('');
+  const [transferEntries, setTransferEntries] = useState<TransferEntry[]>([createBlankTransferEntry()]);
   const [discountsFile, setDiscountsFile] = useState<File | null>(null);
   const [discountsResult, setDiscountsResult] = useState<DiscountsParseResult | null>(null);
   const [discountsError, setDiscountsError] = useState('');
@@ -231,6 +333,17 @@ export function GuidedWeeklyPackage({ initialValues, onFieldsChange, onClose }: 
     }
   };
 
+  const handleTransferEntriesChange = (entries: TransferEntry[]) => {
+    setTransferEntries(entries);
+    const summary = summarizeTransfers(entries);
+    onFieldsChange?.({
+      labour_transfer_vacation: summary.vacation,
+      labour_transfer_management: summary.management,
+      labour_transfer_other: summary.other,
+      labour_transfer_notes: summary.notes,
+    });
+  };
+
   const handleDiscountsFileSelect = async (file: File) => {
     setDiscountsFile(file);
     setDiscountsError('');
@@ -261,6 +374,15 @@ export function GuidedWeeklyPackage({ initialValues, onFieldsChange, onClose }: 
         error={salesError}
         onFileSelect={handleSalesFileSelect}
         onBack={() => setStep('start')}
+        onNext={() => setStep('transfers')}
+      />
+    );
+  } else if (step === 'transfers') {
+    content = (
+      <GuidedTransfersStep
+        entries={transferEntries}
+        onEntriesChange={handleTransferEntriesChange}
+        onBack={() => setStep('sales')}
         onNext={() => setStep('discounts')}
       />
     );
@@ -271,7 +393,7 @@ export function GuidedWeeklyPackage({ initialValues, onFieldsChange, onClose }: 
         result={discountsResult}
         error={discountsError}
         onFileSelect={handleDiscountsFileSelect}
-        onBack={() => setStep('sales')}
+        onBack={() => setStep('transfers')}
       />
     );
   } else {
@@ -299,6 +421,27 @@ export function GuidedWeeklyPackage({ initialValues, onFieldsChange, onClose }: 
       )}
       {content}
     </div>
+  );
+}
+
+function StepProgressHeader({ meta }: { meta: StepMeta }) {
+  const pct = Math.round((meta.overallIndex / TOTAL_STEPS) * 100);
+
+  return (
+    <>
+      <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+        <span>
+          Section {meta.section}: {meta.sectionLabel} — Step {meta.sectionStepIndex} of {meta.sectionStepCount}
+        </span>
+        <span>{pct}%</span>
+      </div>
+      <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden mb-6">
+        <div className="h-full bg-slate-800 rounded-full" style={{ width: `${pct}%` }} />
+      </div>
+      <h2 className="text-xl font-bold text-slate-800">
+        Step {meta.overallIndex}: {meta.stepLabel}
+      </h2>
+    </>
   );
 }
 
@@ -389,7 +532,6 @@ function GuidedSalesStep({
   onNext: () => void;
 }) {
   const [dragActive, setDragActive] = useState(false);
-  const stepNumber = 1;
   const days = [1, 2, 3, 4, 5, 6, 7];
 
   const handleFiles = (files: FileList | null) => {
@@ -403,18 +545,11 @@ function GuidedSalesStep({
 
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
-      <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-        <span>Step {stepNumber} of {TOTAL_STEPS}</span>
-        <span>{Math.round((stepNumber / TOTAL_STEPS) * 100)}%</span>
-      </div>
-      <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden mb-6">
-        <div
-          className="h-full bg-slate-800 rounded-full"
-          style={{ width: `${(stepNumber / TOTAL_STEPS) * 100}%` }}
-        />
-      </div>
+      <StepProgressHeader meta={STEP_META.sales} />
 
-      <h2 className="text-xl font-bold text-slate-800">Step 1: Sales and Labour</h2>
+      <p className="mt-4 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+        Before you begin, ensure all punch adjustments have been reviewed.
+      </p>
 
       <div className="mt-6 grid grid-cols-2 gap-4">
         <div>
@@ -553,6 +688,158 @@ function GuidedSalesStep({
   );
 }
 
+function GuidedTransfersStep({
+  entries,
+  onEntriesChange,
+  onBack,
+  onNext,
+}: {
+  entries: TransferEntry[];
+  onEntriesChange: (entries: TransferEntry[]) => void;
+  onBack: () => void;
+  onNext: () => void;
+}) {
+  const formatCurrency = (value: number) =>
+    value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const updateEntry = (id: string, field: keyof TransferEntry, value: string) => {
+    onEntriesChange(entries.map((e) => (e.id === id ? { ...e, [field]: value } : e)));
+  };
+
+  const addEntry = () => {
+    onEntriesChange([...entries, createBlankTransferEntry()]);
+  };
+
+  const removeEntry = (id: string) => {
+    onEntriesChange(entries.filter((e) => e.id !== id));
+  };
+
+  const totals = summarizeTransfers(entries);
+
+  return (
+    <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+      <StepProgressHeader meta={STEP_META.transfers} />
+
+      <p className="mt-4 text-sm text-slate-600 leading-relaxed">
+        Calculate a day wage for any labour to transfer out of this week's labour cost. For example,
+        a $52,000 annual wage ÷ 52 weeks ÷ 5 days = $200/day. If 3 days need to move to Management
+        Labour because the chef was on holidays and the sous covered, enter that below.
+      </p>
+
+      <div className="mt-6 space-y-4">
+        {entries.map((entry, index) => {
+          const { dayWage, amount } = calculateTransferAmount(entry);
+          return (
+            <div key={entry.id} className="border border-slate-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-semibold text-slate-700">Transfer {index + 1}</p>
+                {entries.length > 1 && (
+                  <button
+                    onClick={() => removeEntry(entry.id)}
+                    className="text-red-600 hover:bg-red-50 rounded-lg p-1.5 transition-colors"
+                    title="Remove this transfer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Annual Wage</label>
+                  <input
+                    type="number"
+                    value={entry.annualWage}
+                    onChange={(e) => updateEntry(entry.id, 'annualWage', e.target.value)}
+                    placeholder="e.g. 52000"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Days to Transfer</label>
+                  <input
+                    type="number"
+                    value={entry.days}
+                    onChange={(e) => updateEntry(entry.id, 'days', e.target.value)}
+                    placeholder="e.g. 3"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Move To</label>
+                  <select
+                    value={entry.destination}
+                    onChange={(e) => updateEntry(entry.id, 'destination', e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 bg-white"
+                  >
+                    {TRANSFER_DESTINATIONS.map((d) => (
+                      <option key={d.value} value={d.value}>
+                        {d.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">
+                    Day Wage / Amount <span className="text-slate-400">(calculated)</span>
+                  </label>
+                  <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 text-sm font-medium">
+                    ${formatCurrency(dayWage)}/day &rarr; ${formatCurrency(amount)}
+                  </div>
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Reason</label>
+                  <input
+                    type="text"
+                    value={entry.reason}
+                    onChange={(e) => updateEntry(entry.id, 'reason', e.target.value)}
+                    placeholder="e.g. Chef on holidays 3 days, sous covered"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
+                  />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        <button
+          onClick={addEntry}
+          className="flex items-center gap-2 px-4 py-2 text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+        >
+          <Plus className="w-5 h-5" />
+          Add Transfer
+        </button>
+      </div>
+
+      <div className="mt-6 grid grid-cols-3 gap-4">
+        {TRANSFER_DESTINATIONS.map((d) => (
+          <div key={d.value} className="bg-slate-50 rounded-lg p-4">
+            <p className="text-xs font-medium text-slate-500 uppercase">{d.label}</p>
+            <p className="text-base font-semibold text-slate-800">
+              ${formatCurrency(totals[d.value])}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-8 flex justify-between">
+        <button
+          onClick={onBack}
+          className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+        >
+          Back
+        </button>
+        <button
+          onClick={onNext}
+          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function GuidedDiscountsStep({
   file,
   result,
@@ -567,7 +854,6 @@ function GuidedDiscountsStep({
   onBack: () => void;
 }) {
   const [dragActive, setDragActive] = useState(false);
-  const stepNumber = 2;
 
   const handleFiles = (files: FileList | null) => {
     if (files && files.length > 0) {
@@ -577,18 +863,7 @@ function GuidedDiscountsStep({
 
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
-      <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-        <span>Step {stepNumber} of {TOTAL_STEPS}</span>
-        <span>{Math.round((stepNumber / TOTAL_STEPS) * 100)}%</span>
-      </div>
-      <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden mb-6">
-        <div
-          className="h-full bg-slate-800 rounded-full"
-          style={{ width: `${(stepNumber / TOTAL_STEPS) * 100}%` }}
-        />
-      </div>
-
-      <h2 className="text-xl font-bold text-slate-800">Step 2: Discounts</h2>
+      <StepProgressHeader meta={STEP_META.discounts} />
 
       <div className="mt-6">
         <h3 className="text-base font-semibold text-slate-800">Upload Discounts Report</h3>

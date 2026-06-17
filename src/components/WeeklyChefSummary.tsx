@@ -44,6 +44,10 @@ interface WeeklySummaryData {
   labour_spent: number;
   overtime_amount: number;
   lab_qtd_var_amount: number;
+  labour_transfer_vacation: number;
+  labour_transfer_management: number;
+  labour_transfer_other: number;
+  labour_transfer_notes: string;
   ebidta_budget_period_pct: number;
   ebidta_ptd_pct: number;
   ebidta_variance_pct: number;
@@ -127,6 +131,10 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     labour_spent: 0,
     overtime_amount: 0,
     lab_qtd_var_amount: 0,
+    labour_transfer_vacation: 0,
+    labour_transfer_management: 0,
+    labour_transfer_other: 0,
+    labour_transfer_notes: '',
     ebidta_budget_period_pct: 0,
     ebidta_ptd_pct: 0,
     ebidta_variance_pct: 0,
@@ -456,6 +464,10 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     labour_spent: 0,
     overtime_amount: 0,
     lab_qtd_var_amount: 0,
+    labour_transfer_vacation: 0,
+    labour_transfer_management: 0,
+    labour_transfer_other: 0,
+    labour_transfer_notes: '',
     ebidta_budget_period_pct: 0,
     ebidta_ptd_pct: 0,
     ebidta_variance_pct: 0,
@@ -820,6 +832,10 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 food_sales_labour_push: formData.food_sales_labour_push,
                 labour_spent: formData.labour_spent,
                 boh_promo_amount: formData.boh_promo_amount,
+                labour_transfer_vacation: formData.labour_transfer_vacation,
+                labour_transfer_management: formData.labour_transfer_management,
+                labour_transfer_other: formData.labour_transfer_other,
+                labour_transfer_notes: formData.labour_transfer_notes,
               }}
               onFieldsChange={handleGuideFieldsChange}
               onClose={() => setShowGuide(false)}
@@ -1082,6 +1098,33 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 <div className={`w-full px-3 py-2 border rounded-lg font-medium ${lcVariance <= 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
                   {lcVariance > 0 ? '+' : ''}{lcVariance.toFixed(2)}%
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Transfer to Vacation <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  ${(formData.labour_transfer_vacation || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Transfer to Management Labour <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  ${(formData.labour_transfer_management || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Transfer to Other <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  ${(formData.labour_transfer_other || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Labour Transfer Notes</label>
+                <textarea
+                  value={formData.labour_transfer_notes}
+                  onChange={(e) => handleInputChange('labour_transfer_notes', e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                />
               </div>
             </div>
           </div>
