@@ -284,16 +284,18 @@ export function GuidedWeeklyPackage({ initialValues, onFieldsChange, onClose }: 
   }
 
   return (
-    <div className="relative">
+    <div>
       {onClose && (
-        <button
-          onClick={onClose}
-          className="absolute -top-2 right-0 sm:right-2 flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors z-10"
-          title="Close guide"
-        >
-          <X className="w-4 h-4" />
-          Close
-        </button>
+        <div className="max-w-2xl mx-auto mb-2 flex justify-end">
+          <button
+            onClick={onClose}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-slate-800/80 hover:bg-slate-700 rounded-lg transition-colors shadow"
+            title="Close guide"
+          >
+            <X className="w-4 h-4" />
+            Close
+          </button>
+        </div>
       )}
       {content}
     </div>
@@ -591,7 +593,7 @@ function GuidedDiscountsStep({
       <div className="mt-6">
         <h3 className="text-base font-semibold text-slate-800">Upload Discounts Report</h3>
         <p className="text-sm text-slate-600 mt-1">
-          Loss Prevention &gt; Discounts &gt; Select Dates &gt; Select Major Classes:
+          Silverware &gt; Loss Prevention &gt; Discounts &gt; Select Dates &gt; Select Major Classes:
           FOOD-ADD-ONS, FOOD-APPS, FOOD-DESSERTS, FOOD-ENTREES &gt; CSV &gt; Upload below
         </p>
 
