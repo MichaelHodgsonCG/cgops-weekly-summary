@@ -44,6 +44,7 @@ interface WeeklySummaryData {
   labour_spent: number;
   overtime_amount: number;
   overtime_notes: string;
+  labour_review_action_plan: string;
   lab_qtd_var_amount: number;
   labour_transfer_vacation: number;
   labour_transfer_management: number;
@@ -132,6 +133,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     labour_spent: 0,
     overtime_amount: 0,
     overtime_notes: '',
+    labour_review_action_plan: '',
     lab_qtd_var_amount: 0,
     labour_transfer_vacation: 0,
     labour_transfer_management: 0,
@@ -466,6 +468,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     labour_spent: 0,
     overtime_amount: 0,
     overtime_notes: '',
+    labour_review_action_plan: '',
     lab_qtd_var_amount: 0,
     labour_transfer_vacation: 0,
     labour_transfer_management: 0,
@@ -841,6 +844,13 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 labour_transfer_management: formData.labour_transfer_management,
                 labour_transfer_other: formData.labour_transfer_other,
                 labour_transfer_notes: formData.labour_transfer_notes,
+                labour_cost_ptd_pct: formData.labour_cost_ptd_pct,
+                lab_ptd_var_amount: formData.lab_ptd_var_amount,
+                labour_qtd_pct: formData.labour_qtd_pct,
+                sage_labour_budget_qtd_pct: formData.sage_labour_budget_qtd_pct,
+                qtd_labour_variance_pct: formData.qtd_labour_variance_pct,
+                lab_qtd_var_amount: formData.lab_qtd_var_amount,
+                labour_review_action_plan: formData.labour_review_action_plan,
               }}
               onFieldsChange={handleGuideFieldsChange}
               onClose={() => setShowGuide(false)}
@@ -1136,6 +1146,15 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 <textarea
                   value={formData.overtime_notes}
                   onChange={(e) => handleInputChange('overtime_notes', e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                />
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Labour Review Action Plan <span className="text-xs text-slate-400">(from guide)</span></label>
+                <textarea
+                  value={formData.labour_review_action_plan}
+                  onChange={(e) => handleInputChange('labour_review_action_plan', e.target.value)}
                   rows={3}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
                 />

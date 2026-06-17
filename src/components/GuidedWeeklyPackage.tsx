@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 
 const LOCATION_NAME = 'Test Package';
 
-type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'discounts';
+type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts';
 
 type StepMeta = {
   section: number;
@@ -21,7 +21,7 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     section: 1,
     sectionLabel: 'Sales and Labour',
     sectionStepIndex: 1,
-    sectionStepCount: 3,
+    sectionStepCount: 4,
     overallIndex: 1,
     stepLabel: 'Budget and Sales Upload',
   },
@@ -29,7 +29,7 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     section: 1,
     sectionLabel: 'Sales and Labour',
     sectionStepIndex: 2,
-    sectionStepCount: 3,
+    sectionStepCount: 4,
     overallIndex: 2,
     stepLabel: 'Labour Transfers',
   },
@@ -37,16 +37,24 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     section: 1,
     sectionLabel: 'Sales and Labour',
     sectionStepIndex: 3,
-    sectionStepCount: 3,
+    sectionStepCount: 4,
     overallIndex: 3,
     stepLabel: 'Overtime',
+  },
+  review: {
+    section: 1,
+    sectionLabel: 'Sales and Labour',
+    sectionStepIndex: 4,
+    sectionStepCount: 4,
+    overallIndex: 4,
+    stepLabel: 'Sales and Labour Review',
   },
   discounts: {
     section: 2,
     sectionLabel: 'Discounts',
     sectionStepIndex: 1,
     sectionStepCount: 1,
-    overallIndex: 4,
+    overallIndex: 5,
     stepLabel: 'Discounts',
   },
 };
@@ -284,6 +292,13 @@ export type GuidedFieldUpdates = {
   labour_transfer_management?: number;
   labour_transfer_other?: number;
   labour_transfer_notes?: string;
+  labour_cost_ptd_pct?: number;
+  lab_ptd_var_amount?: number;
+  labour_qtd_pct?: number;
+  sage_labour_budget_qtd_pct?: number;
+  qtd_labour_variance_pct?: number;
+  lab_qtd_var_amount?: number;
+  labour_review_action_plan?: string;
 };
 
 interface GuidedWeeklyPackageProps {
@@ -306,6 +321,9 @@ export function GuidedWeeklyPackage({ initialValues, onFieldsChange, onClose }: 
   const [salesError, setSalesError] = useState('');
   const [transferEntries, setTransferEntries] = useState<TransferEntry[]>([createBlankTransferEntry()]);
   const [overtimeNotes, setOvertimeNotes] = useState(initialValues?.overtime_notes ?? '');
+  const [labourReviewActionPlan, setLabourReviewActionPlan] = useState(
+    initialValues?.labour_review_action_plan ?? ''
+  );
   const [discountsFile, setDiscountsFile] = useState<File | null>(null);
   const [discountsResult, setDiscountsResult] = useState<DiscountsParseResult | null>(null);
   const [discountsError, setDiscountsError] = useState('');
@@ -371,6 +389,11 @@ export function GuidedWeeklyPackage({ initialValues, onFieldsChange, onClose }: 
     onFieldsChange?.({ overtime_notes: value });
   };
 
+  const handleLabourReviewActionPlanChange = (value: string) => {
+    setLabourReviewActionPlan(value);
+    onFieldsChange?.({ labour_review_action_plan: value });
+  };
+
   const handleDiscountsFileSelect = async (file: File) => {
     setDiscountsFile(file);
     setDiscountsError('');
@@ -420,6 +443,24 @@ export function GuidedWeeklyPackage({ initialValues, onFieldsChange, onClose }: 
         notes={overtimeNotes}
         onNotesChange={handleOvertimeNotesChange}
         onBack={() => setStep('transfers')}
+        onNext={() => setStep('review')}
+      />
+    );
+  } else if (step === 'review') {
+    content = (
+      <GuidedLabourReviewStep
+        wtdSales={salesResult?.salesTotal ?? initialValues?.food_sales_labour_push ?? 0}
+        wtdLabour={salesResult?.labourTotal ?? initialValues?.labour_spent ?? 0}
+        wtdBudgetPct={parseFloat(labourBudgetPct) || 0}
+        ptdPct={initialValues?.labour_cost_ptd_pct ?? 0}
+        ptdVarAmount={initialValues?.lab_ptd_var_amount ?? 0}
+        ytdPct={initialValues?.labour_qtd_pct ?? 0}
+        ytdBudgetPct={initialValues?.sage_labour_budget_qtd_pct ?? 0}
+        ytdVariancePct={initialValues?.qtd_labour_variance_pct ?? 0}
+        ytdVarAmount={initialValues?.lab_qtd_var_amount ?? 0}
+        actionPlan={labourReviewActionPlan}
+        onActionPlanChange={handleLabourReviewActionPlanChange}
+        onBack={() => setStep('overtime')}
         onNext={() => setStep('discounts')}
       />
     );
@@ -430,7 +471,7 @@ export function GuidedWeeklyPackage({ initialValues, onFieldsChange, onClose }: 
         result={discountsResult}
         error={discountsError}
         onFileSelect={handleDiscountsFileSelect}
-        onBack={() => setStep('overtime')}
+        onBack={() => setStep('review')}
       />
     );
   } else {
@@ -979,6 +1020,110 @@ function GuidedOvertimeStep({
           No overtime this period.
         </p>
       )}
+
+      <div className="mt-8 flex justify-between">
+        <button
+          onClick={onBack}
+          className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+        >
+          Back
+        </button>
+        <button
+          onClick={onNext}
+          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GuidedLabourReviewStep({
+  wtdSales,
+  wtdLabour,
+  wtdBudgetPct,
+  ptdPct,
+  ptdVarAmount,
+  ytdPct,
+  ytdBudgetPct,
+  ytdVariancePct,
+  ytdVarAmount,
+  actionPlan,
+  onActionPlanChange,
+  onBack,
+  onNext,
+}: {
+  wtdSales: number;
+  wtdLabour: number;
+  wtdBudgetPct: number;
+  ptdPct: number;
+  ptdVarAmount: number;
+  ytdPct: number;
+  ytdBudgetPct: number;
+  ytdVariancePct: number;
+  ytdVarAmount: number;
+  actionPlan: string;
+  onActionPlanChange: (value: string) => void;
+  onBack: () => void;
+  onNext: () => void;
+}) {
+  const wtdPct = wtdSales > 0 ? (wtdLabour / wtdSales) * 100 : 0;
+  const wtdVariance = wtdPct - wtdBudgetPct;
+
+  const formatPct = (value: number) => `${value.toFixed(2)}%`;
+  const formatCurrency = (value: number) =>
+    `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const varianceClass = (value: number) =>
+    value <= 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700';
+
+  return (
+    <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+      <StepProgressHeader meta={STEP_META.review} />
+
+      <p className="mt-4 text-sm text-slate-600 leading-relaxed">
+        Review labour performance for the week, period, and year before moving on to Discounts.
+      </p>
+
+      <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="border border-slate-200 rounded-lg p-4">
+          <p className="text-xs font-medium text-slate-500 uppercase">Week to Date</p>
+          <p className="text-lg font-semibold text-slate-800 mt-1">{formatPct(wtdPct)}</p>
+          <p className="text-xs text-slate-500 mt-1">Budget {formatPct(wtdBudgetPct)}</p>
+          <div className={`mt-2 px-2 py-1 rounded border text-xs font-medium ${varianceClass(wtdVariance)}`}>
+            {wtdVariance > 0 ? '+' : ''}{formatPct(wtdVariance)} variance
+          </div>
+        </div>
+        <div className="border border-slate-200 rounded-lg p-4">
+          <p className="text-xs font-medium text-slate-500 uppercase">Period to Date</p>
+          <p className="text-lg font-semibold text-slate-800 mt-1">{formatPct(ptdPct)}</p>
+          <div className={`mt-2 px-2 py-1 rounded border text-xs font-medium ${varianceClass(ptdVarAmount)}`}>
+            {ptdVarAmount > 0 ? '+' : ''}{formatCurrency(ptdVarAmount)} variance
+          </div>
+        </div>
+        <div className="border border-slate-200 rounded-lg p-4">
+          <p className="text-xs font-medium text-slate-500 uppercase">Year to Date</p>
+          <p className="text-lg font-semibold text-slate-800 mt-1">{formatPct(ytdPct)}</p>
+          <p className="text-xs text-slate-500 mt-1">Budget {formatPct(ytdBudgetPct)}</p>
+          <div className={`mt-2 px-2 py-1 rounded border text-xs font-medium ${varianceClass(ytdVariancePct)}`}>
+            {ytdVariancePct > 0 ? '+' : ''}{formatPct(ytdVariancePct)} ({ytdVarAmount > 0 ? '+' : ''}{formatCurrency(ytdVarAmount)})
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8">
+        <label className="block text-sm font-medium text-slate-700 mb-2">
+          Action Plan
+        </label>
+        <textarea
+          value={actionPlan}
+          onChange={(e) => onActionPlanChange(e.target.value)}
+          rows={4}
+          placeholder="Based on the labour review above, what's the plan to address any variances?"
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
+        />
+      </div>
 
       <div className="mt-8 flex justify-between">
         <button
