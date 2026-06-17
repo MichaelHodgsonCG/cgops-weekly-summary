@@ -1,21 +1,18 @@
 import { useEffect, useState } from 'react';
 import { ClipboardCheck, Upload, CheckCircle2, AlertCircle } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 
 const LOCATION_NAME = 'Test Package';
 const TOTAL_STEPS = 2;
-const FOOD_CLASSES = ['FOOD-ADD-ONS', 'FOOD-APPS', 'FOOD-DESSERTS', 'FOOD-ENTREES'];
 
 type GuidedStep = 'start' | 'sales' | 'discounts';
 
-type DailySales = {
-  day: number;
-  total: number;
-};
-
-type SalesParseResult = {
-  dailyTotals: DailySales[];
-  grandTotal: number;
+type ProfitCenterParseResult = {
+  salesDaily: number[];
+  salesTotal: number;
+  labourDaily: number[];
+  labourTotal: number;
 };
 
 const DISCOUNT_REASON_CATEGORIES = [
@@ -67,46 +64,36 @@ function parseCsvLine(line: string): string[] {
   return fields;
 }
 
-function parseExecutiveSummarySales(csvText: string): SalesParseResult {
-  const lines = csvText.split(/\r?\n/);
-  const sectionIndex = lines.findIndex((line) =>
-    line.includes('ExecutiveSummaryWeekly_Sales')
-  );
+function findRow(rows: any[][], label: string): any[] | undefined {
+  return rows.find((row) => String(row[0] ?? '').trim() === label);
+}
 
-  if (sectionIndex === -1) {
-    throw new Error('Could not find the Sales section in this report.');
+function parseProfitCenterReport(buffer: ArrayBuffer): ProfitCenterParseResult {
+  const workbook = XLSX.read(buffer, { type: 'array' });
+  const sheet = workbook.Sheets['BOH'];
+
+  if (!sheet) {
+    throw new Error('Could not find a "BOH" sheet in this report.');
   }
 
-  const headerLine = parseCsvLine(lines[sectionIndex + 1]);
-  const dayColumns = headerLine
-    .map((col, idx) => ({ col, idx }))
-    .filter(({ col }) => /^Day\d+_GrossSales$/.test(col));
+  const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-  const dailyTotals: DailySales[] = dayColumns.map(({ col }) => ({
-    day: Number(col.match(/^Day(\d+)_/)?.[1]),
-    total: 0,
-  }));
+  const salesRow = findRow(rows, 'Sales Total');
+  const labourRow = findRow(rows, 'Labor Total');
 
-  let rowIndex = sectionIndex + 2;
-  while (rowIndex < lines.length && lines[rowIndex].trim() !== '') {
-    const row = parseCsvLine(lines[rowIndex]);
-    const className = row[0];
-
-    if (FOOD_CLASSES.includes(className)) {
-      dayColumns.forEach(({ idx }, i) => {
-        const value = parseFloat(row[idx]);
-        if (!isNaN(value)) {
-          dailyTotals[i].total += value;
-        }
-      });
-    }
-
-    rowIndex++;
+  if (!salesRow || !labourRow) {
+    throw new Error('Could not find "Sales Total" or "Labor Total" rows on the BOH sheet.');
   }
 
-  const grandTotal = dailyTotals.reduce((sum, d) => sum + d.total, 0);
+  const toNumbers = (row: any[]) =>
+    row.slice(1, 8).map((v) => parseFloat(String(v ?? 0)) || 0);
 
-  return { dailyTotals, grandTotal };
+  return {
+    salesDaily: toNumbers(salesRow),
+    salesTotal: parseFloat(String(salesRow[8] ?? 0)) || 0,
+    labourDaily: toNumbers(labourRow),
+    labourTotal: parseFloat(String(labourRow[8] ?? 0)) || 0,
+  };
 }
 
 function parseDiscountsReport(csvText: string): DiscountsParseResult {
@@ -174,8 +161,9 @@ export function GuidedWeeklyPackage() {
   const [step, setStep] = useState<GuidedStep>('start');
   const [locationName, setLocationName] = useState(LOCATION_NAME);
   const [salesBudget, setSalesBudget] = useState('');
+  const [labourBudgetPct, setLabourBudgetPct] = useState('');
   const [salesFile, setSalesFile] = useState<File | null>(null);
-  const [salesResult, setSalesResult] = useState<SalesParseResult | null>(null);
+  const [salesResult, setSalesResult] = useState<ProfitCenterParseResult | null>(null);
   const [salesError, setSalesError] = useState('');
   const [discountsFile, setDiscountsFile] = useState<File | null>(null);
   const [discountsResult, setDiscountsResult] = useState<DiscountsParseResult | null>(null);
@@ -203,8 +191,8 @@ export function GuidedWeeklyPackage() {
     setSalesResult(null);
 
     try {
-      const text = await file.text();
-      const result = parseExecutiveSummarySales(text);
+      const buffer = await file.arrayBuffer();
+      const result = parseProfitCenterReport(buffer);
       setSalesResult(result);
     } catch (err) {
       setSalesError(err instanceof Error ? err.message : 'Failed to parse this report.');
@@ -230,6 +218,8 @@ export function GuidedWeeklyPackage() {
       <GuidedSalesStep
         salesBudget={salesBudget}
         onSalesBudgetChange={setSalesBudget}
+        labourBudgetPct={labourBudgetPct}
+        onLabourBudgetPctChange={setLabourBudgetPct}
         file={salesFile}
         result={salesResult}
         error={salesError}
@@ -326,6 +316,8 @@ function GuidedPackageStart({
 function GuidedSalesStep({
   salesBudget,
   onSalesBudgetChange,
+  labourBudgetPct,
+  onLabourBudgetPctChange,
   file,
   result,
   error,
@@ -335,8 +327,10 @@ function GuidedSalesStep({
 }: {
   salesBudget: string;
   onSalesBudgetChange: (value: string) => void;
+  labourBudgetPct: string;
+  onLabourBudgetPctChange: (value: string) => void;
   file: File | null;
-  result: SalesParseResult | null;
+  result: ProfitCenterParseResult | null;
   error: string;
   onFileSelect: (file: File) => void;
   onBack: () => void;
@@ -344,12 +338,16 @@ function GuidedSalesStep({
 }) {
   const [dragActive, setDragActive] = useState(false);
   const stepNumber = 1;
+  const days = [1, 2, 3, 4, 5, 6, 7];
 
   const handleFiles = (files: FileList | null) => {
     if (files && files.length > 0) {
       onFileSelect(files[0]);
     }
   };
+
+  const formatCurrency = (value: number) =>
+    value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
@@ -364,25 +362,40 @@ function GuidedSalesStep({
         />
       </div>
 
-      <h2 className="text-xl font-bold text-slate-800">Step 1: Sales</h2>
+      <h2 className="text-xl font-bold text-slate-800">Step 1: Sales and Labour</h2>
 
-      <div className="mt-6">
-        <label className="block text-sm font-medium text-slate-700 mb-1">
-          Sales Budget
-        </label>
-        <input
-          type="number"
-          value={salesBudget}
-          onChange={(e) => onSalesBudgetChange(e.target.value)}
-          placeholder="Enter sales budget"
-          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
-        />
+      <div className="mt-6 grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Sales Budget
+          </label>
+          <input
+            type="number"
+            value={salesBudget}
+            onChange={(e) => onSalesBudgetChange(e.target.value)}
+            placeholder="Enter sales budget"
+            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Labour Budget %
+          </label>
+          <input
+            type="number"
+            value={labourBudgetPct}
+            onChange={(e) => onLabourBudgetPctChange(e.target.value)}
+            placeholder="Enter labour budget %"
+            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
+          />
+        </div>
       </div>
 
       <div className="mt-8">
         <h3 className="text-base font-semibold text-slate-800">Upload Sales Report</h3>
         <p className="text-sm text-slate-600 mt-1">
-          Executive Summary Weekly &gt; Select End Date &gt; Down to CSV &gt; Upload below
+          Push &gt; Reports &gt; Sales &gt; Profit Center Report &gt; Select Dates &gt; Run &gt;
+          Download as Excel &gt; Upload here
         </p>
 
         <div
@@ -406,7 +419,7 @@ function GuidedSalesStep({
             Browse Files
             <input
               type="file"
-              accept=".csv"
+              accept=".xlsx,.xls"
               className="hidden"
               onChange={(e) => handleFiles(e.target.files)}
             />
@@ -428,13 +441,14 @@ function GuidedSalesStep({
         )}
 
         {result && (
-          <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden">
+          <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  {result.dailyTotals.map((d) => (
-                    <th key={d.day} className="px-3 py-2 text-right font-medium text-slate-500">
-                      Day {d.day}
+                  <th className="px-3 py-2 text-left font-medium text-slate-500">Metric</th>
+                  {days.map((day) => (
+                    <th key={day} className="px-3 py-2 text-right font-medium text-slate-500">
+                      Day {day}
                     </th>
                   ))}
                   <th className="px-3 py-2 text-right font-medium text-slate-500">Total</th>
@@ -442,13 +456,25 @@ function GuidedSalesStep({
               </thead>
               <tbody>
                 <tr className="border-t border-slate-200">
-                  {result.dailyTotals.map((d) => (
-                    <td key={d.day} className="px-3 py-2 text-right text-slate-700">
-                      {d.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <td className="px-3 py-2 text-slate-700 whitespace-nowrap">Sales Total</td>
+                  {result.salesDaily.map((value, i) => (
+                    <td key={i} className="px-3 py-2 text-right text-slate-700">
+                      {formatCurrency(value)}
                     </td>
                   ))}
                   <td className="px-3 py-2 text-right font-semibold text-slate-800">
-                    {result.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {formatCurrency(result.salesTotal)}
+                  </td>
+                </tr>
+                <tr className="border-t border-slate-200">
+                  <td className="px-3 py-2 text-slate-700 whitespace-nowrap">Labor Total</td>
+                  {result.labourDaily.map((value, i) => (
+                    <td key={i} className="px-3 py-2 text-right text-slate-700">
+                      {formatCurrency(value)}
+                    </td>
+                  ))}
+                  <td className="px-3 py-2 text-right font-semibold text-slate-800">
+                    {formatCurrency(result.labourTotal)}
                   </td>
                 </tr>
               </tbody>
