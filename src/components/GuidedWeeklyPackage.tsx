@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ClipboardCheck, Upload, CheckCircle2, AlertCircle, X, Plus, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
+import { calculateNeedToSave, fetchLabourPlBaseline, NeedToSaveResult, LabourPlBaseline } from '../lib/needToSave';
 
 const LOCATION_NAME = 'Test Package';
 
@@ -292,12 +293,6 @@ export type GuidedFieldUpdates = {
   labour_transfer_management?: number;
   labour_transfer_other?: number;
   labour_transfer_notes?: string;
-  labour_cost_ptd_pct?: number;
-  lab_ptd_var_amount?: number;
-  labour_qtd_pct?: number;
-  sage_labour_budget_qtd_pct?: number;
-  qtd_labour_variance_pct?: number;
-  lab_qtd_var_amount?: number;
   labour_review_action_plan?: string;
 };
 
@@ -305,9 +300,21 @@ interface GuidedWeeklyPackageProps {
   initialValues?: GuidedFieldUpdates;
   onFieldsChange?: (updates: GuidedFieldUpdates) => void;
   onClose?: () => void;
+  locationId?: string;
+  fiscalYear?: number;
+  periodNumber?: number;
+  weekNumber?: number;
 }
 
-export function GuidedWeeklyPackage({ initialValues, onFieldsChange, onClose }: GuidedWeeklyPackageProps) {
+export function GuidedWeeklyPackage({
+  initialValues,
+  onFieldsChange,
+  onClose,
+  locationId,
+  fiscalYear,
+  periodNumber,
+  weekNumber,
+}: GuidedWeeklyPackageProps) {
   const [step, setStep] = useState<GuidedStep>('start');
   const [locationName, setLocationName] = useState(LOCATION_NAME);
   const [salesBudget, setSalesBudget] = useState(
@@ -452,12 +459,10 @@ export function GuidedWeeklyPackage({ initialValues, onFieldsChange, onClose }: 
         wtdSales={salesResult?.salesTotal ?? initialValues?.food_sales_labour_push ?? 0}
         wtdLabour={salesResult?.labourTotal ?? initialValues?.labour_spent ?? 0}
         wtdBudgetPct={parseFloat(labourBudgetPct) || 0}
-        ptdPct={initialValues?.labour_cost_ptd_pct ?? 0}
-        ptdVarAmount={initialValues?.lab_ptd_var_amount ?? 0}
-        ytdPct={initialValues?.labour_qtd_pct ?? 0}
-        ytdBudgetPct={initialValues?.sage_labour_budget_qtd_pct ?? 0}
-        ytdVariancePct={initialValues?.qtd_labour_variance_pct ?? 0}
-        ytdVarAmount={initialValues?.lab_qtd_var_amount ?? 0}
+        locationId={locationId}
+        fiscalYear={fiscalYear}
+        periodNumber={periodNumber}
+        weekNumber={weekNumber}
         actionPlan={labourReviewActionPlan}
         onActionPlanChange={handleLabourReviewActionPlanChange}
         onBack={() => setStep('overtime')}
@@ -1043,12 +1048,10 @@ function GuidedLabourReviewStep({
   wtdSales,
   wtdLabour,
   wtdBudgetPct,
-  ptdPct,
-  ptdVarAmount,
-  ytdPct,
-  ytdBudgetPct,
-  ytdVariancePct,
-  ytdVarAmount,
+  locationId,
+  fiscalYear,
+  periodNumber,
+  weekNumber,
   actionPlan,
   onActionPlanChange,
   onBack,
@@ -1057,19 +1060,63 @@ function GuidedLabourReviewStep({
   wtdSales: number;
   wtdLabour: number;
   wtdBudgetPct: number;
-  ptdPct: number;
-  ptdVarAmount: number;
-  ytdPct: number;
-  ytdBudgetPct: number;
-  ytdVariancePct: number;
-  ytdVarAmount: number;
+  locationId?: string;
+  fiscalYear?: number;
+  periodNumber?: number;
+  weekNumber?: number;
   actionPlan: string;
   onActionPlanChange: (value: string) => void;
   onBack: () => void;
   onNext: () => void;
 }) {
+  const [baseline, setBaseline] = useState<LabourPlBaseline | null>(null);
+  const [needToSaveResult, setNeedToSaveResult] = useState<NeedToSaveResult | null>(null);
+  const [loadingPL, setLoadingPL] = useState(false);
+  const [plError, setPlError] = useState('');
+
+  useEffect(() => {
+    if (!locationId || !fiscalYear || !periodNumber || !weekNumber) return;
+
+    let cancelled = false;
+    setLoadingPL(true);
+    setPlError('');
+
+    Promise.all([
+      fetchLabourPlBaseline(locationId, fiscalYear, periodNumber, weekNumber),
+      calculateNeedToSave(locationId, fiscalYear, periodNumber, weekNumber),
+    ])
+      .then(([baselineResult, needToSave]) => {
+        if (cancelled) return;
+        if (!baselineResult) {
+          setPlError('No P&L data found for this location yet.');
+        }
+        setBaseline(baselineResult);
+        setNeedToSaveResult(needToSave);
+      })
+      .catch(() => {
+        if (!cancelled) setPlError('Failed to load P&L data.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPL(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [locationId, fiscalYear, periodNumber, weekNumber]);
+
   const wtdPct = wtdSales > 0 ? (wtdLabour / wtdSales) * 100 : 0;
   const wtdVariance = wtdPct - wtdBudgetPct;
+
+  const ptdLabour = baseline ? (baseline.isCurrentWeek ? baseline.periodLabourActual : baseline.periodLabourActual + wtdLabour) : 0;
+  const ptdSales = baseline ? (baseline.isCurrentWeek ? baseline.periodSalesActual : baseline.periodSalesActual + wtdSales) : 0;
+  const ptdPct = ptdSales > 0 ? (ptdLabour / ptdSales) * 100 : 0;
+  const ptdVarAmount = baseline ? ((ptdPct - baseline.periodBudgetPct) / 100) * ptdSales : 0;
+
+  const ytdLabour = baseline ? (baseline.isCurrentWeek ? baseline.ytdLabourActual : baseline.ytdLabourActual + wtdLabour) : 0;
+  const ytdSales = baseline ? (baseline.isCurrentWeek ? baseline.ytdSalesActual : baseline.ytdSalesActual + wtdSales) : 0;
+  const ytdPct = ytdSales > 0 ? (ytdLabour / ytdSales) * 100 : 0;
+  const ytdVarAmount = baseline ? ((ytdPct - baseline.ytdBudgetPct) / 100) * ytdSales : 0;
 
   const formatPct = (value: number) => `${value.toFixed(2)}%`;
   const formatCurrency = (value: number) =>
@@ -1078,13 +1125,31 @@ function GuidedLabourReviewStep({
   const varianceClass = (value: number) =>
     value <= 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700';
 
+  const basisLabel: Record<NeedToSaveResult['labour_basis'], string> = {
+    ytd: 'Year to Date',
+    qtr: 'Quarter to Date',
+    period: 'Period to Date',
+    none: 'On Track',
+  };
+
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
       <StepProgressHeader meta={STEP_META.review} />
 
       <p className="mt-4 text-sm text-slate-600 leading-relaxed">
         Review labour performance for the week, period, and year before moving on to Discounts.
+        Period and year figures combine the most recent P&L upload with this week's sales and labour.
       </p>
+
+      {loadingPL && (
+        <p className="mt-4 text-sm text-slate-500">Loading P&L data...</p>
+      )}
+
+      {plError && !loadingPL && (
+        <p className="mt-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+          {plError}
+        </p>
+      )}
 
       <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="border border-slate-200 rounded-lg p-4">
@@ -1098,6 +1163,7 @@ function GuidedLabourReviewStep({
         <div className="border border-slate-200 rounded-lg p-4">
           <p className="text-xs font-medium text-slate-500 uppercase">Period to Date</p>
           <p className="text-lg font-semibold text-slate-800 mt-1">{formatPct(ptdPct)}</p>
+          <p className="text-xs text-slate-500 mt-1">Budget {baseline ? formatPct(baseline.periodBudgetPct) : '—'}</p>
           <div className={`mt-2 px-2 py-1 rounded border text-xs font-medium ${varianceClass(ptdVarAmount)}`}>
             {ptdVarAmount > 0 ? '+' : ''}{formatCurrency(ptdVarAmount)} variance
           </div>
@@ -1105,12 +1171,34 @@ function GuidedLabourReviewStep({
         <div className="border border-slate-200 rounded-lg p-4">
           <p className="text-xs font-medium text-slate-500 uppercase">Year to Date</p>
           <p className="text-lg font-semibold text-slate-800 mt-1">{formatPct(ytdPct)}</p>
-          <p className="text-xs text-slate-500 mt-1">Budget {formatPct(ytdBudgetPct)}</p>
-          <div className={`mt-2 px-2 py-1 rounded border text-xs font-medium ${varianceClass(ytdVariancePct)}`}>
-            {ytdVariancePct > 0 ? '+' : ''}{formatPct(ytdVariancePct)} ({ytdVarAmount > 0 ? '+' : ''}{formatCurrency(ytdVarAmount)})
+          <p className="text-xs text-slate-500 mt-1">Budget {baseline ? formatPct(baseline.ytdBudgetPct) : '—'}</p>
+          <div className={`mt-2 px-2 py-1 rounded border text-xs font-medium ${varianceClass(ytdVarAmount)}`}>
+            {ytdVarAmount > 0 ? '+' : ''}{formatCurrency(ytdVarAmount)} variance
           </div>
         </div>
       </div>
+
+      {needToSaveResult && needToSaveResult.labour_basis !== 'none' && (
+        <div className="mt-6 border border-blue-200 bg-blue-50 rounded-lg p-4">
+          <p className="text-xs font-medium text-blue-700 uppercase">
+            Need to Save — Labour ({basisLabel[needToSaveResult.labour_basis]})
+          </p>
+          <p className="text-xs text-blue-700 mt-1">
+            {formatCurrency(needToSaveResult.labour_variance_dollars)} over budget across{' '}
+            {needToSaveResult.labour_weeks_remaining} week{needToSaveResult.labour_weeks_remaining === 1 ? '' : 's'} remaining
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs font-medium text-blue-700 uppercase">Per Week</p>
+              <p className="text-base font-semibold text-blue-900">{formatCurrency(needToSaveResult.labour_need_save_per_week)}</p>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-blue-700 uppercase">Per Day</p>
+              <p className="text-base font-semibold text-blue-900">{formatCurrency(needToSaveResult.labour_need_save_per_day)}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mt-8">
         <label className="block text-sm font-medium text-slate-700 mb-2">

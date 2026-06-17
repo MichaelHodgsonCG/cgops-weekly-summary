@@ -844,16 +844,14 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 labour_transfer_management: formData.labour_transfer_management,
                 labour_transfer_other: formData.labour_transfer_other,
                 labour_transfer_notes: formData.labour_transfer_notes,
-                labour_cost_ptd_pct: formData.labour_cost_ptd_pct,
-                lab_ptd_var_amount: formData.lab_ptd_var_amount,
-                labour_qtd_pct: formData.labour_qtd_pct,
-                sage_labour_budget_qtd_pct: formData.sage_labour_budget_qtd_pct,
-                qtd_labour_variance_pct: formData.qtd_labour_variance_pct,
-                lab_qtd_var_amount: formData.lab_qtd_var_amount,
                 labour_review_action_plan: formData.labour_review_action_plan,
               }}
               onFieldsChange={handleGuideFieldsChange}
               onClose={() => setShowGuide(false)}
+              locationId={locationId}
+              fiscalYear={formData.fiscal_year}
+              periodNumber={formData.period_number}
+              weekNumber={formData.week_number}
             />
           </div>
         )}
