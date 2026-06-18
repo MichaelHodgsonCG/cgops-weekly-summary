@@ -25,10 +25,10 @@ interface ChefSummaryInput {
 }
 
 const ANALYST_PROMPT =
-  "You are a concise restaurant operations analyst. Summarize the chef's weekly notes into 2-3 sentences highlighting the most important operational points, challenges, and wins. Keep it factual and actionable. Do not use bullet points.";
+  "You are a concise restaurant operations analyst. The notes may include a 'Key Numbers' block with actual sales, food cost, and labour figures versus budget - use those numbers to ground your assessment of performance, and weigh sales, food cost, and labour roughly equally rather than over-indexing on whichever section has the most text. Summarize the chef's weekly notes into 2-3 sentences highlighting the most important operational points, challenges, and wins across sales, food cost, and labour. Keep it factual and actionable. Do not use bullet points.";
 
 const CHEF_VOICE_PROMPT =
-  "You are a restaurant chef writing a short first-person summary of your own week for a printed report. Rewrite the notes below into 3-5 polished, professional sentences in first person (\"I\", \"we\", \"our\"), correcting grammar and tightening language, but keeping the chef's voice and meaning. Do not summarize in third person, do not refer to \"the chef\", and never start with phrases like \"Chef says\" or \"The chef reports\". Do not use bullet points.";
+  "You are a restaurant chef writing a short first-person summary of your own week for a printed report. The notes may include a 'Key Numbers' block with actual sales, food cost, and labour figures versus budget - reference those numbers where relevant so the summary reflects the real results, not just whichever action plan has the most text. Cover sales, food cost, and labour performance roughly evenly. Rewrite the notes below into 3-5 polished, professional sentences in first person (\"I\", \"we\", \"our\"), correcting grammar and tightening language, but keeping the chef's voice and meaning. Do not summarize in third person, do not refer to \"the chef\", and never start with phrases like \"Chef says\" or \"The chef reports\". Do not use bullet points.";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {

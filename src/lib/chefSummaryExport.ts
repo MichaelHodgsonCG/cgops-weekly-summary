@@ -1,4 +1,6 @@
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface FeatureItem {
   name: string;
@@ -68,6 +70,7 @@ interface WeeklySummaryData {
   tm_mots_of_note: string;
   development_path_updates: string;
   feature_items: FeatureItem[];
+  ai_summary?: string;
 }
 
 function pct(val: number) {
@@ -178,4 +181,165 @@ export function exportChefSummaryToExcel(
 
   const filename = `ChefSummary_${locationName.replace(/\s+/g, '_')}_FY${data.fiscal_year}_P${data.period_number}_W${data.week_number}.xlsx`;
   XLSX.writeFile(wb, filename);
+}
+
+export function exportChefSummaryToPdf(
+  data: WeeklySummaryData,
+  locationName: string,
+  weekBudget: number,
+  actualFoodCostPct: number,
+  fcVariance: number,
+  theoreticalFoodCostPct: number,
+  theoreticalVariance: number,
+  labourCostPct: number,
+  lcVariance: number
+) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 30;
+
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Culinary Performance Summary', pageWidth / 2, 36, { align: 'center' });
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'normal');
+  doc.text(
+    `${locationName}   •   FY${data.fiscal_year}   •   Period ${data.period_number}   •   Week ${data.week_number}`,
+    pageWidth / 2,
+    54,
+    { align: 'center' }
+  );
+
+  const headStyles = { fillColor: [30, 41, 59] as [number, number, number], textColor: 255, fontStyle: 'bold' as const };
+  const numberStyles = { fontSize: 8.5, cellPadding: 5 };
+
+  autoTable(doc, {
+    startY: 68,
+    head: [['Food Cost', '', '', '', '', '']],
+    body: [
+      ['Budget Food Cost %', pct(data.budget_food_cost_pct), 'Actual Food Cost %', pct(actualFoodCostPct), 'FC Variance', pct(fcVariance)],
+      ['Theoretical FC %', pct(theoreticalFoodCostPct), 'On Hand', currency(data.on_hand_amount), 'Theoretical Var', pct(theoreticalVariance)],
+      ['Sage Food Sales QTD', currency(data.sage_food_sales_qtd), 'Sage FC QTD %', pct(data.sage_fcost_qtd_pct), 'Food Cost PTD %', pct(data.food_cost_ptd_pct)],
+      ['Sage Sales Budget QTD', currency(data.sage_sales_budget_qtd), 'FC QTD %', pct(data.fc_qtd_pct), 'QTD Variance %', pct(data.qtd_variance_pct)],
+      ['Usage', currency(data.usage_amount), 'Ideal Usage', currency(data.ideal_usage_amount), 'COGS QTD', currency(data.cogs_qtd)],
+      ['Food Sales (Labour Push)', currency(data.food_sales_labour_push), 'Food Sales OC', currency(data.food_sales_oc), 'Week Variance', currency(data.week_variance_amount)],
+      ['Budget Food Sales (Period)', currency(data.budget_food_sales_period), 'Week Budget', currency(weekBudget), 'QTD Variance $', currency(data.qtd_variance_amount)],
+    ],
+    styles: numberStyles,
+    headStyles,
+    margin: { left: margin, right: margin },
+    tableWidth: pageWidth - margin * 2,
+  });
+
+  let y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+
+  autoTable(doc, {
+    startY: y,
+    head: [['Labour', '', '', '', '', '']],
+    body: [
+      ['Labour Budget %', pct(data.labour_budget_pct), 'Labour Cost %', pct(labourCostPct), 'LC Variance', pct(lcVariance)],
+      ['Sage Labour Budget QTD %', pct(data.sage_labour_budget_qtd_pct), 'Sage LC QTD %', pct(data.sage_lcost_qtd_pct), 'Labour Cost PTD %', pct(data.labour_cost_ptd_pct)],
+      ['Labour QTD %', pct(data.labour_qtd_pct), 'Lab PTD Var $', currency(data.lab_ptd_var_amount), 'QTD Labour Variance %', pct(data.qtd_labour_variance_pct)],
+      ['Labour $ Spent', currency(data.labour_spent), 'Overtime', currency(data.overtime_amount), 'Lab QTD Var $', currency(data.lab_qtd_var_amount)],
+    ],
+    styles: numberStyles,
+    headStyles,
+    margin: { left: margin, right: margin },
+    tableWidth: pageWidth - margin * 2,
+  });
+
+  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+
+  autoTable(doc, {
+    startY: y,
+    head: [['Other Metrics', '', '', '', '', '']],
+    body: [
+      ['EBITDA Budget (Period) %', pct(data.ebidta_budget_period_pct), 'EBITDA PTD %', pct(data.ebidta_ptd_pct), 'EBITDA Variance %', pct(data.ebidta_variance_pct)],
+      ['QSR Weekend Lunch Time', data.qsr_weekend_lunch_time || '—', 'QSR Expo Time', data.qsr_expo_time || '—', 'Teamshare', currency(data.teamshare_amount)],
+      ['Petty Cash', currency(data.petty_cash), 'Waste', currency(data.waste_amount), 'Last Audit Score', pct(data.last_audit_score_pct)],
+      ['BOH Promo $', currency(data.boh_promo_amount), 'Promo $ PTD', currency(data.promo_ptd), 'Promo $ QTD', currency(data.promo_qtd)],
+      ['Sous Vac Days', String(data.sous_vac_days), '', '', '', ''],
+    ],
+    styles: numberStyles,
+    headStyles,
+    margin: { left: margin, right: margin },
+    tableWidth: pageWidth - margin * 2,
+  });
+
+  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+
+  autoTable(doc, {
+    startY: y,
+    head: [['Position', 'Ideal #', 'Current #', 'Needed']],
+    body: [
+      ['Cooks', data.ideal_cooks, data.current_cooks, Math.max(0, data.ideal_cooks - data.current_cooks)],
+      ['Prep', data.ideal_prep, data.current_prep, Math.max(0, data.ideal_prep - data.current_prep)],
+      ['Dish', data.ideal_dish, data.current_dish, Math.max(0, data.ideal_dish - data.current_dish)],
+      ['Other', data.ideal_other, data.current_other, Math.max(0, data.ideal_other - data.current_other)],
+    ],
+    styles: { fontSize: 9, cellPadding: 5, halign: 'center' },
+    headStyles,
+    columnStyles: { 0: { halign: 'left', fontStyle: 'bold' } },
+    margin: { left: margin, right: margin },
+    tableWidth: pageWidth - margin * 2,
+  });
+
+  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 16;
+
+  const addTextSection = (title: string, body: string) => {
+    if (!body) return;
+    if (y > pageHeight - 80) {
+      doc.addPage();
+      y = margin;
+    }
+    doc.setFontSize(10.5);
+    doc.setFont('helvetica', 'bold');
+    doc.text(title, margin, y);
+    y += 13;
+    doc.setFontSize(9.5);
+    doc.setFont('helvetica', 'normal');
+    const wrapped = doc.splitTextToSize(body, pageWidth - margin * 2);
+    if (y + wrapped.length * 12 > pageHeight - 30) {
+      doc.addPage();
+      y = margin;
+    }
+    doc.text(wrapped, margin, y);
+    y += wrapped.length * 12 + 12;
+  };
+
+  addTextSection('Sales Action Plan', data.action_plan_summary);
+  addTextSection('Food Cost Action Plan', data.food_cost_summary);
+  addTextSection('Labour Action Plan', data.labour_summary);
+  addTextSection('BOH Promo Summary', data.boh_promo_summary);
+  addTextSection('Hiring Notes', data.hiring_notes);
+  addTextSection('TM MOTs of Note', data.tm_mots_of_note);
+  addTextSection('Development Path Updates', data.development_path_updates);
+  addTextSection('R&M Issues / Cleaning Focus', data.rm_issues_cleaning_focus);
+  addTextSection('Notes', data.notes);
+  if (data.ai_summary) addTextSection('Weekly Summary', data.ai_summary);
+
+  if (data.feature_items && data.feature_items.filter((f) => f.name).length > 0) {
+    if (y > pageHeight - 100) {
+      doc.addPage();
+      y = margin;
+    }
+    autoTable(doc, {
+      startY: y,
+      head: [['Feature Item', 'Sold', 'Notes']],
+      body: data.feature_items.filter((f) => f.name).map((f) => [f.name, String(f.sold), f.notes || '']),
+      styles: { fontSize: 9, cellPadding: 5 },
+      headStyles,
+      margin: { left: margin, right: margin },
+      tableWidth: pageWidth - margin * 2,
+    });
+    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 14;
+  }
+
+  doc.setFontSize(8.5);
+  doc.setTextColor(120);
+  doc.text(`Generated ${new Date().toLocaleDateString()}`, margin, pageHeight - 16);
+
+  const filename = `ChefSummary_${locationName.replace(/\s+/g, '_')}_FY${data.fiscal_year}_P${data.period_number}_W${data.week_number}.pdf`;
+  doc.save(filename);
 }

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, LogOut, ChevronDown, FileText, AlertTriangle, Download, ClipboardCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
-import { exportChefSummaryToExcel } from '../lib/chefSummaryExport';
+import { exportChefSummaryToExcel, exportChefSummaryToPdf } from '../lib/chefSummaryExport';
 import { GuidedWeeklyPackage, GuidedFieldUpdates } from './GuidedWeeklyPackage';
 
 interface FeatureItem {
@@ -717,6 +717,20 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
 
   const handleExportExcel = () => {
     exportChefSummaryToExcel(
+      formData,
+      locationName,
+      weekBudget,
+      actualFoodCostPct,
+      fcVariance,
+      theoreticalFoodCostPct,
+      theoreticalVariance,
+      labourCostPct,
+      lcVariance
+    );
+  };
+
+  const handleExportPdf = () => {
+    exportChefSummaryToPdf(
       formData,
       locationName,
       weekBudget,
@@ -1537,6 +1551,13 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
             >
               <Download className="w-5 h-5" />
               Export to Excel
+            </button>
+            <button
+              onClick={handleExportPdf}
+              className="flex items-center gap-2 px-6 py-3 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+            >
+              <Download className="w-5 h-5" />
+              Export to PDF
             </button>
             <button
               onClick={handleSave}

@@ -788,6 +788,20 @@ export type GuidedFieldUpdates = {
   recap_labour_ytd_variance_amount?: number;
 };
 
+function formatRecapMetricsForPrompt(m: GuidedFieldUpdates): string {
+  const lines = [
+    m.recap_sales_wtd_actual !== undefined && `Sales WTD: $${m.recap_sales_wtd_actual.toFixed(2)} (budget $${(m.recap_sales_wtd_budget ?? 0).toFixed(2)})`,
+    m.recap_sales_ytd_actual !== undefined && `Sales YTD: $${m.recap_sales_ytd_actual.toFixed(2)} (budget $${(m.recap_sales_ytd_budget ?? 0).toFixed(2)})`,
+    m.recap_fc_wtd_pct !== undefined && `Food Cost WTD: ${m.recap_fc_wtd_pct.toFixed(2)}%`,
+    m.recap_fc_ptd_pct !== undefined && `Food Cost PTD: ${m.recap_fc_ptd_pct.toFixed(2)}%`,
+    m.recap_fc_ytd_pct !== undefined && `Food Cost YTD: ${m.recap_fc_ytd_pct.toFixed(2)}% (budget ${(m.recap_fc_ytd_budget_pct ?? 0).toFixed(2)}%, variance $${(m.recap_fc_ytd_variance_amount ?? 0).toFixed(2)})`,
+    m.recap_labour_wtd_pct !== undefined && `Labour WTD: ${m.recap_labour_wtd_pct.toFixed(2)}%`,
+    m.recap_labour_ptd_pct !== undefined && `Labour PTD: ${m.recap_labour_ptd_pct.toFixed(2)}%`,
+    m.recap_labour_ytd_pct !== undefined && `Labour YTD: ${m.recap_labour_ytd_pct.toFixed(2)}% (budget ${(m.recap_labour_ytd_budget_pct ?? 0).toFixed(2)}%, variance $${(m.recap_labour_ytd_variance_amount ?? 0).toFixed(2)})`,
+  ].filter(Boolean);
+  return lines.length ? `Key Numbers:\n${lines.join('\n')}` : '';
+}
+
 export type FeatureItem = {
   name: string;
   sold: number;
@@ -1285,8 +1299,9 @@ export function GuidedWeeklyPackage({
     setSummaryError('');
     try {
       const chefNotes = [
-        foodCostComments && `Food Cost: ${foodCostComments}`,
-        labourReviewActionPlan && `Labour: ${labourReviewActionPlan}`,
+        formatRecapMetricsForPrompt(recapMetrics),
+        foodCostComments && `Food Cost Action Plan: ${foodCostComments}`,
+        labourReviewActionPlan && `Labour Action Plan: ${labourReviewActionPlan}`,
         salesActionPlan && `Sales Action Plan: ${salesActionPlan}`,
         hiringNotes && `Hiring: ${hiringNotes}`,
         tmMotsOfNote && `Team Members of Note: ${tmMotsOfNote}`,
@@ -4803,8 +4818,9 @@ function GuidedRecapStep({
     setPdfError('');
     try {
       const chefNotes = [
-        foodCostComments && `Food Cost: ${foodCostComments}`,
-        labourReviewActionPlan && `Labour: ${labourReviewActionPlan}`,
+        formatRecapMetricsForPrompt(recapMetrics),
+        foodCostComments && `Food Cost Action Plan: ${foodCostComments}`,
+        labourReviewActionPlan && `Labour Action Plan: ${labourReviewActionPlan}`,
         salesActionPlan && `Sales Action Plan: ${salesActionPlan}`,
         hiringNotes && `Hiring: ${hiringNotes}`,
         tmMotsOfNote && `Team Members of Note: ${tmMotsOfNote}`,
@@ -4937,9 +4953,9 @@ function GuidedRecapStep({
     }
   };
   const recapSections: { label: string; value: string }[] = [
-    { label: 'Food Cost', value: foodCostComments },
-    { label: 'Labour', value: labourReviewActionPlan },
     { label: 'Sales Action Plan', value: salesActionPlan },
+    { label: 'Food Cost Action Plan', value: foodCostComments },
+    { label: 'Labour Action Plan', value: labourReviewActionPlan },
     { label: 'Hiring Notes', value: hiringNotes },
     { label: 'TM MOTs of Note', value: tmMotsOfNote },
     { label: 'Development Path Updates', value: developmentPathUpdates },
