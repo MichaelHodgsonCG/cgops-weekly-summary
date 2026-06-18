@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import { fetchLabourPlBaseline, fetchSalesPlBaseline, fetchFoodCostPlBaseline, getWeeksRemainingInYear, LabourPlBaseline, SalesPlBaseline, FoodCostPlBaseline } from '../lib/needToSave';
 
-type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs' | 'purchases' | 'usageReview' | 'finalFoodCost';
+type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs' | 'purchases' | 'usageReview' | 'finalFoodCost' | 'team' | 'facilities' | 'features' | 'audit' | 'recap';
 
 type StepMeta = {
   section: number;
@@ -103,6 +103,46 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     sectionStepCount: 1,
     overallIndex: 11,
     stepLabel: 'Final Food Cost Report',
+  },
+  team: {
+    section: 7,
+    sectionLabel: 'Team',
+    sectionStepIndex: 1,
+    sectionStepCount: 1,
+    overallIndex: 12,
+    stepLabel: 'Team Staffing & Notes',
+  },
+  facilities: {
+    section: 8,
+    sectionLabel: 'Facilities',
+    sectionStepIndex: 1,
+    sectionStepCount: 1,
+    overallIndex: 13,
+    stepLabel: 'R&M and Cleaning',
+  },
+  features: {
+    section: 9,
+    sectionLabel: 'Features',
+    sectionStepIndex: 1,
+    sectionStepCount: 1,
+    overallIndex: 14,
+    stepLabel: 'Feature Items',
+  },
+  audit: {
+    section: 10,
+    sectionLabel: 'Audit',
+    sectionStepIndex: 1,
+    sectionStepCount: 1,
+    overallIndex: 15,
+    stepLabel: 'Last Audit Score',
+  },
+  recap: {
+    section: 11,
+    sectionLabel: 'Recap',
+    sectionStepIndex: 1,
+    sectionStepCount: 1,
+    overallIndex: 16,
+    stepLabel: 'Weekly Recap',
   },
 };
 
@@ -700,6 +740,30 @@ export type GuidedFieldUpdates = {
   qsr_expo_time?: string;
   window_time?: string;
   sous_vac_days?: number;
+  ideal_cooks?: number;
+  current_cooks?: number;
+  ideal_prep?: number;
+  current_prep?: number;
+  ideal_dish?: number;
+  current_dish?: number;
+  ideal_other?: number;
+  current_other?: number;
+  hiring_notes?: string;
+  tm_mots_of_note?: string;
+  development_path_updates?: string;
+  rm_issues?: string;
+  cleaning_focus?: string;
+  feature_items?: FeatureItem[];
+  features_notes?: string;
+  last_audit_score_pct?: number;
+  audit_score_comment?: string;
+  ai_summary?: string;
+};
+
+export type FeatureItem = {
+  name: string;
+  sold: number;
+  notes: string;
 };
 
 interface GuidedWeeklyPackageProps {
@@ -787,6 +851,79 @@ export function GuidedWeeklyPackage({
   });
   const [foodCostError, setFoodCostError] = useState('');
   const [foodCostComments, setFoodCostComments] = useState(initialValues?.final_food_cost_comments ?? '');
+
+  const [idealCooks, setIdealCooks] = useState(String(initialValues?.ideal_cooks ?? ''));
+  const [currentCooks, setCurrentCooks] = useState(String(initialValues?.current_cooks ?? ''));
+  const [idealPrep, setIdealPrep] = useState(String(initialValues?.ideal_prep ?? ''));
+  const [currentPrep, setCurrentPrep] = useState(String(initialValues?.current_prep ?? ''));
+  const [idealDish, setIdealDish] = useState(String(initialValues?.ideal_dish ?? ''));
+  const [currentDish, setCurrentDish] = useState(String(initialValues?.current_dish ?? ''));
+  const [idealOther, setIdealOther] = useState(String(initialValues?.ideal_other ?? ''));
+  const [currentOther, setCurrentOther] = useState(String(initialValues?.current_other ?? ''));
+  const [hiringNotes, setHiringNotes] = useState(initialValues?.hiring_notes ?? '');
+  const [tmMotsOfNote, setTmMotsOfNote] = useState(initialValues?.tm_mots_of_note ?? '');
+  const [developmentPathUpdates, setDevelopmentPathUpdates] = useState(initialValues?.development_path_updates ?? '');
+
+  const [rmIssues, setRmIssues] = useState(initialValues?.rm_issues ?? '');
+  const [cleaningFocus, setCleaningFocus] = useState(initialValues?.cleaning_focus ?? '');
+
+  const [featureItems, setFeatureItems] = useState<FeatureItem[]>(
+    initialValues?.feature_items && initialValues.feature_items.length > 0
+      ? initialValues.feature_items
+      : [{ name: '', sold: 0, notes: '' }]
+  );
+  const [featuresNotes, setFeaturesNotes] = useState(initialValues?.features_notes ?? '');
+
+  const [lastAuditScorePct, setLastAuditScorePct] = useState(
+    initialValues?.last_audit_score_pct ? String(initialValues.last_audit_score_pct) : ''
+  );
+  const [auditScoreComment, setAuditScoreComment] = useState(initialValues?.audit_score_comment ?? '');
+  const [priorAuditScore, setPriorAuditScore] = useState<number | null>(null);
+  const [loadingAuditScore, setLoadingAuditScore] = useState(false);
+
+  const [aiSummary, setAiSummary] = useState(initialValues?.ai_summary ?? '');
+  const [generatingSummary, setGeneratingSummary] = useState(false);
+  const [summaryError, setSummaryError] = useState('');
+
+  useEffect(() => {
+    if (!locationId || !fiscalYear || !periodNumber || !weekNumber) return;
+    if (initialValues?.last_audit_score_pct) return;
+
+    let cancelled = false;
+    setLoadingAuditScore(true);
+
+    supabase
+      .from('weekly_chef_summary')
+      .select('fiscal_year, period_number, week_number, last_audit_score_pct')
+      .eq('location_id', locationId)
+      .order('fiscal_year', { ascending: false })
+      .order('period_number', { ascending: false })
+      .order('week_number', { ascending: false })
+      .limit(5)
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        const prior = data.find(
+          (row) =>
+            row.fiscal_year !== fiscalYear ||
+            row.period_number !== periodNumber ||
+            row.week_number !== weekNumber
+        );
+        if (prior) {
+          setPriorAuditScore(prior.last_audit_score_pct ?? null);
+          if (!lastAuditScorePct) {
+            setLastAuditScorePct(String(prior.last_audit_score_pct ?? ''));
+            onFieldsChange?.({ last_audit_score_pct: prior.last_audit_score_pct ?? 0 });
+          }
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingAuditScore(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [locationId, fiscalYear, periodNumber, weekNumber]);
 
   const handleSalesBudgetChange = (value: string) => {
     setSalesBudget(value);
@@ -1040,6 +1177,140 @@ export function GuidedWeeklyPackage({
     onFieldsChange?.({ final_food_cost_comments: value });
   };
 
+  const handleStaffingChange = (field: 'idealCooks' | 'currentCooks' | 'idealPrep' | 'currentPrep' | 'idealDish' | 'currentDish' | 'idealOther' | 'currentOther', value: string) => {
+    const setters: Record<typeof field, (v: string) => void> = {
+      idealCooks: setIdealCooks,
+      currentCooks: setCurrentCooks,
+      idealPrep: setIdealPrep,
+      currentPrep: setCurrentPrep,
+      idealDish: setIdealDish,
+      currentDish: setCurrentDish,
+      idealOther: setIdealOther,
+      currentOther: setCurrentOther,
+    };
+    const fieldKeys: Record<typeof field, keyof GuidedFieldUpdates> = {
+      idealCooks: 'ideal_cooks',
+      currentCooks: 'current_cooks',
+      idealPrep: 'ideal_prep',
+      currentPrep: 'current_prep',
+      idealDish: 'ideal_dish',
+      currentDish: 'current_dish',
+      idealOther: 'ideal_other',
+      currentOther: 'current_other',
+    };
+    setters[field](value);
+    onFieldsChange?.({ [fieldKeys[field]]: parseInt(value) || 0 });
+  };
+
+  const handleHiringNotesChange = (value: string) => {
+    setHiringNotes(value);
+    onFieldsChange?.({ hiring_notes: value });
+  };
+
+  const handleTmMotsOfNoteChange = (value: string) => {
+    setTmMotsOfNote(value);
+    onFieldsChange?.({ tm_mots_of_note: value });
+  };
+
+  const handleDevelopmentPathUpdatesChange = (value: string) => {
+    setDevelopmentPathUpdates(value);
+    onFieldsChange?.({ development_path_updates: value });
+  };
+
+  const handleRmIssuesChange = (value: string) => {
+    setRmIssues(value);
+    onFieldsChange?.({ rm_issues: value });
+  };
+
+  const handleCleaningFocusChange = (value: string) => {
+    setCleaningFocus(value);
+    onFieldsChange?.({ cleaning_focus: value });
+  };
+
+  const handleFeatureItemsChange = (items: FeatureItem[]) => {
+    setFeatureItems(items);
+    onFieldsChange?.({ feature_items: items });
+  };
+
+  const handleFeaturesNotesChange = (value: string) => {
+    setFeaturesNotes(value);
+    onFieldsChange?.({ features_notes: value });
+  };
+
+  const handleLastAuditScorePctChange = (value: string) => {
+    setLastAuditScorePct(value);
+    onFieldsChange?.({ last_audit_score_pct: parseFloat(value) || 0 });
+  };
+
+  const handleAuditScoreCommentChange = (value: string) => {
+    setAuditScoreComment(value);
+    onFieldsChange?.({ audit_score_comment: value });
+  };
+
+  const handleGenerateAiSummary = async () => {
+    setGeneratingSummary(true);
+    setSummaryError('');
+    try {
+      const chefNotes = [
+        foodCostComments && `Food Cost: ${foodCostComments}`,
+        labourReviewActionPlan && `Labour: ${labourReviewActionPlan}`,
+        salesActionPlan && `Sales Action Plan: ${salesActionPlan}`,
+        hiringNotes && `Hiring: ${hiringNotes}`,
+        tmMotsOfNote && `Team Members of Note: ${tmMotsOfNote}`,
+        developmentPathUpdates && `Development Path: ${developmentPathUpdates}`,
+        rmIssues && `R&M Issues: ${rmIssues}`,
+        cleaningFocus && `Cleaning Focus: ${cleaningFocus}`,
+        featuresNotes && `Features: ${featuresNotes}`,
+        auditScoreComment && `Audit: ${auditScoreComment}`,
+      ].filter(Boolean).join('\n');
+
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-chef-summary`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          summaries: [
+            {
+              id: 'current',
+              location_name: locationName,
+              food_cost_summary: foodCostComments,
+              labour_summary: labourReviewActionPlan,
+              boh_promo_summary: salesActionPlan,
+              notes: chefNotes,
+              action_plan_summary: salesActionPlan,
+              hiring_notes: hiringNotes,
+              tm_mots_of_note: tmMotsOfNote,
+              development_path_updates: developmentPathUpdates,
+              rm_issues: rmIssues,
+              cleaning_focus: cleaningFocus,
+              features_notes: featuresNotes,
+              audit_score_comment: auditScoreComment,
+            },
+          ],
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to generate summary');
+
+      const { results } = await response.json();
+      const generated = results?.[0]?.ai_summary ?? '';
+      setAiSummary(generated);
+      onFieldsChange?.({ ai_summary: generated });
+    } catch (err) {
+      setSummaryError(err instanceof Error ? err.message : 'Failed to generate summary.');
+    } finally {
+      setGeneratingSummary(false);
+    }
+  };
+
+  const handleAiSummaryChange = (value: string) => {
+    setAiSummary(value);
+    onFieldsChange?.({ ai_summary: value });
+  };
+
   const transferTotals = summarizeTransfers(transferEntries);
   const discountsTotal = discountsResult
     ? discountsResult.categories.reduce((sum, c) => sum + c.totalAmount, 0)
@@ -1206,6 +1477,87 @@ export function GuidedWeeklyPackage({
         periodNumber={periodNumber}
         weekNumber={weekNumber}
         onBack={() => setStep('usageReview')}
+        onFinish={() => setStep('team')}
+      />
+    );
+  } else if (step === 'team') {
+    content = (
+      <GuidedTeamStep
+        idealCooks={idealCooks}
+        currentCooks={currentCooks}
+        idealPrep={idealPrep}
+        currentPrep={currentPrep}
+        idealDish={idealDish}
+        currentDish={currentDish}
+        idealOther={idealOther}
+        currentOther={currentOther}
+        onStaffingChange={handleStaffingChange}
+        hiringNotes={hiringNotes}
+        onHiringNotesChange={handleHiringNotesChange}
+        tmMotsOfNote={tmMotsOfNote}
+        onTmMotsOfNoteChange={handleTmMotsOfNoteChange}
+        developmentPathUpdates={developmentPathUpdates}
+        onDevelopmentPathUpdatesChange={handleDevelopmentPathUpdatesChange}
+        onBack={() => setStep('finalFoodCost')}
+        onNext={() => setStep('facilities')}
+      />
+    );
+  } else if (step === 'facilities') {
+    content = (
+      <GuidedFacilitiesStep
+        rmIssues={rmIssues}
+        onRmIssuesChange={handleRmIssuesChange}
+        cleaningFocus={cleaningFocus}
+        onCleaningFocusChange={handleCleaningFocusChange}
+        onBack={() => setStep('team')}
+        onNext={() => setStep('features')}
+      />
+    );
+  } else if (step === 'features') {
+    content = (
+      <GuidedFeaturesStep
+        items={featureItems}
+        onItemsChange={handleFeatureItemsChange}
+        notes={featuresNotes}
+        onNotesChange={handleFeaturesNotesChange}
+        onBack={() => setStep('facilities')}
+        onNext={() => setStep('audit')}
+      />
+    );
+  } else if (step === 'audit') {
+    content = (
+      <GuidedAuditStep
+        score={lastAuditScorePct}
+        onScoreChange={handleLastAuditScorePctChange}
+        priorScore={priorAuditScore}
+        loadingPriorScore={loadingAuditScore}
+        comment={auditScoreComment}
+        onCommentChange={handleAuditScoreCommentChange}
+        onBack={() => setStep('features')}
+        onNext={() => setStep('recap')}
+      />
+    );
+  } else if (step === 'recap') {
+    content = (
+      <GuidedRecapStep
+        foodCostComments={foodCostComments}
+        labourReviewActionPlan={labourReviewActionPlan}
+        salesActionPlan={salesActionPlan}
+        hiringNotes={hiringNotes}
+        tmMotsOfNote={tmMotsOfNote}
+        developmentPathUpdates={developmentPathUpdates}
+        rmIssues={rmIssues}
+        cleaningFocus={cleaningFocus}
+        featureItems={featureItems}
+        featuresNotes={featuresNotes}
+        auditScore={lastAuditScorePct}
+        auditScoreComment={auditScoreComment}
+        aiSummary={aiSummary}
+        onAiSummaryChange={handleAiSummaryChange}
+        onGenerate={handleGenerateAiSummary}
+        generating={generatingSummary}
+        error={summaryError}
+        onBack={() => setStep('audit')}
         onFinish={() => onClose?.()}
       />
     );
@@ -3354,6 +3706,484 @@ function GuidedFinalFoodCostStep({
             />
           </div>
         )}
+      </div>
+
+      <div className="mt-8 flex justify-between">
+        <button
+          onClick={onBack}
+          className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+        >
+          Back
+        </button>
+        <button
+          onClick={onFinish}
+          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+        >
+          Finish
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type StaffingField =
+  | 'idealCooks'
+  | 'currentCooks'
+  | 'idealPrep'
+  | 'currentPrep'
+  | 'idealDish'
+  | 'currentDish'
+  | 'idealOther'
+  | 'currentOther';
+
+function GuidedTeamStep({
+  idealCooks,
+  currentCooks,
+  idealPrep,
+  currentPrep,
+  idealDish,
+  currentDish,
+  idealOther,
+  currentOther,
+  onStaffingChange,
+  hiringNotes,
+  onHiringNotesChange,
+  tmMotsOfNote,
+  onTmMotsOfNoteChange,
+  developmentPathUpdates,
+  onDevelopmentPathUpdatesChange,
+  onBack,
+  onNext,
+}: {
+  idealCooks: string;
+  currentCooks: string;
+  idealPrep: string;
+  currentPrep: string;
+  idealDish: string;
+  currentDish: string;
+  idealOther: string;
+  currentOther: string;
+  onStaffingChange: (field: StaffingField, value: string) => void;
+  hiringNotes: string;
+  onHiringNotesChange: (value: string) => void;
+  tmMotsOfNote: string;
+  onTmMotsOfNoteChange: (value: string) => void;
+  developmentPathUpdates: string;
+  onDevelopmentPathUpdatesChange: (value: string) => void;
+  onBack: () => void;
+  onNext: () => void;
+}) {
+  const rows: { label: string; ideal: StaffingField; current: StaffingField; idealValue: string; currentValue: string }[] = [
+    { label: 'Cooks', ideal: 'idealCooks', current: 'currentCooks', idealValue: idealCooks, currentValue: currentCooks },
+    { label: 'Prep', ideal: 'idealPrep', current: 'currentPrep', idealValue: idealPrep, currentValue: currentPrep },
+    { label: 'Dish', ideal: 'idealDish', current: 'currentDish', idealValue: idealDish, currentValue: currentDish },
+    { label: 'Other', ideal: 'idealOther', current: 'currentOther', idealValue: idealOther, currentValue: currentOther },
+  ];
+
+  return (
+    <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+      <StepProgressHeader meta={STEP_META.team} />
+
+      <div className="mt-6 space-y-3">
+        <h3 className="text-base font-semibold text-slate-800">Team Staffing</h3>
+        <div className="grid grid-cols-4 gap-4 font-medium text-slate-700 text-sm pb-1 border-b border-slate-100">
+          <div>Position</div>
+          <div>Ideal #</div>
+          <div>Current #</div>
+          <div>Needed</div>
+        </div>
+        {rows.map(({ label, ideal, current, idealValue, currentValue }) => {
+          const needed = (parseInt(idealValue) || 0) - (parseInt(currentValue) || 0);
+          return (
+            <div key={label} className="grid grid-cols-4 gap-4 items-center">
+              <div className="text-sm font-medium text-slate-700">{label}</div>
+              <input
+                type="number"
+                value={idealValue}
+                onChange={(e) => onStaffingChange(ideal, e.target.value)}
+                className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <input
+                type="number"
+                value={currentValue}
+                onChange={(e) => onStaffingChange(current, e.target.value)}
+                className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <div className={`px-3 py-2 border rounded-lg font-medium text-sm ${needed > 0 ? 'bg-amber-50 border-amber-200 text-amber-700' : needed < 0 ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-green-50 border-green-200 text-green-700'}`}>
+                {needed > 0 ? `+${needed} needed` : needed < 0 ? `${Math.abs(needed)} over` : 'Fully staffed'}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-6 space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Hiring Notes</label>
+          <textarea
+            value={hiringNotes}
+            onChange={(e) => onHiringNotesChange(e.target.value)}
+            rows={3}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">TM MOTs of Note</label>
+          <textarea
+            value={tmMotsOfNote}
+            onChange={(e) => onTmMotsOfNoteChange(e.target.value)}
+            rows={3}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Development Path Updates</label>
+          <textarea
+            value={developmentPathUpdates}
+            onChange={(e) => onDevelopmentPathUpdatesChange(e.target.value)}
+            rows={3}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+          />
+        </div>
+      </div>
+
+      <div className="mt-8 flex justify-between">
+        <button
+          onClick={onBack}
+          className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+        >
+          Back
+        </button>
+        <button
+          onClick={onNext}
+          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GuidedFacilitiesStep({
+  rmIssues,
+  onRmIssuesChange,
+  cleaningFocus,
+  onCleaningFocusChange,
+  onBack,
+  onNext,
+}: {
+  rmIssues: string;
+  onRmIssuesChange: (value: string) => void;
+  cleaningFocus: string;
+  onCleaningFocusChange: (value: string) => void;
+  onBack: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+      <StepProgressHeader meta={STEP_META.facilities} />
+
+      <div className="mt-6 space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">R&M Issues</label>
+          <textarea
+            value={rmIssues}
+            onChange={(e) => onRmIssuesChange(e.target.value)}
+            rows={4}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Cleaning Focus</label>
+          <textarea
+            value={cleaningFocus}
+            onChange={(e) => onCleaningFocusChange(e.target.value)}
+            rows={4}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+          />
+        </div>
+      </div>
+
+      <div className="mt-8 flex justify-between">
+        <button
+          onClick={onBack}
+          className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+        >
+          Back
+        </button>
+        <button
+          onClick={onNext}
+          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GuidedFeaturesStep({
+  items,
+  onItemsChange,
+  notes,
+  onNotesChange,
+  onBack,
+  onNext,
+}: {
+  items: FeatureItem[];
+  onItemsChange: (items: FeatureItem[]) => void;
+  notes: string;
+  onNotesChange: (value: string) => void;
+  onBack: () => void;
+  onNext: () => void;
+}) {
+  const updateItem = (index: number, field: keyof FeatureItem, value: string | number) => {
+    const next = items.map((item, i) => (i === index ? { ...item, [field]: value } : item));
+    onItemsChange(next);
+  };
+
+  const addItem = () => onItemsChange([...items, { name: '', sold: 0, notes: '' }]);
+  const removeItem = (index: number) => onItemsChange(items.filter((_, i) => i !== index));
+
+  return (
+    <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+      <StepProgressHeader meta={STEP_META.features} />
+
+      <div className="mt-6 space-y-4">
+        {items.map((item, index) => (
+          <div key={index} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+            <div className="md:col-span-4">
+              <input
+                type="text"
+                placeholder="Feature name"
+                value={item.name}
+                onChange={(e) => updateItem(index, 'name', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <input
+                type="number"
+                placeholder="Sold"
+                value={item.sold || ''}
+                onChange={(e) => updateItem(index, 'sold', parseInt(e.target.value) || 0)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+            </div>
+            <div className="md:col-span-5">
+              <input
+                type="text"
+                placeholder="Notes"
+                value={item.notes}
+                onChange={(e) => updateItem(index, 'notes', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+              />
+            </div>
+            <div className="md:col-span-1">
+              <button
+                onClick={() => removeItem(index)}
+                className="w-full px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        ))}
+        <button
+          onClick={addItem}
+          className="flex items-center gap-2 px-4 py-2 text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+        >
+          <Plus className="w-5 h-5" />
+          Add Feature Item
+        </button>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Feature Notes</label>
+          <textarea
+            value={notes}
+            onChange={(e) => onNotesChange(e.target.value)}
+            rows={4}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+          />
+        </div>
+      </div>
+
+      <div className="mt-8 flex justify-between">
+        <button
+          onClick={onBack}
+          className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+        >
+          Back
+        </button>
+        <button
+          onClick={onNext}
+          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GuidedAuditStep({
+  score,
+  onScoreChange,
+  priorScore,
+  loadingPriorScore,
+  comment,
+  onCommentChange,
+  onBack,
+  onNext,
+}: {
+  score: string;
+  onScoreChange: (value: string) => void;
+  priorScore: number | null;
+  loadingPriorScore: boolean;
+  comment: string;
+  onCommentChange: (value: string) => void;
+  onBack: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+      <StepProgressHeader meta={STEP_META.audit} />
+
+      <div className="mt-6 space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Last Audit Score (%)</label>
+          {loadingPriorScore && (
+            <p className="text-xs text-slate-400 mb-1">Loading prior score...</p>
+          )}
+          {!loadingPriorScore && priorScore !== null && (
+            <p className="text-xs text-slate-400 mb-1">Auto-populated from last audit score on file: {priorScore}%</p>
+          )}
+          <input
+            type="number"
+            value={score}
+            onChange={(e) => onScoreChange(e.target.value)}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Audit Score Comment</label>
+          <textarea
+            value={comment}
+            onChange={(e) => onCommentChange(e.target.value)}
+            rows={4}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+          />
+        </div>
+      </div>
+
+      <div className="mt-8 flex justify-between">
+        <button
+          onClick={onBack}
+          className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+        >
+          Back
+        </button>
+        <button
+          onClick={onNext}
+          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GuidedRecapStep({
+  foodCostComments,
+  labourReviewActionPlan,
+  salesActionPlan,
+  hiringNotes,
+  tmMotsOfNote,
+  developmentPathUpdates,
+  rmIssues,
+  cleaningFocus,
+  featureItems,
+  featuresNotes,
+  auditScore,
+  auditScoreComment,
+  aiSummary,
+  onAiSummaryChange,
+  onGenerate,
+  generating,
+  error,
+  onBack,
+  onFinish,
+}: {
+  foodCostComments: string;
+  labourReviewActionPlan: string;
+  salesActionPlan: string;
+  hiringNotes: string;
+  tmMotsOfNote: string;
+  developmentPathUpdates: string;
+  rmIssues: string;
+  cleaningFocus: string;
+  featureItems: FeatureItem[];
+  featuresNotes: string;
+  auditScore: string;
+  auditScoreComment: string;
+  aiSummary: string;
+  onAiSummaryChange: (value: string) => void;
+  onGenerate: () => void;
+  generating: boolean;
+  error: string;
+  onBack: () => void;
+  onFinish: () => void;
+}) {
+  const recapSections: { label: string; value: string }[] = [
+    { label: 'Food Cost', value: foodCostComments },
+    { label: 'Labour', value: labourReviewActionPlan },
+    { label: 'Sales Action Plan', value: salesActionPlan },
+    { label: 'Hiring Notes', value: hiringNotes },
+    { label: 'TM MOTs of Note', value: tmMotsOfNote },
+    { label: 'Development Path Updates', value: developmentPathUpdates },
+    { label: 'R&M Issues', value: rmIssues },
+    { label: 'Cleaning Focus', value: cleaningFocus },
+    { label: 'Features', value: [featureItems.map((f) => f.name).filter(Boolean).join(', '), featuresNotes].filter(Boolean).join(' — ') },
+    { label: 'Audit Score', value: [auditScore && `${auditScore}%`, auditScoreComment].filter(Boolean).join(' — ') },
+  ].filter((s) => s.value);
+
+  return (
+    <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+      <StepProgressHeader meta={STEP_META.recap} />
+
+      <div className="mt-6 space-y-3">
+        <h3 className="text-base font-semibold text-slate-800">Weekly Recap</h3>
+        {recapSections.length === 0 && (
+          <p className="text-sm text-slate-500">No notes recorded yet.</p>
+        )}
+        {recapSections.map((s) => (
+          <div key={s.label} className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+            <p className="text-xs font-semibold text-slate-500 uppercase">{s.label}</p>
+            <p className="text-sm text-slate-700 whitespace-pre-wrap">{s.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-6">
+        <div className="flex items-center justify-between mb-2">
+          <label className="block text-sm font-medium text-slate-700">AI Summary</label>
+          <button
+            onClick={onGenerate}
+            disabled={generating}
+            className="px-3 py-1.5 text-sm bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors disabled:opacity-50"
+          >
+            {generating ? 'Generating...' : 'Generate Summary'}
+          </button>
+        </div>
+        {error && <p className="text-sm text-red-600 mb-2">{error}</p>}
+        <textarea
+          value={aiSummary}
+          onChange={(e) => onAiSummaryChange(e.target.value)}
+          rows={6}
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+        />
       </div>
 
       <div className="mt-8 flex justify-between">

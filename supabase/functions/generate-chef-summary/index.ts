@@ -17,6 +17,11 @@ interface ChefSummaryInput {
   action_plan_summary: string;
   hiring_notes: string;
   tm_mots_of_note: string;
+  development_path_updates?: string;
+  rm_issues?: string;
+  cleaning_focus?: string;
+  features_notes?: string;
+  audit_score_comment?: string;
 }
 
 Deno.serve(async (req: Request) => {
@@ -55,6 +60,11 @@ Deno.serve(async (req: Request) => {
         summary.action_plan_summary && `Action Plan: ${summary.action_plan_summary}`,
         summary.hiring_notes && `Hiring: ${summary.hiring_notes}`,
         summary.tm_mots_of_note && `Team Members of Note: ${summary.tm_mots_of_note}`,
+        summary.development_path_updates && `Development Path: ${summary.development_path_updates}`,
+        summary.rm_issues && `R&M Issues: ${summary.rm_issues}`,
+        summary.cleaning_focus && `Cleaning Focus: ${summary.cleaning_focus}`,
+        summary.features_notes && `Features: ${summary.features_notes}`,
+        summary.audit_score_comment && `Audit: ${summary.audit_score_comment}`,
       ]
         .filter(Boolean)
         .join("\n");

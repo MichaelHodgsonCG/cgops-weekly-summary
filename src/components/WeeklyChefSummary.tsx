@@ -90,7 +90,11 @@ interface WeeklySummaryData {
   boh_promo_summary: string;
   notes: string;
   action_plan_summary: string;
-  rm_issues_cleaning_focus: string;
+  rm_issues: string;
+  cleaning_focus: string;
+  features_notes: string;
+  audit_score_comment: string;
+  ai_summary: string;
   ideal_cooks: number;
   current_cooks: number;
   ideal_prep: number;
@@ -197,7 +201,11 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     boh_promo_summary: '',
     notes: '',
     action_plan_summary: '',
-    rm_issues_cleaning_focus: '',
+    rm_issues: '',
+    cleaning_focus: '',
+    features_notes: '',
+    audit_score_comment: '',
+    ai_summary: '',
     ideal_cooks: 0,
     current_cooks: 0,
     ideal_prep: 0,
@@ -550,7 +558,11 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     boh_promo_summary: '',
     notes: '',
     action_plan_summary: '',
-    rm_issues_cleaning_focus: '',
+    rm_issues: '',
+    cleaning_focus: '',
+    features_notes: '',
+    audit_score_comment: '',
+    ai_summary: '',
     ideal_cooks: 0,
     current_cooks: 0,
     ideal_prep: 0,
@@ -922,6 +934,24 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 qsr_expo_time: formData.qsr_expo_time,
                 window_time: formData.window_time,
                 sous_vac_days: formData.sous_vac_days,
+                ideal_cooks: formData.ideal_cooks,
+                current_cooks: formData.current_cooks,
+                ideal_prep: formData.ideal_prep,
+                current_prep: formData.current_prep,
+                ideal_dish: formData.ideal_dish,
+                current_dish: formData.current_dish,
+                ideal_other: formData.ideal_other,
+                current_other: formData.current_other,
+                hiring_notes: formData.hiring_notes,
+                tm_mots_of_note: formData.tm_mots_of_note,
+                development_path_updates: formData.development_path_updates,
+                rm_issues: formData.rm_issues,
+                cleaning_focus: formData.cleaning_focus,
+                feature_items: formData.feature_items,
+                features_notes: formData.features_notes,
+                last_audit_score_pct: formData.last_audit_score_pct,
+                audit_score_comment: formData.audit_score_comment,
+                ai_summary: formData.ai_summary,
               }}
               onFieldsChange={handleGuideFieldsChange}
               onClose={() => setShowGuide(false)}
@@ -1261,7 +1291,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Last Audit Score %</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Last Audit Score % <span className="text-xs text-slate-400">(from guide)</span></label>
                 <input
                   type="number"
                   step="0.01"
@@ -1333,7 +1363,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
           </div>
 
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Team Staffing</h3>
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Team Staffing <span className="text-xs text-slate-400 font-normal">(from guide)</span></h3>
             <div className="space-y-3">
               <div className="grid grid-cols-4 gap-4 font-medium text-slate-700 text-sm pb-1 border-b border-slate-100">
                 <div>Position</div>
@@ -1375,7 +1405,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
           </div>
 
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Feature Items</h3>
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Feature Items <span className="text-xs text-slate-400 font-normal">(from guide)</span></h3>
             <div className="space-y-4">
               {formData.feature_items.map((item, index) => (
                 <div key={index} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
@@ -1423,6 +1453,15 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 <Plus className="w-5 h-5" />
                 Add Feature Item
               </button>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Feature Notes <span className="text-xs text-slate-400">(from guide)</span></label>
+                <textarea
+                  value={formData.features_notes}
+                  onChange={(e) => handleInputChange('features_notes', e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                />
+              </div>
             </div>
           </div>
 
@@ -1549,7 +1588,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Hiring Notes</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Hiring Notes <span className="text-xs text-slate-400">(from guide)</span></label>
                 <textarea
                   value={formData.hiring_notes}
                   onChange={(e) => handleInputChange('hiring_notes', e.target.value)}
@@ -1558,7 +1597,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">TM MOTs of Note</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">TM MOTs of Note <span className="text-xs text-slate-400">(from guide)</span></label>
                 <textarea
                   value={formData.tm_mots_of_note}
                   onChange={(e) => handleInputChange('tm_mots_of_note', e.target.value)}
@@ -1567,7 +1606,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Development Path Updates</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Development Path Updates <span className="text-xs text-slate-400">(from guide)</span></label>
                 <textarea
                   value={formData.development_path_updates}
                   onChange={(e) => handleInputChange('development_path_updates', e.target.value)}
@@ -1576,10 +1615,28 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">R&M Issues / Cleaning Focus</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">R&M Issues <span className="text-xs text-slate-400">(from guide)</span></label>
                 <textarea
-                  value={formData.rm_issues_cleaning_focus}
-                  onChange={(e) => handleInputChange('rm_issues_cleaning_focus', e.target.value)}
+                  value={formData.rm_issues}
+                  onChange={(e) => handleInputChange('rm_issues', e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Cleaning Focus <span className="text-xs text-slate-400">(from guide)</span></label>
+                <textarea
+                  value={formData.cleaning_focus}
+                  onChange={(e) => handleInputChange('cleaning_focus', e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Audit Score Comment <span className="text-xs text-slate-400">(from guide)</span></label>
+                <textarea
+                  value={formData.audit_score_comment}
+                  onChange={(e) => handleInputChange('audit_score_comment', e.target.value)}
                   rows={3}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
                 />
@@ -1590,6 +1647,15 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   value={formData.action_plan_summary}
                   onChange={(e) => handleInputChange('action_plan_summary', e.target.value)}
                   rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">AI Summary <span className="text-xs text-slate-400">(from guide)</span></label>
+                <textarea
+                  value={formData.ai_summary}
+                  onChange={(e) => handleInputChange('ai_summary', e.target.value)}
+                  rows={5}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
                 />
               </div>
