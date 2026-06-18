@@ -61,6 +61,7 @@ interface WeeklySummaryData {
   purchases_produce_amount: number;
   usage_review_items: string;
   final_food_cost_items: string;
+  final_food_cost_comments: string;
   lab_qtd_var_amount: number;
   labour_transfer_vacation: number;
   labour_transfer_management: number;
@@ -71,6 +72,7 @@ interface WeeklySummaryData {
   ebidta_variance_pct: number;
   qsr_weekend_lunch_time: string;
   qsr_expo_time: string;
+  window_time: string;
   teamshare_amount: number;
   petty_cash: number;
   waste_amount: number;
@@ -166,6 +168,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     purchases_produce_amount: 0,
     usage_review_items: '[]',
     final_food_cost_items: '[]',
+    final_food_cost_comments: '',
     lab_qtd_var_amount: 0,
     labour_transfer_vacation: 0,
     labour_transfer_management: 0,
@@ -175,6 +178,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     ebidta_ptd_pct: 0,
     ebidta_variance_pct: 0,
     qsr_weekend_lunch_time: '',
+    window_time: '',
     qsr_expo_time: '',
     teamshare_amount: 0,
     petty_cash: 0,
@@ -517,6 +521,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     purchases_produce_amount: 0,
     usage_review_items: '[]',
     final_food_cost_items: '[]',
+    final_food_cost_comments: '',
     lab_qtd_var_amount: 0,
     labour_transfer_vacation: 0,
     labour_transfer_management: 0,
@@ -526,6 +531,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     ebidta_ptd_pct: 0,
     ebidta_variance_pct: 0,
     qsr_weekend_lunch_time: '',
+    window_time: '',
     qsr_expo_time: '',
     teamshare_amount: 0,
     petty_cash: 0,
@@ -909,6 +915,13 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 purchases_produce_amount: formData.purchases_produce_amount,
                 usage_review_items: formData.usage_review_items,
                 final_food_cost_items: formData.final_food_cost_items,
+                final_food_cost_comments: formData.final_food_cost_comments,
+                usage_amount: formData.usage_amount,
+                ideal_usage_amount: formData.ideal_usage_amount,
+                waste_amount: formData.waste_amount,
+                qsr_expo_time: formData.qsr_expo_time,
+                window_time: formData.window_time,
+                sous_vac_days: formData.sous_vac_days,
               }}
               onFieldsChange={handleGuideFieldsChange}
               onClose={() => setShowGuide(false)}
@@ -1047,24 +1060,16 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
             <h3 className="text-lg font-semibold text-slate-900 mb-4">Food Cost Performance</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Usage Amount</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.usage_amount || ''}
-                  onChange={(e) => handleInputChange('usage_amount', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
+                <label className="block text-sm font-medium text-slate-700 mb-2">Usage Amount <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  ${(formData.usage_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Ideal Usage</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.ideal_usage_amount || ''}
-                  onChange={(e) => handleInputChange('ideal_usage_amount', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
+                <label className="block text-sm font-medium text-slate-700 mb-2">Ideal Usage <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  ${(formData.ideal_usage_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Petty Cash</label>
@@ -1120,6 +1125,12 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Final Food Cost Comments <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 min-h-[3rem] whitespace-pre-wrap">
+                  {formData.final_food_cost_comments || '—'}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1147,13 +1158,10 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Sous Vac Days</label>
-                <input
-                  type="number"
-                  value={formData.sous_vac_days || ''}
-                  onChange={(e) => handleInputChange('sous_vac_days', parseInt(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
+                <label className="block text-sm font-medium text-slate-700 mb-2">Sous Vac Days <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  {formData.sous_vac_days || 0}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Labour Budget %</label>
@@ -1229,22 +1237,16 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
             <h3 className="text-lg font-semibold text-slate-900 mb-4">Other Metrics</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">QSR Weekend Lunch Time</label>
-                <input
-                  type="text"
-                  value={formData.qsr_weekend_lunch_time}
-                  onChange={(e) => handleInputChange('qsr_weekend_lunch_time', e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                />
+                <label className="block text-sm font-medium text-slate-700 mb-2">Window Time <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  {formData.window_time || '—'}
+                </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">QSR Expo Time</label>
-                <input
-                  type="text"
-                  value={formData.qsr_expo_time}
-                  onChange={(e) => handleInputChange('qsr_expo_time', e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                />
+                <label className="block text-sm font-medium text-slate-700 mb-2">Dine In Expo Time <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  {formData.qsr_expo_time || '—'}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Teamshare</label>
@@ -1257,14 +1259,10 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Waste</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.waste_amount || ''}
-                  onChange={(e) => handleInputChange('waste_amount', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
+                <label className="block text-sm font-medium text-slate-700 mb-2">Waste <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  ${(formData.waste_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Last Audit Score %</label>

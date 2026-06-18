@@ -692,6 +692,13 @@ export type GuidedFieldUpdates = {
   purchases_produce_amount?: number;
   usage_review_items?: string;
   final_food_cost_items?: string;
+  final_food_cost_comments?: string;
+  usage_amount?: number;
+  ideal_usage_amount?: number;
+  waste_amount?: number;
+  qsr_expo_time?: string;
+  window_time?: string;
+  sous_vac_days?: number;
 };
 
 interface GuidedWeeklyPackageProps {
@@ -778,6 +785,7 @@ export function GuidedWeeklyPackage({
     }
   });
   const [foodCostError, setFoodCostError] = useState('');
+  const [foodCostComments, setFoodCostComments] = useState(initialValues?.final_food_cost_comments ?? '');
 
   const handleSalesBudgetChange = (value: string) => {
     setSalesBudget(value);
@@ -812,11 +820,13 @@ export function GuidedWeeklyPackage({
   const handleTransferEntriesChange = (entries: TransferEntry[]) => {
     setTransferEntries(entries);
     const summary = summarizeTransfers(entries);
+    const sousVacDays = entries.reduce((sum, entry) => sum + (parseFloat(entry.days) || 0), 0);
     onFieldsChange?.({
       labour_transfer_vacation: summary.vacation,
       labour_transfer_management: summary.management,
       labour_transfer_other: summary.other,
       labour_transfer_notes: summary.notes,
+      sous_vac_days: sousVacDays,
       ...(salesResult
         ? { labour_spent: salesResult.labourTotal - summary.vacation - summary.management - summary.other }
         : {}),
@@ -863,6 +873,10 @@ export function GuidedWeeklyPackage({
       const text = await file.text();
       const result = parseSpeedOfServiceReport(text);
       setSpeedResult(result);
+      onFieldsChange?.({
+        qsr_expo_time: formatSecondsAsTime(result.expediter.average),
+        window_time: formatSecondsAsTime(result.windowTime.average),
+      });
     } catch (err) {
       setSpeedError(err instanceof Error ? err.message : 'Failed to parse this report.');
     }
@@ -999,10 +1013,28 @@ export function GuidedWeeklyPackage({
       const pushSales = salesResult?.salesTotal ?? initialValues?.food_sales_labour_push ?? 0;
       const summary = buildFoodCostSummary(parsed, glPurchasesByCategory, pushSales);
       setFoodCostSummary(summary);
-      onFieldsChange?.({ final_food_cost_items: JSON.stringify(summary) });
+      const totals = summary.categories.reduce(
+        (acc, c) => ({
+          actualUsage: acc.actualUsage + c.actualUsage,
+          idealUsage: acc.idealUsage + c.idealUsage,
+          waste: acc.waste + c.waste,
+        }),
+        { actualUsage: 0, idealUsage: 0, waste: 0 }
+      );
+      onFieldsChange?.({
+        final_food_cost_items: JSON.stringify(summary),
+        usage_amount: totals.actualUsage,
+        ideal_usage_amount: totals.idealUsage,
+        waste_amount: totals.waste,
+      });
     } catch (err) {
       setFoodCostError(err instanceof Error ? err.message : 'Failed to parse this report.');
     }
+  };
+
+  const handleFoodCostCommentsChange = (value: string) => {
+    setFoodCostComments(value);
+    onFieldsChange?.({ final_food_cost_comments: value });
   };
 
   const transferTotals = summarizeTransfers(transferEntries);
@@ -1164,6 +1196,8 @@ export function GuidedWeeklyPackage({
         summary={foodCostSummary}
         error={foodCostError}
         onFileSelect={handleFoodCostFileSelect}
+        comments={foodCostComments}
+        onCommentsChange={handleFoodCostCommentsChange}
         onBack={() => setStep('usageReview')}
         onFinish={() => onClose?.()}
       />
@@ -3012,6 +3046,8 @@ function GuidedFinalFoodCostStep({
   summary,
   error,
   onFileSelect,
+  comments,
+  onCommentsChange,
   onBack,
   onFinish,
 }: {
@@ -3019,6 +3055,8 @@ function GuidedFinalFoodCostStep({
   summary: FoodCostSummary | null;
   error: string;
   onFileSelect: (file: File) => void;
+  comments: string;
+  onCommentsChange: (value: string) => void;
   onBack: () => void;
   onFinish: () => void;
 }) {
@@ -3108,7 +3146,15 @@ function GuidedFinalFoodCostStep({
 
         {summary && (
           <>
-            <div className="mt-4 flex flex-wrap gap-3">
+            <div className="mt-4 inline-flex items-baseline gap-2 bg-slate-800 text-white rounded-lg px-4 py-3">
+              <span className="text-sm font-medium text-slate-300">Actual Total Food Cost:</span>
+              <span className="text-lg font-semibold">{totals ? formatCurrency(totals.actualUsage) : '—'}</span>
+              {totals && (
+                <span className="text-sm text-slate-300">({formatPct(pctOfPushSales(totals.actualUsage))})</span>
+              )}
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-3">
               <div className="inline-flex items-baseline gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
                 <span className="text-sm font-medium text-slate-500">Food Sales (Push):</span>
                 <span className="text-lg font-semibold text-slate-800">{formatCurrency(summary.pushSales)}</span>
@@ -3189,6 +3235,19 @@ function GuidedFinalFoodCostStep({
               </table>
             </div>
           </>
+        )}
+
+        {summary && (
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-slate-700 mb-2">Chef Comment</label>
+            <textarea
+              value={comments}
+              onChange={(e) => onCommentsChange(e.target.value)}
+              rows={3}
+              placeholder="Comment on food cost performance — trends, drivers, or corrective action."
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            />
+          </div>
         )}
       </div>
 
