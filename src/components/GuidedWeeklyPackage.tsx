@@ -78,12 +78,19 @@ const DISCOUNT_REASON_CATEGORIES = [
   { label: 'Steak Over/Under', match: 'steak over under s' },
 ];
 
+type DiscountItem = {
+  itemDesc: string;
+  count: number;
+  amount: number;
+};
+
 type DiscountCategoryResult = {
   label: string;
   dailyCounts: number[];
   dailyAmounts: number[];
   totalCount: number;
   totalAmount: number;
+  items: DiscountItem[];
 };
 
 type DiscountsParseResult = {
@@ -193,6 +200,7 @@ function parseDiscountsReport(csvText: string): DiscountsParseResult {
   const dateIdx = header.indexOf('date');
   const discountIdx = header.indexOf('discount');
   const amountIdx = header.indexOf('discountAmount');
+  const itemDescIdx = header.indexOf('itemDesc');
 
   if (dateIdx === -1 || discountIdx === -1 || amountIdx === -1) {
     throw new Error('This report is missing expected columns (date, discount, discountAmount).');
@@ -205,6 +213,7 @@ function parseDiscountsReport(csvText: string): DiscountsParseResult {
     dailyAmounts: days.map(() => 0),
     totalCount: 0,
     totalAmount: 0,
+    items: [],
   }));
 
   let rowIndex = sectionIndex + 2;
@@ -213,6 +222,7 @@ function parseDiscountsReport(csvText: string): DiscountsParseResult {
     const rowDateStr = row[dateIdx];
     const reason = normalizeDiscountReason(row[discountIdx] ?? '');
     const amount = parseFloat(row[amountIdx]);
+    const itemDesc = itemDescIdx !== -1 ? (row[itemDescIdx] ?? '').trim() : '';
 
     const categoryIndex = DISCOUNT_REASON_CATEGORIES.findIndex((c) => c.match === reason);
 
@@ -222,17 +232,55 @@ function parseDiscountsReport(csvText: string): DiscountsParseResult {
       const dayPos = days.indexOf(dayNumber);
 
       if (dayPos !== -1) {
-        categories[categoryIndex].dailyCounts[dayPos] += 1;
-        categories[categoryIndex].dailyAmounts[dayPos] += amount;
-        categories[categoryIndex].totalCount += 1;
-        categories[categoryIndex].totalAmount += amount;
+        const category = categories[categoryIndex];
+        category.dailyCounts[dayPos] += 1;
+        category.dailyAmounts[dayPos] += amount;
+        category.totalCount += 1;
+        category.totalAmount += amount;
+
+        if (itemDesc) {
+          const existingItem = category.items.find((i) => i.itemDesc === itemDesc);
+          if (existingItem) {
+            existingItem.count += 1;
+            existingItem.amount += amount;
+          } else {
+            category.items.push({ itemDesc, count: 1, amount });
+          }
+        }
       }
     }
 
     rowIndex++;
   }
 
+  categories.forEach((category) => {
+    category.items.sort((a, b) => b.count - a.count);
+  });
+
   return { days, categories };
+}
+
+function buildDiscountsSummary(result: DiscountsParseResult): string {
+  const activeCategories = result.categories.filter((c) => c.totalCount > 0);
+
+  if (activeCategories.length === 0) {
+    return 'No discounts were recorded in this report.';
+  }
+
+  const sentences = activeCategories.map((category) => {
+    const topItems = category.items.slice(0, 3);
+    const itemList = topItems
+      .map((item) => `${item.itemDesc} (${item.count}x, $${item.amount.toFixed(2)})`)
+      .join(', ');
+    const remaining = category.items.length - topItems.length;
+    const itemSuffix = remaining > 0 ? `, and ${remaining} other item${remaining === 1 ? '' : 's'}` : '';
+
+    return `${category.label}: ${category.totalCount} discount${category.totalCount === 1 ? '' : 's'} totaling $${category.totalAmount.toFixed(2)}${
+      itemList ? ` — ${itemList}${itemSuffix}` : ''
+    }.`;
+  });
+
+  return sentences.join(' ');
 }
 
 function calculateTransferAmount(entry: TransferEntry): { dayWage: number; amount: number } {
@@ -292,6 +340,7 @@ export type GuidedFieldUpdates = {
   labour_transfer_other?: number;
   labour_transfer_notes?: string;
   labour_review_action_plan?: string;
+  discount_review_notes?: string;
 };
 
 interface GuidedWeeklyPackageProps {
@@ -333,6 +382,7 @@ export function GuidedWeeklyPackage({
   const [discountsFile, setDiscountsFile] = useState<File | null>(null);
   const [discountsResult, setDiscountsResult] = useState<DiscountsParseResult | null>(null);
   const [discountsError, setDiscountsError] = useState('');
+  const [discountReviewNotes, setDiscountReviewNotes] = useState(initialValues?.discount_review_notes ?? '');
 
   const handleSalesBudgetChange = (value: string) => {
     setSalesBudget(value);
@@ -398,6 +448,11 @@ export function GuidedWeeklyPackage({
     } catch (err) {
       setDiscountsError(err instanceof Error ? err.message : 'Failed to parse this report.');
     }
+  };
+
+  const handleDiscountReviewNotesChange = (value: string) => {
+    setDiscountReviewNotes(value);
+    onFieldsChange?.({ discount_review_notes: value });
   };
 
   const transferTotals = summarizeTransfers(transferEntries);
@@ -466,6 +521,8 @@ export function GuidedWeeklyPackage({
         result={discountsResult}
         error={discountsError}
         onFileSelect={handleDiscountsFileSelect}
+        notes={discountReviewNotes}
+        onNotesChange={handleDiscountReviewNotesChange}
         onBack={() => setStep('review')}
       />
     );
@@ -1279,12 +1336,16 @@ function GuidedDiscountsStep({
   result,
   error,
   onFileSelect,
+  notes,
+  onNotesChange,
   onBack,
 }: {
   file: File | null;
   result: DiscountsParseResult | null;
   error: string;
   onFileSelect: (file: File) => void;
+  notes: string;
+  onNotesChange: (value: string) => void;
   onBack: () => void;
 }) {
   const [dragActive, setDragActive] = useState(false);
@@ -1385,6 +1446,51 @@ function GuidedDiscountsStep({
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {result && (
+          <div className="mt-4 border border-slate-200 rounded-lg p-4 bg-slate-50">
+            <p className="text-xs font-medium text-slate-500 uppercase">Summary</p>
+            <p className="text-sm text-slate-700 mt-2">{buildDiscountsSummary(result)}</p>
+          </div>
+        )}
+
+        {result && result.categories.some((c) => c.items.length > 0) && (
+          <div className="mt-4 space-y-3">
+            {result.categories
+              .filter((c) => c.items.length > 0)
+              .map((category) => (
+                <div key={category.label} className="border border-slate-200 rounded-lg p-4">
+                  <p className="text-sm font-semibold text-slate-800">{category.label}</p>
+                  <ul className="mt-2 space-y-1">
+                    {category.items.map((item) => (
+                      <li
+                        key={item.itemDesc}
+                        className="flex justify-between text-sm text-slate-600"
+                      >
+                        <span>{item.itemDesc}</span>
+                        <span>
+                          {item.count}x · ${item.amount.toFixed(2)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+          </div>
+        )}
+
+        {result && (
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-slate-700 mb-2">Chef Comment</label>
+            <textarea
+              value={notes}
+              onChange={(e) => onNotesChange(e.target.value)}
+              rows={3}
+              placeholder="Comment on the items above — root causes, trends, or corrective action."
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            />
           </div>
         )}
       </div>
