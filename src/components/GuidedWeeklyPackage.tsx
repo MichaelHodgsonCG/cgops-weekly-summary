@@ -2869,12 +2869,19 @@ function GuidedUsageReviewStep({
   const overItems = flaggedItems.filter((item) => item.direction === 'over');
 
   const renderItemRow = (item: UsageFlaggedItem) => {
+    const priorThreeWeeks = item.fourWeekVariance === null ? null : item.fourWeekVariance - item.weekVariance;
+    const sharePct =
+      item.fourWeekVariance === null || item.fourWeekVariance === 0
+        ? null
+        : Math.round((Math.abs(item.weekVariance) / Math.abs(item.fourWeekVariance)) * 100);
     const trend =
-      item.fourWeekVariance === null
-        ? 'No 4-week data'
-        : Math.sign(item.fourWeekVariance) === Math.sign(item.weekVariance)
-        ? 'Trend (consistent over 4 weeks)'
-        : 'One-off (differs from 4-week trend)';
+      sharePct === null
+        ? item.fourWeekVariance === null
+          ? 'No 4-week data'
+          : 'No comparable 4-week total'
+        : sharePct > 50
+        ? `One-off (${sharePct}% of 4-week total occurred this week)`
+        : `Trend (${sharePct}% of 4-week total occurred this week)`;
 
     return (
       <div key={`${item.direction}-${item.itemName}`} className="border border-slate-200 rounded-lg p-4 mt-3">
@@ -2884,6 +2891,9 @@ function GuidedUsageReviewStep({
             <span className="text-slate-600">Week: {formatCurrency(item.weekVariance)}</span>
             <span className="text-slate-600">
               4-Week: {item.fourWeekVariance === null ? 'N/A' : formatCurrency(item.fourWeekVariance)}
+            </span>
+            <span className="text-slate-600">
+              Prior 3 Weeks: {priorThreeWeeks === null ? 'N/A' : formatCurrency(priorThreeWeeks)}
             </span>
             <span className="text-slate-500">{trend}</span>
           </div>
@@ -2931,7 +2941,7 @@ function GuidedUsageReviewStep({
 
       <UsageReportUploadZone
         title="2. Upload Trailing 4-Week Report"
-        instructions="Select a date range covering the trailing 4 weeks, then upload the saved CSV."
+        instructions="Select a date range covering the trailing 4 weeks, including the reporting week, then upload the saved CSV."
         file={fourWeekFile}
         rowCount={fourWeekRows ? fourWeekRows.length : null}
         error={fourWeekError}
