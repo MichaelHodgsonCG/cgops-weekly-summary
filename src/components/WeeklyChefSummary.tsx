@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Save, Plus, Trash2, LogOut, ChevronDown, FileText, AlertTriangle, Download, RefreshCw, ClipboardCheck } from 'lucide-react';
+import { Save, Plus, Trash2, LogOut, ChevronDown, FileText, AlertTriangle, Download, ClipboardCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { exportChefSummaryToExcel } from '../lib/chefSummaryExport';
-import { calculateNeedToSave, NeedToSaveBasis } from '../lib/needToSave';
 import { GuidedWeeklyPackage, GuidedFieldUpdates } from './GuidedWeeklyPackage';
 
 interface FeatureItem {
@@ -228,15 +227,6 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [calculatingNTS, setCalculatingNTS] = useState(false);
-  const [ntsContext, setNtsContext] = useState<{
-    fc_basis: NeedToSaveBasis;
-    fc_variance_dollars: number;
-    fc_weeks_remaining: number;
-    labour_basis: NeedToSaveBasis;
-    labour_variance_dollars: number;
-    labour_weeks_remaining: number;
-  } | null>(null);
 
   const weekBudget = formData.budget_food_sales_period > 0 ? formData.budget_food_sales_period / 4 : 0;
   const weekVarianceAmount = formData.food_sales_labour_push > 0 ? formData.food_sales_labour_push - weekBudget : 0;
@@ -617,41 +607,6 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
         i === index ? { ...item, [field]: value } : item
       )
     }));
-  };
-
-  const handleCalculateNeedToSave = async () => {
-    setCalculatingNTS(true);
-    try {
-      const result = await calculateNeedToSave(
-        locationId,
-        formData.fiscal_year,
-        formData.period_number,
-        formData.week_number
-      );
-      if (result) {
-        setFormData(prev => ({
-          ...prev,
-          fc_need_save_per_week: parseFloat(result.fc_need_save_per_week.toFixed(2)),
-          fc_need_save_per_day: parseFloat(result.fc_need_save_per_day.toFixed(2)),
-          labour_need_save_per_week: parseFloat(result.labour_need_save_per_week.toFixed(2)),
-          labour_need_save_per_day: parseFloat(result.labour_need_save_per_day.toFixed(2)),
-        }));
-        setNtsContext({
-          fc_basis: result.fc_basis,
-          fc_variance_dollars: result.fc_variance_dollars,
-          fc_weeks_remaining: result.fc_weeks_remaining,
-          labour_basis: result.labour_basis,
-          labour_variance_dollars: result.labour_variance_dollars,
-          labour_weeks_remaining: result.labour_weeks_remaining,
-        });
-      } else {
-        setMessage({ type: 'error', text: 'No P&L data found for this location. Upload a P&L statement first.' });
-      }
-    } catch (err) {
-      setMessage({ type: 'error', text: 'Failed to calculate need-to-save values.' });
-    } finally {
-      setCalculatingNTS(false);
-    }
   };
 
   const fetchPTDFromPL = async (): Promise<{ food_cost_ptd_pct: number; labour_cost_ptd_pct: number }> => {
@@ -1470,123 +1425,45 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
             <div className="space-y-4">
 
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm font-semibold text-slate-700">Need to Save — from P&L</p>
-                  <button
-                    type="button"
-                    onClick={handleCalculateNeedToSave}
-                    disabled={calculatingNTS}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-slate-800 text-white rounded-lg hover:bg-slate-700 disabled:opacity-50 transition-colors"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${calculatingNTS ? 'animate-spin' : ''}`} />
-                    {calculatingNTS ? 'Calculating...' : 'Calculate from P&L'}
-                  </button>
-                </div>
+                <p className="text-sm font-semibold text-slate-700 mb-3">Need to Save — from P&L <span className="text-xs text-slate-400 font-normal">(from guide)</span></p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Food Cost</p>
-                    {ntsContext && ntsContext.fc_basis !== 'none' && (
-                      <div className="mb-2 px-2 py-1.5 bg-amber-50 border border-amber-100 rounded text-xs text-amber-700">
-                        Based on <span className="font-semibold">{ntsContext.fc_basis.toUpperCase()}</span> variance of{' '}
-                        <span className="font-semibold">${Math.abs(ntsContext.fc_variance_dollars).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        {' '}over <span className="font-semibold">{ntsContext.fc_weeks_remaining}</span> week{ntsContext.fc_weeks_remaining !== 1 ? 's' : ''} remaining
-                      </div>
-                    )}
-                    {ntsContext && ntsContext.fc_basis === 'none' && (
-                      <div className="mb-2 px-2 py-1.5 bg-green-50 border border-green-100 rounded text-xs text-green-700 font-medium">
-                        On track — all horizons green
-                      </div>
-                    )}
                     <div className="flex gap-2">
                       <div className="flex-1">
                         <label className="block text-xs text-slate-500 mb-1">Per Week</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={formData.fc_need_save_per_week || ''}
-                          onChange={(e) => handleInputChange('fc_need_save_per_week', parseFloat(e.target.value) || 0)}
-                          className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${formData.fc_need_save_per_week > 0 ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-slate-300 bg-white text-slate-700'}`}
-                        />
+                        <div className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold ${formData.fc_need_save_per_week > 0 ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-slate-300 bg-white text-slate-700'}`}>
+                          ${(formData.fc_need_save_per_week || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
                       </div>
                       <div className="flex-1">
                         <label className="block text-xs text-slate-500 mb-1">Per Day</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={formData.fc_need_save_per_day || ''}
-                          onChange={(e) => handleInputChange('fc_need_save_per_day', parseFloat(e.target.value) || 0)}
-                          className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${formData.fc_need_save_per_day > 0 ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-slate-300 bg-white text-slate-700'}`}
-                        />
+                        <div className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold ${formData.fc_need_save_per_day > 0 ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-slate-300 bg-white text-slate-700'}`}>
+                          ${(formData.fc_need_save_per_day || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
                       </div>
                     </div>
                   </div>
                   <div>
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Labour</p>
-                    {ntsContext && ntsContext.labour_basis !== 'none' && (
-                      <div className="mb-2 px-2 py-1.5 bg-blue-50 border border-blue-100 rounded text-xs text-blue-700">
-                        Based on <span className="font-semibold">{ntsContext.labour_basis.toUpperCase()}</span> variance of{' '}
-                        <span className="font-semibold">${Math.abs(ntsContext.labour_variance_dollars).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        {' '}over <span className="font-semibold">{ntsContext.labour_weeks_remaining}</span> week{ntsContext.labour_weeks_remaining !== 1 ? 's' : ''} remaining
-                      </div>
-                    )}
-                    {ntsContext && ntsContext.labour_basis === 'none' && (
-                      <div className="mb-2 px-2 py-1.5 bg-green-50 border border-green-100 rounded text-xs text-green-700 font-medium">
-                        On track — all horizons green
-                      </div>
-                    )}
                     <div className="flex gap-2">
                       <div className="flex-1">
                         <label className="block text-xs text-slate-500 mb-1">Per Week</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={formData.labour_need_save_per_week || ''}
-                          onChange={(e) => handleInputChange('labour_need_save_per_week', parseFloat(e.target.value) || 0)}
-                          className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${formData.labour_need_save_per_week > 0 ? 'border-blue-300 bg-blue-50 text-blue-900' : 'border-slate-300 bg-white text-slate-700'}`}
-                        />
+                        <div className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold ${formData.labour_need_save_per_week > 0 ? 'border-blue-300 bg-blue-50 text-blue-900' : 'border-slate-300 bg-white text-slate-700'}`}>
+                          ${(formData.labour_need_save_per_week || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
                       </div>
                       <div className="flex-1">
                         <label className="block text-xs text-slate-500 mb-1">Per Day</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={formData.labour_need_save_per_day || ''}
-                          onChange={(e) => handleInputChange('labour_need_save_per_day', parseFloat(e.target.value) || 0)}
-                          className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${formData.labour_need_save_per_day > 0 ? 'border-blue-300 bg-blue-50 text-blue-900' : 'border-slate-300 bg-white text-slate-700'}`}
-                        />
+                        <div className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold ${formData.labour_need_save_per_day > 0 ? 'border-blue-300 bg-blue-50 text-blue-900' : 'border-slate-300 bg-white text-slate-700'}`}>
+                          ${(formData.labour_need_save_per_day || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Food Cost Summary</label>
-                <textarea
-                  value={formData.food_cost_summary}
-                  onChange={(e) => handleInputChange('food_cost_summary', e.target.value)}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Labour Summary</label>
-                <textarea
-                  value={formData.labour_summary}
-                  onChange={(e) => handleInputChange('labour_summary', e.target.value)}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">BOH Promo Summary</label>
-                <textarea
-                  value={formData.boh_promo_summary}
-                  onChange={(e) => handleInputChange('boh_promo_summary', e.target.value)}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                />
-              </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Hiring Notes <span className="text-xs text-slate-400">(from guide)</span></label>
                 <textarea
@@ -1637,15 +1514,6 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 <textarea
                   value={formData.audit_score_comment}
                   onChange={(e) => handleInputChange('audit_score_comment', e.target.value)}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Action Plan Summary</label>
-                <textarea
-                  value={formData.action_plan_summary}
-                  onChange={(e) => handleInputChange('action_plan_summary', e.target.value)}
                   rows={3}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
                 />

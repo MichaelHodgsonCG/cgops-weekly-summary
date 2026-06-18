@@ -758,6 +758,10 @@ export type GuidedFieldUpdates = {
   last_audit_score_pct?: number;
   audit_score_comment?: string;
   ai_summary?: string;
+  fc_need_save_per_week?: number;
+  fc_need_save_per_day?: number;
+  labour_need_save_per_week?: number;
+  labour_need_save_per_day?: number;
 };
 
 export type FeatureItem = {
@@ -1369,6 +1373,7 @@ export function GuidedWeeklyPackage({
         weekNumber={weekNumber}
         actionPlan={labourReviewActionPlan}
         onActionPlanChange={handleLabourReviewActionPlanChange}
+        onFieldsChange={onFieldsChange}
         onBack={() => setStep('overtime')}
         onNext={() => setStep('discounts')}
       />
@@ -1472,6 +1477,7 @@ export function GuidedWeeklyPackage({
         onFileSelect={handleFoodCostFileSelect}
         comments={foodCostComments}
         onCommentsChange={handleFoodCostCommentsChange}
+        onFieldsChange={onFieldsChange}
         locationId={locationId}
         fiscalYear={fiscalYear}
         periodNumber={periodNumber}
@@ -2174,6 +2180,7 @@ function GuidedLabourReviewStep({
   weekNumber,
   actionPlan,
   onActionPlanChange,
+  onFieldsChange,
   onBack,
   onNext,
 }: {
@@ -2186,6 +2193,7 @@ function GuidedLabourReviewStep({
   weekNumber?: number;
   actionPlan: string;
   onActionPlanChange: (value: string) => void;
+  onFieldsChange?: (updates: GuidedFieldUpdates) => void;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -2248,6 +2256,13 @@ function GuidedLabourReviewStep({
   const safeWeeksRemaining = Math.max(weeksRemainingInYear, 1);
   const needToSavePerWeek = ytdVarAmount > 0 ? ytdVarAmount / safeWeeksRemaining : 0;
   const needToSavePerDay = needToSavePerWeek / 7;
+
+  useEffect(() => {
+    onFieldsChange?.({
+      labour_need_save_per_week: parseFloat(needToSavePerWeek.toFixed(2)),
+      labour_need_save_per_day: parseFloat(needToSavePerDay.toFixed(2)),
+    });
+  }, [needToSavePerWeek, needToSavePerDay]);
 
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
@@ -3407,6 +3422,7 @@ function GuidedFinalFoodCostStep({
   onFileSelect,
   comments,
   onCommentsChange,
+  onFieldsChange,
   locationId,
   fiscalYear,
   periodNumber,
@@ -3420,6 +3436,7 @@ function GuidedFinalFoodCostStep({
   onFileSelect: (file: File) => void;
   comments: string;
   onCommentsChange: (value: string) => void;
+  onFieldsChange?: (updates: GuidedFieldUpdates) => void;
   locationId?: string;
   fiscalYear?: number;
   periodNumber?: number;
@@ -3429,6 +3446,7 @@ function GuidedFinalFoodCostStep({
 }) {
   const [dragActive, setDragActive] = useState(false);
   const [baseline, setBaseline] = useState<FoodCostPlBaseline | null>(null);
+  const [weeksRemainingInYear, setWeeksRemainingInYear] = useState(0);
   const [loadingPL, setLoadingPL] = useState(false);
   const [plError, setPlError] = useState('');
 
@@ -3439,13 +3457,17 @@ function GuidedFinalFoodCostStep({
     setLoadingPL(true);
     setPlError('');
 
-    fetchFoodCostPlBaseline(locationId, fiscalYear, periodNumber, weekNumber)
-      .then((baselineResult) => {
+    Promise.all([
+      fetchFoodCostPlBaseline(locationId, fiscalYear, periodNumber, weekNumber),
+      getWeeksRemainingInYear(fiscalYear, periodNumber, weekNumber),
+    ])
+      .then(([baselineResult, weeksRemaining]) => {
         if (cancelled) return;
         if (!baselineResult) {
           setPlError('No P&L data found for this location yet.');
         }
         setBaseline(baselineResult);
+        setWeeksRemainingInYear(weeksRemaining);
       })
       .catch(() => {
         if (!cancelled) setPlError('Failed to load P&L data.');
@@ -3506,6 +3528,17 @@ function GuidedFinalFoodCostStep({
   const ytdSales = baseline ? (baseline.isCurrentWeek ? baseline.ytdSalesActual : baseline.ytdSalesActual + wtdSales) : 0;
   const ytdPct = ytdSales > 0 ? (ytdFoodCost / ytdSales) * 100 : 0;
   const ytdVarAmount = baseline ? ((ytdPct - baseline.ytdBudgetPct) / 100) * ytdSales : 0;
+
+  const safeWeeksRemaining = Math.max(weeksRemainingInYear, 1);
+  const needToSavePerWeek = ytdVarAmount > 0 ? ytdVarAmount / safeWeeksRemaining : 0;
+  const needToSavePerDay = needToSavePerWeek / 7;
+
+  useEffect(() => {
+    onFieldsChange?.({
+      fc_need_save_per_week: parseFloat(needToSavePerWeek.toFixed(2)),
+      fc_need_save_per_day: parseFloat(needToSavePerDay.toFixed(2)),
+    });
+  }, [needToSavePerWeek, needToSavePerDay]);
 
   const varianceClass = (value: number) =>
     value <= 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700';
@@ -3691,6 +3724,28 @@ function GuidedFinalFoodCostStep({
                 </div>
               </div>
             </div>
+
+            {ytdVarAmount > 0 && (
+              <div className="mt-6 border rounded-lg p-4 border-blue-200 bg-blue-50">
+                <p className="text-xs font-medium uppercase text-blue-700">
+                  Need to Save — Food Cost (Year to Date)
+                </p>
+                <p className="text-xs text-blue-700 mt-1">
+                  {formatCurrency(ytdVarAmount)} over budget across{' '}
+                  {safeWeeksRemaining} week{safeWeeksRemaining === 1 ? '' : 's'} remaining in the fiscal year
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs font-medium text-blue-700 uppercase">Per Week</p>
+                    <p className="text-base font-semibold text-blue-900">{formatCurrency(needToSavePerWeek)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-blue-700 uppercase">Per Day</p>
+                    <p className="text-base font-semibold text-blue-900">{formatCurrency(needToSavePerDay)}</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
 
