@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { ClipboardCheck, Upload, CheckCircle2, AlertCircle, X, Plus, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
-import { fetchLabourPlBaseline, getWeeksRemainingInYear, LabourPlBaseline } from '../lib/needToSave';
+import { fetchLabourPlBaseline, fetchSalesPlBaseline, getWeeksRemainingInYear, LabourPlBaseline, SalesPlBaseline } from '../lib/needToSave';
 
-type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService';
+type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap';
 
 type StepMeta = {
   section: number;
@@ -63,6 +63,14 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     sectionStepCount: 1,
     overallIndex: 6,
     stepLabel: 'Speed of Service',
+  },
+  salesRecap: {
+    section: 4,
+    sectionLabel: 'Sales & Execution Recap',
+    sectionStepIndex: 1,
+    sectionStepCount: 1,
+    overallIndex: 7,
+    stepLabel: 'Sales & Execution Recap',
   },
 };
 
@@ -430,6 +438,7 @@ export type GuidedFieldUpdates = {
   labour_review_action_plan?: string;
   discount_review_notes?: string;
   speed_of_service_notes?: string;
+  sales_action_plan?: string;
 };
 
 interface GuidedWeeklyPackageProps {
@@ -476,6 +485,7 @@ export function GuidedWeeklyPackage({
   const [speedResult, setSpeedResult] = useState<SpeedOfServiceParseResult | null>(null);
   const [speedError, setSpeedError] = useState('');
   const [speedOfServiceNotes, setSpeedOfServiceNotes] = useState(initialValues?.speed_of_service_notes ?? '');
+  const [salesActionPlan, setSalesActionPlan] = useState(initialValues?.sales_action_plan ?? '');
 
   const handleSalesBudgetChange = (value: string) => {
     setSalesBudget(value);
@@ -571,7 +581,15 @@ export function GuidedWeeklyPackage({
     onFieldsChange?.({ speed_of_service_notes: value });
   };
 
+  const handleSalesActionPlanChange = (value: string) => {
+    setSalesActionPlan(value);
+    onFieldsChange?.({ sales_action_plan: value });
+  };
+
   const transferTotals = summarizeTransfers(transferEntries);
+  const discountsTotal = discountsResult
+    ? discountsResult.categories.reduce((sum, c) => sum + c.totalAmount, 0)
+    : 0;
 
   let content;
 
@@ -653,6 +671,23 @@ export function GuidedWeeklyPackage({
         notes={speedOfServiceNotes}
         onNotesChange={handleSpeedOfServiceNotesChange}
         onBack={() => setStep('discounts')}
+        onNext={() => setStep('salesRecap')}
+      />
+    );
+  } else if (step === 'salesRecap') {
+    content = (
+      <GuidedSalesRecapStep
+        wtdSales={salesResult?.salesTotal ?? initialValues?.food_sales_labour_push ?? 0}
+        wtdSalesBudget={parseFloat(salesBudget) || 0}
+        discountsTotal={discountsTotal}
+        windowTimeAverage={speedResult?.windowTime.average ?? null}
+        locationId={locationId}
+        fiscalYear={fiscalYear}
+        periodNumber={periodNumber}
+        weekNumber={weekNumber}
+        actionPlan={salesActionPlan}
+        onActionPlanChange={handleSalesActionPlanChange}
+        onBack={() => setStep('speedOfService')}
       />
     );
   } else {
@@ -1644,6 +1679,160 @@ function GuidedDiscountsStep({
   );
 }
 
+function GuidedSalesRecapStep({
+  wtdSales,
+  wtdSalesBudget,
+  discountsTotal,
+  windowTimeAverage,
+  locationId,
+  fiscalYear,
+  periodNumber,
+  weekNumber,
+  actionPlan,
+  onActionPlanChange,
+  onBack,
+}: {
+  wtdSales: number;
+  wtdSalesBudget: number;
+  discountsTotal: number;
+  windowTimeAverage: number | null;
+  locationId?: string;
+  fiscalYear?: number;
+  periodNumber?: number;
+  weekNumber?: number;
+  actionPlan: string;
+  onActionPlanChange: (value: string) => void;
+  onBack: () => void;
+}) {
+  const [baseline, setBaseline] = useState<SalesPlBaseline | null>(null);
+  const [loadingPL, setLoadingPL] = useState(false);
+  const [plError, setPlError] = useState('');
+
+  useEffect(() => {
+    if (!locationId || !fiscalYear || !periodNumber || !weekNumber) return;
+
+    let cancelled = false;
+    setLoadingPL(true);
+    setPlError('');
+
+    fetchSalesPlBaseline(locationId, fiscalYear, periodNumber, weekNumber)
+      .then((result) => {
+        if (cancelled) return;
+        if (!result) {
+          setPlError('No P&L data found for this location yet.');
+        }
+        setBaseline(result);
+      })
+      .catch(() => {
+        if (!cancelled) setPlError('Failed to load P&L data.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPL(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [locationId, fiscalYear, periodNumber, weekNumber]);
+
+  const ptdSales = baseline ? (baseline.isCurrentWeek ? baseline.periodSalesActual : baseline.periodSalesActual + wtdSales) : 0;
+  const ptdSalesBudget = baseline?.periodSalesBudget ?? 0;
+  const ptdVariance = ptdSales - ptdSalesBudget;
+
+  const ytdSales = baseline ? (baseline.isCurrentWeek ? baseline.ytdSalesActual : baseline.ytdSalesActual + wtdSales) : 0;
+  const ytdSalesBudget = baseline?.ytdSalesBudget ?? 0;
+  const ytdVariance = ytdSales - ytdSalesBudget;
+
+  const wtdVariance = wtdSales - wtdSalesBudget;
+
+  const formatCurrency = (value: number) =>
+    `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const varianceClass = (value: number) =>
+    value >= 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700';
+
+  return (
+    <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+      <StepProgressHeader meta={STEP_META.salesRecap} />
+
+      <p className="mt-4 text-sm text-slate-600 leading-relaxed">
+        Review sales performance for the week, period, and year, along with discounts and line times,
+        before writing a sales action plan.
+      </p>
+
+      {loadingPL && (
+        <p className="mt-4 text-sm text-slate-500">Loading P&L data...</p>
+      )}
+
+      {plError && !loadingPL && (
+        <p className="mt-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+          {plError}
+        </p>
+      )}
+
+      <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="border border-slate-200 rounded-lg p-4">
+          <p className="text-xs font-medium text-slate-500 uppercase">Week to Date</p>
+          <p className="text-lg font-semibold text-slate-800 mt-1">{formatCurrency(wtdSales)}</p>
+          <p className="text-xs text-slate-500 mt-1">Budget {formatCurrency(wtdSalesBudget)}</p>
+          <div className={`mt-2 px-2 py-1 rounded border text-xs font-medium ${varianceClass(wtdVariance)}`}>
+            {wtdVariance >= 0 ? '+' : ''}{formatCurrency(wtdVariance)} variance
+          </div>
+        </div>
+        <div className="border border-slate-200 rounded-lg p-4">
+          <p className="text-xs font-medium text-slate-500 uppercase">Period to Date</p>
+          <p className="text-lg font-semibold text-slate-800 mt-1">{formatCurrency(ptdSales)}</p>
+          <p className="text-xs text-slate-500 mt-1">Budget {formatCurrency(ptdSalesBudget)}</p>
+          <div className={`mt-2 px-2 py-1 rounded border text-xs font-medium ${varianceClass(ptdVariance)}`}>
+            {ptdVariance >= 0 ? '+' : ''}{formatCurrency(ptdVariance)} variance
+          </div>
+        </div>
+        <div className="border border-slate-200 rounded-lg p-4">
+          <p className="text-xs font-medium text-slate-500 uppercase">Year to Date</p>
+          <p className="text-lg font-semibold text-slate-800 mt-1">{formatCurrency(ytdSales)}</p>
+          <p className="text-xs text-slate-500 mt-1">Budget {formatCurrency(ytdSalesBudget)}</p>
+          <div className={`mt-2 px-2 py-1 rounded border text-xs font-medium ${varianceClass(ytdVariance)}`}>
+            {ytdVariance >= 0 ? '+' : ''}{formatCurrency(ytdVariance)} variance
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="border border-slate-200 rounded-lg p-4">
+          <p className="text-xs font-medium text-slate-500 uppercase">Discounts (Week)</p>
+          <p className="text-lg font-semibold text-slate-800 mt-1">{formatCurrency(discountsTotal)}</p>
+        </div>
+        <div className="border border-slate-200 rounded-lg p-4">
+          <p className="text-xs font-medium text-slate-500 uppercase">Line Times (Week)</p>
+          <p className="text-lg font-semibold text-slate-800 mt-1">
+            {windowTimeAverage !== null ? formatSecondsAsTime(windowTimeAverage) : '—'}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-6">
+        <label className="block text-sm font-medium text-slate-700 mb-2">Sales Action Plan</label>
+        <textarea
+          value={actionPlan}
+          onChange={(e) => onActionPlanChange(e.target.value)}
+          rows={4}
+          placeholder="Based on sales, discounts, and line times above, what's the plan for the week ahead?"
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
+        />
+      </div>
+
+      <div className="mt-8 flex justify-between">
+        <button
+          onClick={onBack}
+          className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+        >
+          Back
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function GuidedSpeedOfServiceStep({
   file,
   result,
@@ -1652,6 +1841,7 @@ function GuidedSpeedOfServiceStep({
   notes,
   onNotesChange,
   onBack,
+  onNext,
 }: {
   file: File | null;
   result: SpeedOfServiceParseResult | null;
@@ -1660,6 +1850,7 @@ function GuidedSpeedOfServiceStep({
   notes: string;
   onNotesChange: (value: string) => void;
   onBack: () => void;
+  onNext: () => void;
 }) {
   const [dragActive, setDragActive] = useState(false);
 
@@ -1786,6 +1977,12 @@ function GuidedSpeedOfServiceStep({
           className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
         >
           Back
+        </button>
+        <button
+          onClick={onNext}
+          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+        >
+          Next
         </button>
       </div>
     </div>

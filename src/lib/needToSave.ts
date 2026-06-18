@@ -314,6 +314,60 @@ export async function fetchLabourPlBaseline(
   };
 }
 
+export type SalesPlBaseline = {
+  weekEndingDate: string;
+  isCurrentWeek: boolean;
+  periodSalesActual: number;
+  periodSalesBudget: number;
+  ytdSalesActual: number;
+  ytdSalesBudget: number;
+};
+
+export async function fetchSalesPlBaseline(
+  locationId: string,
+  fiscalYear: number,
+  periodNumber: number,
+  weekNumber: number
+): Promise<SalesPlBaseline | null> {
+  const { data: uploads } = await supabase
+    .from('pl_uploads')
+    .select('id, week_ending_date')
+    .eq('location_id', locationId)
+    .order('week_ending_date', { ascending: false })
+    .limit(1);
+
+  if (!uploads || uploads.length === 0) return null;
+
+  const upload = uploads[0];
+
+  const { data: items } = await supabase
+    .from('pl_line_items')
+    .select('line_item_name, current_actual, current_budget, ytd_actual, ytd_budget')
+    .eq('upload_id', upload.id)
+    .eq('line_item_name', 'Food Sales');
+
+  if (!items) return null;
+
+  const sales = items.find(i => i.line_item_name === 'Food Sales');
+
+  const { data: calWeek } = await supabase
+    .from('fiscal_calendar')
+    .select('end_date')
+    .eq('fiscal_year', fiscalYear)
+    .eq('period', periodNumber)
+    .eq('week', weekNumber)
+    .maybeSingle();
+
+  return {
+    weekEndingDate: upload.week_ending_date,
+    isCurrentWeek: !!calWeek && calWeek.end_date === upload.week_ending_date,
+    periodSalesActual: sales?.current_actual ?? 0,
+    periodSalesBudget: sales?.current_budget ?? 0,
+    ytdSalesActual: sales?.ytd_actual ?? 0,
+    ytdSalesBudget: sales?.ytd_budget ?? 0,
+  };
+}
+
 export async function computeQtdForUpload(
   locationId: string,
   fiscalYear: number,
