@@ -820,7 +820,7 @@ export function GuidedWeeklyPackage({
         wtdSales={salesResult?.salesTotal ?? initialValues?.food_sales_labour_push ?? 0}
         wtdSalesBudget={parseFloat(salesBudget) || 0}
         discountsTotal={discountsTotal}
-        expoAverage={speedResult?.expo.average ?? null}
+        dineInExpoAverage={speedResult?.expediter.average ?? null}
         locationId={locationId}
         fiscalYear={fiscalYear}
         periodNumber={periodNumber}
@@ -1853,7 +1853,7 @@ function GuidedSalesRecapStep({
   wtdSales,
   wtdSalesBudget,
   discountsTotal,
-  expoAverage,
+  dineInExpoAverage,
   locationId,
   fiscalYear,
   periodNumber,
@@ -1866,7 +1866,7 @@ function GuidedSalesRecapStep({
   wtdSales: number;
   wtdSalesBudget: number;
   discountsTotal: number;
-  expoAverage: number | null;
+  dineInExpoAverage: number | null;
   locationId?: string;
   fiscalYear?: number;
   periodNumber?: number;
@@ -1981,7 +1981,7 @@ function GuidedSalesRecapStep({
         <div className="border border-slate-200 rounded-lg p-4">
           <p className="text-xs font-medium text-slate-500 uppercase">Line Times (Week)</p>
           <p className="text-lg font-semibold text-slate-800 mt-1">
-            {expoAverage !== null ? formatSecondsAsTime(expoAverage) : '—'}
+            {dineInExpoAverage !== null ? formatSecondsAsTime(dineInExpoAverage) : '—'}
           </p>
         </div>
       </div>
