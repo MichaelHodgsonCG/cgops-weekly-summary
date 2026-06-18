@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import { fetchLabourPlBaseline, fetchSalesPlBaseline, fetchFoodCostPlBaseline, getWeeksRemainingInYear, LabourPlBaseline, SalesPlBaseline, FoodCostPlBaseline } from '../lib/needToSave';
 
-type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs' | 'purchases' | 'usageReview' | 'finalFoodCost' | 'team' | 'facilities' | 'features' | 'audit' | 'recap';
+type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs' | 'purchases' | 'usageReview' | 'finalFoodCost' | 'finalFoodCostRecap' | 'team' | 'facilities' | 'features' | 'audit' | 'recap';
 
 type StepMeta = {
   section: number;
@@ -100,16 +100,24 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     section: 6,
     sectionLabel: 'Final Food Cost Report',
     sectionStepIndex: 1,
-    sectionStepCount: 1,
+    sectionStepCount: 2,
     overallIndex: 11,
     stepLabel: 'Final Food Cost Report',
+  },
+  finalFoodCostRecap: {
+    section: 6,
+    sectionLabel: 'Final Food Cost Report',
+    sectionStepIndex: 2,
+    sectionStepCount: 2,
+    overallIndex: 12,
+    stepLabel: 'Food Cost Recap & Action Plan',
   },
   team: {
     section: 7,
     sectionLabel: 'Team',
     sectionStepIndex: 1,
     sectionStepCount: 1,
-    overallIndex: 12,
+    overallIndex: 13,
     stepLabel: 'Team Staffing & Notes',
   },
   facilities: {
@@ -117,7 +125,7 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     sectionLabel: 'Facilities',
     sectionStepIndex: 1,
     sectionStepCount: 1,
-    overallIndex: 13,
+    overallIndex: 14,
     stepLabel: 'R&M and Cleaning',
   },
   features: {
@@ -125,7 +133,7 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     sectionLabel: 'Features',
     sectionStepIndex: 1,
     sectionStepCount: 1,
-    overallIndex: 14,
+    overallIndex: 15,
     stepLabel: 'Feature Items',
   },
   audit: {
@@ -133,7 +141,7 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     sectionLabel: 'Audit',
     sectionStepIndex: 1,
     sectionStepCount: 1,
-    overallIndex: 15,
+    overallIndex: 16,
     stepLabel: 'Last Audit Score',
   },
   recap: {
@@ -141,7 +149,7 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     sectionLabel: 'Recap',
     sectionStepIndex: 1,
     sectionStepCount: 1,
-    overallIndex: 16,
+    overallIndex: 17,
     stepLabel: 'Weekly Recap',
   },
 };
@@ -1475,6 +1483,14 @@ export function GuidedWeeklyPackage({
         summary={foodCostSummary}
         error={foodCostError}
         onFileSelect={handleFoodCostFileSelect}
+        onBack={() => setStep('usageReview')}
+        onFinish={() => setStep('finalFoodCostRecap')}
+      />
+    );
+  } else if (step === 'finalFoodCostRecap') {
+    content = (
+      <GuidedFinalFoodCostRecapStep
+        summary={foodCostSummary}
         comments={foodCostComments}
         onCommentsChange={handleFoodCostCommentsChange}
         onFieldsChange={onFieldsChange}
@@ -1482,7 +1498,7 @@ export function GuidedWeeklyPackage({
         fiscalYear={fiscalYear}
         periodNumber={periodNumber}
         weekNumber={weekNumber}
-        onBack={() => setStep('usageReview')}
+        onBack={() => setStep('finalFoodCost')}
         onFinish={() => setStep('team')}
       />
     );
@@ -1504,7 +1520,7 @@ export function GuidedWeeklyPackage({
         onTmMotsOfNoteChange={handleTmMotsOfNoteChange}
         developmentPathUpdates={developmentPathUpdates}
         onDevelopmentPathUpdatesChange={handleDevelopmentPathUpdatesChange}
-        onBack={() => setStep('finalFoodCost')}
+        onBack={() => setStep('finalFoodCostRecap')}
         onNext={() => setStep('facilities')}
       />
     );
@@ -3420,13 +3436,6 @@ function GuidedFinalFoodCostStep({
   summary,
   error,
   onFileSelect,
-  comments,
-  onCommentsChange,
-  onFieldsChange,
-  locationId,
-  fiscalYear,
-  periodNumber,
-  weekNumber,
   onBack,
   onFinish,
 }: {
@@ -3434,52 +3443,10 @@ function GuidedFinalFoodCostStep({
   summary: FoodCostSummary | null;
   error: string;
   onFileSelect: (file: File) => void;
-  comments: string;
-  onCommentsChange: (value: string) => void;
-  onFieldsChange?: (updates: GuidedFieldUpdates) => void;
-  locationId?: string;
-  fiscalYear?: number;
-  periodNumber?: number;
-  weekNumber?: number;
   onBack: () => void;
   onFinish: () => void;
 }) {
   const [dragActive, setDragActive] = useState(false);
-  const [baseline, setBaseline] = useState<FoodCostPlBaseline | null>(null);
-  const [weeksRemainingInYear, setWeeksRemainingInYear] = useState(0);
-  const [loadingPL, setLoadingPL] = useState(false);
-  const [plError, setPlError] = useState('');
-
-  useEffect(() => {
-    if (!locationId || !fiscalYear || !periodNumber || !weekNumber) return;
-
-    let cancelled = false;
-    setLoadingPL(true);
-    setPlError('');
-
-    Promise.all([
-      fetchFoodCostPlBaseline(locationId, fiscalYear, periodNumber, weekNumber),
-      getWeeksRemainingInYear(fiscalYear, periodNumber, weekNumber),
-    ])
-      .then(([baselineResult, weeksRemaining]) => {
-        if (cancelled) return;
-        if (!baselineResult) {
-          setPlError('No P&L data found for this location yet.');
-        }
-        setBaseline(baselineResult);
-        setWeeksRemainingInYear(weeksRemaining);
-      })
-      .catch(() => {
-        if (!cancelled) setPlError('Failed to load P&L data.');
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingPL(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [locationId, fiscalYear, periodNumber, weekNumber]);
 
   const handleFiles = (files: FileList | null) => {
     if (files && files.length > 0) {
@@ -3686,80 +3653,524 @@ function GuidedFinalFoodCostStep({
           </>
         )}
 
-        {summary && (
-          <>
-            {loadingPL && (
-              <p className="mt-4 text-sm text-slate-500">Loading P&L data...</p>
-            )}
+      </div>
 
-            {plError && !loadingPL && (
-              <p className="mt-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-                {plError}
-              </p>
-            )}
+      <div className="mt-8 flex justify-between">
+        <button
+          onClick={onBack}
+          className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+        >
+          Back
+        </button>
+        <button
+          onClick={onFinish}
+          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
 
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="border border-slate-200 rounded-lg p-4">
-                <p className="text-xs font-medium text-slate-500 uppercase">Week to Date</p>
-                <p className="text-lg font-semibold text-slate-800 mt-1">{formatPct(wtdPct)}</p>
-                <p className="text-xs text-slate-500 mt-1">Budget {formatPct(wtdBudgetPct)}</p>
-                <div className={`mt-2 px-2 py-1 rounded border text-xs font-medium ${varianceClass(wtdVariance)}`}>
-                  {wtdVariance > 0 ? '+' : ''}{formatPct(wtdVariance)} variance
-                </div>
-              </div>
-              <div className="border border-slate-200 rounded-lg p-4">
-                <p className="text-xs font-medium text-slate-500 uppercase">Period to Date</p>
-                <p className="text-lg font-semibold text-slate-800 mt-1">{formatPct(ptdPct)}</p>
-                <p className="text-xs text-slate-500 mt-1">Budget {baseline ? formatPct(baseline.periodBudgetPct) : '—'}</p>
-                <div className={`mt-2 px-2 py-1 rounded border text-xs font-medium ${varianceClass(ptdVarAmount)}`}>
-                  {ptdVarAmount > 0 ? '+' : ''}{formatCurrency(ptdVarAmount)} variance
-                </div>
-              </div>
-              <div className="border border-slate-200 rounded-lg p-4">
-                <p className="text-xs font-medium text-slate-500 uppercase">Year to Date</p>
-                <p className="text-lg font-semibold text-slate-800 mt-1">{formatPct(ytdPct)}</p>
-                <p className="text-xs text-slate-500 mt-1">Budget {baseline ? formatPct(baseline.ytdBudgetPct) : '—'}</p>
-                <div className={`mt-2 px-2 py-1 rounded border text-xs font-medium ${varianceClass(ytdVarAmount)}`}>
-                  {ytdVarAmount > 0 ? '+' : ''}{formatCurrency(ytdVarAmount)} variance
-                </div>
-              </div>
+type FcapItem = {
+  item: string;
+  cost: number;
+  variancePerDay: number;
+  reason: string;
+  action: string;
+  manager: string;
+  teamMembers: string;
+  wk1: number;
+  wk2: number;
+  wk3: number;
+  wk4: number;
+};
+
+function parseFcapPaste(text: string): FcapItem[] {
+  const lines = text.split('\n').map((l) => l.trimEnd()).filter((l) => l.trim() !== '');
+  const items: FcapItem[] = [];
+  const toNumber = (raw: string) => {
+    const cleaned = raw.replace(/[$,\s]/g, '');
+    const n = parseFloat(cleaned);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  for (const line of lines) {
+    const cols = line.split('\t');
+    if (cols.length < 2) continue;
+    const label = cols[0].trim();
+    if (!label || /^total/i.test(label) || /^top 10/i.test(label) || /variance including waste/i.test(label)) {
+      continue;
+    }
+    items.push({
+      item: label,
+      cost: toNumber(cols[1] ?? ''),
+      variancePerDay: toNumber(cols[2] ?? ''),
+      reason: (cols[3] ?? '').trim(),
+      action: (cols[4] ?? '').trim(),
+      manager: (cols[5] ?? '').trim(),
+      teamMembers: (cols[6] ?? '').trim(),
+      wk1: toNumber(cols[7] ?? ''),
+      wk2: toNumber(cols[8] ?? ''),
+      wk3: toNumber(cols[9] ?? ''),
+      wk4: toNumber(cols[10] ?? ''),
+    });
+  }
+
+  return items;
+}
+
+function GuidedFinalFoodCostRecapStep({
+  summary,
+  comments,
+  onCommentsChange,
+  onFieldsChange,
+  locationId,
+  fiscalYear,
+  periodNumber,
+  weekNumber,
+  onBack,
+  onFinish,
+}: {
+  summary: FoodCostSummary | null;
+  comments: string;
+  onCommentsChange: (value: string) => void;
+  onFieldsChange?: (updates: GuidedFieldUpdates) => void;
+  locationId?: string;
+  fiscalYear?: number;
+  periodNumber?: number;
+  weekNumber?: number;
+  onBack: () => void;
+  onFinish: () => void;
+}) {
+  const [baseline, setBaseline] = useState<FoodCostPlBaseline | null>(null);
+  const [weeksRemainingInYear, setWeeksRemainingInYear] = useState(0);
+  const [loadingPL, setLoadingPL] = useState(false);
+  const [plError, setPlError] = useState('');
+
+  const [fcapItems, setFcapItems] = useState<FcapItem[]>([]);
+  const [fcapPasteText, setFcapPasteText] = useState('');
+  const [fcapId, setFcapId] = useState<string | null>(null);
+  const [fcapLoading, setFcapLoading] = useState(false);
+  const [fcapSaving, setFcapSaving] = useState(false);
+  const [fcapSavedAt, setFcapSavedAt] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!locationId || !fiscalYear || !periodNumber || !weekNumber) return;
+
+    let cancelled = false;
+    setLoadingPL(true);
+    setPlError('');
+
+    Promise.all([
+      fetchFoodCostPlBaseline(locationId, fiscalYear, periodNumber, weekNumber),
+      getWeeksRemainingInYear(fiscalYear, periodNumber, weekNumber),
+    ])
+      .then(([baselineResult, weeksRemaining]) => {
+        if (cancelled) return;
+        if (!baselineResult) {
+          setPlError('No P&L data found for this location yet.');
+        }
+        setBaseline(baselineResult);
+        setWeeksRemainingInYear(weeksRemaining);
+      })
+      .catch(() => {
+        if (!cancelled) setPlError('Failed to load P&L data.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPL(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [locationId, fiscalYear, periodNumber, weekNumber]);
+
+  useEffect(() => {
+    if (!locationId || !fiscalYear || !periodNumber) return;
+
+    let cancelled = false;
+    setFcapLoading(true);
+
+    supabase
+      .from('food_cost_action_plans')
+      .select('id, items, updated_at')
+      .eq('location_id', locationId)
+      .eq('fiscal_year', fiscalYear)
+      .eq('period_number', periodNumber)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        setFcapId(data.id);
+        setFcapItems(Array.isArray(data.items) ? data.items : []);
+        setFcapSavedAt(data.updated_at ?? null);
+      })
+      .finally(() => {
+        if (!cancelled) setFcapLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [locationId, fiscalYear, periodNumber]);
+
+  const handleImportPaste = () => {
+    const parsed = parseFcapPaste(fcapPasteText);
+    if (parsed.length > 0) {
+      setFcapItems(parsed);
+      setFcapPasteText('');
+    }
+  };
+
+  const handleItemChange = (index: number, field: keyof FcapItem, value: string) => {
+    setFcapItems((prev) =>
+      prev.map((it, i) => {
+        if (i !== index) return it;
+        const isNumeric = field === 'cost' || field === 'variancePerDay' || field === 'wk1' || field === 'wk2' || field === 'wk3' || field === 'wk4';
+        return { ...it, [field]: isNumeric ? parseFloat(value) || 0 : value };
+      })
+    );
+  };
+
+  const handleRemoveItem = (index: number) => {
+    setFcapItems((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSaveFcap = async () => {
+    if (!locationId || !fiscalYear || !periodNumber) return;
+    setFcapSaving(true);
+    try {
+      const { data, error: saveError } = await supabase
+        .from('food_cost_action_plans')
+        .upsert(
+          {
+            id: fcapId ?? undefined,
+            location_id: locationId,
+            fiscal_year: fiscalYear,
+            period_number: periodNumber,
+            items: fcapItems,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'location_id,fiscal_year,period_number' }
+        )
+        .select('id, updated_at')
+        .single();
+
+      if (!saveError && data) {
+        setFcapId(data.id);
+        setFcapSavedAt(data.updated_at ?? null);
+      }
+    } finally {
+      setFcapSaving(false);
+    }
+  };
+
+  const handleExportFcap = () => {
+    const headers = ['Item', 'Cost', 'Variance Per Day', 'Reason For Variance', 'Action to Reduce Variance', 'Manager Responsible', 'Team Members', 'WK1', 'WK2', 'WK3', 'WK4', 'Total', 'PTD Difference'];
+    const rows = fcapItems.map((it) => {
+      const total = it.wk1 + it.wk2 + it.wk3 + it.wk4;
+      const ptdDifference = total - it.cost;
+      return [it.item, it.cost, it.variancePerDay, it.reason, it.action, it.manager, it.teamMembers, it.wk1, it.wk2, it.wk3, it.wk4, total, ptdDifference];
+    });
+    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'FCAP');
+    XLSX.writeFile(workbook, `FCAP_${fiscalYear ?? ''}_P${periodNumber ?? ''}.xlsx`);
+  };
+
+  const formatCurrency = (value: number) =>
+    `${value < 0 ? '-' : ''}$${Math.abs(value).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+
+  const formatPct = (value: number) => `${value.toFixed(2)}%`;
+
+  const totals = summary
+    ? summary.categories.reduce(
+        (acc, c) => ({
+          actualUsage: acc.actualUsage + c.actualUsage,
+        }),
+        { actualUsage: 0 }
+      )
+    : null;
+
+  const pctOfPushSales = (value: number) =>
+    summary && summary.pushSales !== 0 ? (value / summary.pushSales) * 100 : 0;
+
+  const wtdActualUsage = totals?.actualUsage ?? 0;
+  const wtdSales = summary?.pushSales ?? 0;
+  const wtdPct = pctOfPushSales(wtdActualUsage);
+  const wtdBudgetPct = baseline?.periodBudgetPct ?? 0;
+  const wtdVariance = wtdPct - wtdBudgetPct;
+
+  const ptdFoodCost = baseline ? (baseline.isCurrentWeek ? baseline.periodFoodCostActual : baseline.periodFoodCostActual + wtdActualUsage) : 0;
+  const ptdSales = baseline ? (baseline.isCurrentWeek ? baseline.periodSalesActual : baseline.periodSalesActual + wtdSales) : 0;
+  const ptdPct = ptdSales > 0 ? (ptdFoodCost / ptdSales) * 100 : 0;
+  const ptdVarAmount = baseline ? ((ptdPct - baseline.periodBudgetPct) / 100) * ptdSales : 0;
+
+  const ytdFoodCost = baseline ? (baseline.isCurrentWeek ? baseline.ytdFoodCostActual : baseline.ytdFoodCostActual + wtdActualUsage) : 0;
+  const ytdSales = baseline ? (baseline.isCurrentWeek ? baseline.ytdSalesActual : baseline.ytdSalesActual + wtdSales) : 0;
+  const ytdPct = ytdSales > 0 ? (ytdFoodCost / ytdSales) * 100 : 0;
+  const ytdVarAmount = baseline ? ((ytdPct - baseline.ytdBudgetPct) / 100) * ytdSales : 0;
+
+  const safeWeeksRemaining = Math.max(weeksRemainingInYear, 1);
+  const needToSavePerWeek = ytdVarAmount > 0 ? ytdVarAmount / safeWeeksRemaining : 0;
+  const needToSavePerDay = needToSavePerWeek / 7;
+
+  useEffect(() => {
+    onFieldsChange?.({
+      fc_need_save_per_week: parseFloat(needToSavePerWeek.toFixed(2)),
+      fc_need_save_per_day: parseFloat(needToSavePerDay.toFixed(2)),
+    });
+  }, [needToSavePerWeek, needToSavePerDay]);
+
+  const varianceClass = (value: number) =>
+    value <= 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700';
+
+  const fcapTotals = fcapItems.reduce(
+    (acc, it) => {
+      const total = it.wk1 + it.wk2 + it.wk3 + it.wk4;
+      return {
+        cost: acc.cost + it.cost,
+        variancePerDay: acc.variancePerDay + it.variancePerDay,
+        wk1: acc.wk1 + it.wk1,
+        wk2: acc.wk2 + it.wk2,
+        wk3: acc.wk3 + it.wk3,
+        wk4: acc.wk4 + it.wk4,
+        total: acc.total + total,
+        ptdDifference: acc.ptdDifference + (total - it.cost),
+      };
+    },
+    { cost: 0, variancePerDay: 0, wk1: 0, wk2: 0, wk3: 0, wk4: 0, total: 0, ptdDifference: 0 }
+  );
+
+  return (
+    <div className="max-w-3xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+      <StepProgressHeader meta={STEP_META.finalFoodCostRecap} />
+
+      {loadingPL && (
+        <p className="mt-4 text-sm text-slate-500">Loading P&L data...</p>
+      )}
+
+      {plError && !loadingPL && (
+        <p className="mt-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+          {plError}
+        </p>
+      )}
+
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="border border-slate-200 rounded-lg p-4">
+          <p className="text-xs font-medium text-slate-500 uppercase">Week to Date</p>
+          <p className="text-lg font-semibold text-slate-800 mt-1">{formatPct(wtdPct)}</p>
+          <p className="text-xs text-slate-500 mt-1">Budget {formatPct(wtdBudgetPct)}</p>
+          <div className={`mt-2 px-2 py-1 rounded border text-xs font-medium ${varianceClass(wtdVariance)}`}>
+            {wtdVariance > 0 ? '+' : ''}{formatPct(wtdVariance)} variance
+          </div>
+        </div>
+        <div className="border border-slate-200 rounded-lg p-4">
+          <p className="text-xs font-medium text-slate-500 uppercase">Period to Date</p>
+          <p className="text-lg font-semibold text-slate-800 mt-1">{formatPct(ptdPct)}</p>
+          <p className="text-xs text-slate-500 mt-1">Budget {baseline ? formatPct(baseline.periodBudgetPct) : '—'}</p>
+          <div className={`mt-2 px-2 py-1 rounded border text-xs font-medium ${varianceClass(ptdVarAmount)}`}>
+            {ptdVarAmount > 0 ? '+' : ''}{formatCurrency(ptdVarAmount)} variance
+          </div>
+        </div>
+        <div className="border border-slate-200 rounded-lg p-4">
+          <p className="text-xs font-medium text-slate-500 uppercase">Year to Date</p>
+          <p className="text-lg font-semibold text-slate-800 mt-1">{formatPct(ytdPct)}</p>
+          <p className="text-xs text-slate-500 mt-1">Budget {baseline ? formatPct(baseline.ytdBudgetPct) : '—'}</p>
+          <div className={`mt-2 px-2 py-1 rounded border text-xs font-medium ${varianceClass(ytdVarAmount)}`}>
+            {ytdVarAmount > 0 ? '+' : ''}{formatCurrency(ytdVarAmount)} variance
+          </div>
+        </div>
+      </div>
+
+      {ytdVarAmount > 0 && (
+        <div className="mt-6 border rounded-lg p-4 border-blue-200 bg-blue-50">
+          <p className="text-xs font-medium uppercase text-blue-700">
+            Need to Save — Food Cost (Year to Date)
+          </p>
+          <p className="text-xs text-blue-700 mt-1">
+            {formatCurrency(ytdVarAmount)} over budget across{' '}
+            {safeWeeksRemaining} week{safeWeeksRemaining === 1 ? '' : 's'} remaining in the fiscal year
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs font-medium text-blue-700 uppercase">Per Week</p>
+              <p className="text-base font-semibold text-blue-900">{formatCurrency(needToSavePerWeek)}</p>
             </div>
+            <div>
+              <p className="text-xs font-medium text-blue-700 uppercase">Per Day</p>
+              <p className="text-base font-semibold text-blue-900">{formatCurrency(needToSavePerDay)}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
-            {ytdVarAmount > 0 && (
-              <div className="mt-6 border rounded-lg p-4 border-blue-200 bg-blue-50">
-                <p className="text-xs font-medium uppercase text-blue-700">
-                  Need to Save — Food Cost (Year to Date)
-                </p>
-                <p className="text-xs text-blue-700 mt-1">
-                  {formatCurrency(ytdVarAmount)} over budget across{' '}
-                  {safeWeeksRemaining} week{safeWeeksRemaining === 1 ? '' : 's'} remaining in the fiscal year
-                </p>
-                <div className="mt-3 grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs font-medium text-blue-700 uppercase">Per Week</p>
-                    <p className="text-base font-semibold text-blue-900">{formatCurrency(needToSavePerWeek)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-blue-700 uppercase">Per Day</p>
-                    <p className="text-base font-semibold text-blue-900">{formatCurrency(needToSavePerDay)}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
+      <div className="mt-4">
+        <label className="block text-sm font-medium text-slate-700 mb-2">Chef Comment</label>
+        <textarea
+          value={comments}
+          onChange={(e) => onCommentsChange(e.target.value)}
+          rows={3}
+          placeholder="Comment on food cost performance — trends, drivers, or corrective action."
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+        />
+      </div>
+
+      <div className="mt-8 border-t border-slate-200 pt-6">
+        <h3 className="text-base font-semibold text-slate-800">Food Cost Action Plan (FCAP)</h3>
+        <p className="mt-1 text-sm text-slate-600">
+          Paste the Top 10 items from the "Total Variance Including Waste - Period End" report (copied directly from
+          Excel) below. Once a plan is created, it carries through all 4 weeks of the period — just update each
+          item's weekly progress as you go.
+        </p>
+        {fcapLoading && <p className="mt-2 text-xs text-slate-500">Loading existing plan...</p>}
+        {fcapSavedAt && (
+          <p className="mt-2 text-xs text-slate-400">Last saved {new Date(fcapSavedAt).toLocaleString()}</p>
         )}
 
-        {summary && (
-          <div className="mt-4">
-            <label className="block text-sm font-medium text-slate-700 mb-2">Chef Comment</label>
-            <textarea
-              value={comments}
-              onChange={(e) => onCommentsChange(e.target.value)}
-              rows={3}
-              placeholder="Comment on food cost performance — trends, drivers, or corrective action."
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-            />
-          </div>
+        <div className="mt-4">
+          <textarea
+            value={fcapPasteText}
+            onChange={(e) => setFcapPasteText(e.target.value)}
+            rows={4}
+            placeholder="Paste tab-separated rows here (Item, Cost, Variance Per Day, Reason, Action, Manager, Team Members, WK1-WK4)..."
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 font-mono text-xs"
+          />
+          <button
+            onClick={handleImportPaste}
+            disabled={!fcapPasteText.trim()}
+            className="mt-2 px-4 py-2 bg-slate-800 text-white rounded-lg font-medium text-sm hover:bg-slate-700 transition-colors disabled:opacity-50"
+          >
+            Import Pasted Data
+          </button>
+        </div>
+
+        {fcapItems.length > 0 && (
+          <>
+            <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium text-slate-500">Item</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-500">Cost</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-500">Var/Day</th>
+                    <th className="px-3 py-2 text-left font-medium text-slate-500">Reason</th>
+                    <th className="px-3 py-2 text-left font-medium text-slate-500">Action</th>
+                    <th className="px-3 py-2 text-left font-medium text-slate-500">Manager</th>
+                    <th className="px-3 py-2 text-left font-medium text-slate-500">Team Members</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-500">WK1</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-500">WK2</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-500">WK3</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-500">WK4</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-500">Total</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-500">PTD Diff</th>
+                    <th className="px-3 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fcapItems.map((it, index) => {
+                    const total = it.wk1 + it.wk2 + it.wk3 + it.wk4;
+                    const ptdDifference = total - it.cost;
+                    return (
+                      <tr key={index} className="border-t border-slate-200">
+                        <td className="px-3 py-2">
+                          <input
+                            value={it.item}
+                            onChange={(e) => handleItemChange(index, 'item', e.target.value)}
+                            className="w-full min-w-[100px] px-2 py-1 border border-slate-200 rounded text-slate-700"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(it.cost)}</td>
+                        <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(it.variancePerDay)}</td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={it.reason}
+                            onChange={(e) => handleItemChange(index, 'reason', e.target.value)}
+                            className="w-full min-w-[140px] px-2 py-1 border border-slate-200 rounded text-slate-700"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={it.action}
+                            onChange={(e) => handleItemChange(index, 'action', e.target.value)}
+                            className="w-full min-w-[140px] px-2 py-1 border border-slate-200 rounded text-slate-700"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={it.manager}
+                            onChange={(e) => handleItemChange(index, 'manager', e.target.value)}
+                            className="w-full min-w-[90px] px-2 py-1 border border-slate-200 rounded text-slate-700"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={it.teamMembers}
+                            onChange={(e) => handleItemChange(index, 'teamMembers', e.target.value)}
+                            className="w-full min-w-[100px] px-2 py-1 border border-slate-200 rounded text-slate-700"
+                          />
+                        </td>
+                        {(['wk1', 'wk2', 'wk3', 'wk4'] as const).map((wk) => (
+                          <td key={wk} className="px-3 py-2">
+                            <input
+                              type="number"
+                              value={it[wk]}
+                              onChange={(e) => handleItemChange(index, wk, e.target.value)}
+                              className="w-20 px-2 py-1 border border-slate-200 rounded text-right text-slate-700"
+                            />
+                          </td>
+                        ))}
+                        <td className="px-3 py-2 text-right font-medium text-slate-800">{formatCurrency(total)}</td>
+                        <td className={`px-3 py-2 text-right font-medium ${ptdDifference <= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                          {formatCurrency(ptdDifference)}
+                        </td>
+                        <td className="px-3 py-2">
+                          <button onClick={() => handleRemoveItem(index)} className="text-slate-400 hover:text-red-600">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="border-t border-slate-200 bg-slate-50 font-semibold text-slate-800">
+                    <td className="px-3 py-2">TOTALS</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(fcapTotals.cost)}</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(fcapTotals.variancePerDay)}</td>
+                    <td className="px-3 py-2" colSpan={4}></td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(fcapTotals.wk1)}</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(fcapTotals.wk2)}</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(fcapTotals.wk3)}</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(fcapTotals.wk4)}</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(fcapTotals.total)}</td>
+                    <td className={`px-3 py-2 text-right ${fcapTotals.ptdDifference <= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                      {formatCurrency(fcapTotals.ptdDifference)}
+                    </td>
+                    <td className="px-3 py-2"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-4 flex gap-3">
+              <button
+                onClick={handleSaveFcap}
+                disabled={fcapSaving || !locationId || !fiscalYear || !periodNumber}
+                className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium text-sm hover:bg-slate-700 transition-colors disabled:opacity-50"
+              >
+                {fcapSaving ? 'Saving...' : 'Save Plan'}
+              </button>
+              <button
+                onClick={handleExportFcap}
+                className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg font-medium text-sm hover:bg-slate-50 transition-colors"
+              >
+                Export to Excel
+              </button>
+            </div>
+          </>
         )}
       </div>
 
