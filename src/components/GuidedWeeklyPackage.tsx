@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ClipboardCheck, Upload, CheckCircle2, AlertCircle, X, Plus, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
-import { fetchLabourPlBaseline, fetchSalesPlBaseline, getWeeksRemainingInYear, LabourPlBaseline, SalesPlBaseline } from '../lib/needToSave';
+import { fetchLabourPlBaseline, fetchSalesPlBaseline, fetchFoodCostPlBaseline, getWeeksRemainingInYear, LabourPlBaseline, SalesPlBaseline, FoodCostPlBaseline } from '../lib/needToSave';
 
 type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs' | 'purchases' | 'usageReview' | 'finalFoodCost';
 
@@ -696,6 +696,7 @@ export type GuidedFieldUpdates = {
   usage_amount?: number;
   ideal_usage_amount?: number;
   waste_amount?: number;
+  on_hand_amount?: number;
   qsr_expo_time?: string;
   window_time?: string;
   sous_vac_days?: number;
@@ -1018,14 +1019,16 @@ export function GuidedWeeklyPackage({
           actualUsage: acc.actualUsage + c.actualUsage,
           idealUsage: acc.idealUsage + c.idealUsage,
           waste: acc.waste + c.waste,
+          closing: acc.closing + c.closing,
         }),
-        { actualUsage: 0, idealUsage: 0, waste: 0 }
+        { actualUsage: 0, idealUsage: 0, waste: 0, closing: 0 }
       );
       onFieldsChange?.({
         final_food_cost_items: JSON.stringify(summary),
         usage_amount: totals.actualUsage,
         ideal_usage_amount: totals.idealUsage,
         waste_amount: totals.waste,
+        on_hand_amount: totals.closing,
       });
     } catch (err) {
       setFoodCostError(err instanceof Error ? err.message : 'Failed to parse this report.');
@@ -1198,6 +1201,10 @@ export function GuidedWeeklyPackage({
         onFileSelect={handleFoodCostFileSelect}
         comments={foodCostComments}
         onCommentsChange={handleFoodCostCommentsChange}
+        locationId={locationId}
+        fiscalYear={fiscalYear}
+        periodNumber={periodNumber}
+        weekNumber={weekNumber}
         onBack={() => setStep('usageReview')}
         onFinish={() => onClose?.()}
       />
@@ -3048,6 +3055,10 @@ function GuidedFinalFoodCostStep({
   onFileSelect,
   comments,
   onCommentsChange,
+  locationId,
+  fiscalYear,
+  periodNumber,
+  weekNumber,
   onBack,
   onFinish,
 }: {
@@ -3057,10 +3068,44 @@ function GuidedFinalFoodCostStep({
   onFileSelect: (file: File) => void;
   comments: string;
   onCommentsChange: (value: string) => void;
+  locationId?: string;
+  fiscalYear?: number;
+  periodNumber?: number;
+  weekNumber?: number;
   onBack: () => void;
   onFinish: () => void;
 }) {
   const [dragActive, setDragActive] = useState(false);
+  const [baseline, setBaseline] = useState<FoodCostPlBaseline | null>(null);
+  const [loadingPL, setLoadingPL] = useState(false);
+  const [plError, setPlError] = useState('');
+
+  useEffect(() => {
+    if (!locationId || !fiscalYear || !periodNumber || !weekNumber) return;
+
+    let cancelled = false;
+    setLoadingPL(true);
+    setPlError('');
+
+    fetchFoodCostPlBaseline(locationId, fiscalYear, periodNumber, weekNumber)
+      .then((baselineResult) => {
+        if (cancelled) return;
+        if (!baselineResult) {
+          setPlError('No P&L data found for this location yet.');
+        }
+        setBaseline(baselineResult);
+      })
+      .catch(() => {
+        if (!cancelled) setPlError('Failed to load P&L data.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPL(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [locationId, fiscalYear, periodNumber, weekNumber]);
 
   const handleFiles = (files: FileList | null) => {
     if (files && files.length > 0) {
@@ -3093,6 +3138,25 @@ function GuidedFinalFoodCostStep({
 
   const pctOfPushSales = (value: number) =>
     summary && summary.pushSales !== 0 ? (value / summary.pushSales) * 100 : 0;
+
+  const wtdActualUsage = totals?.actualUsage ?? 0;
+  const wtdSales = summary?.pushSales ?? 0;
+  const wtdPct = pctOfPushSales(wtdActualUsage);
+  const wtdBudgetPct = baseline?.periodBudgetPct ?? 0;
+  const wtdVariance = wtdPct - wtdBudgetPct;
+
+  const ptdFoodCost = baseline ? (baseline.isCurrentWeek ? baseline.periodFoodCostActual : baseline.periodFoodCostActual + wtdActualUsage) : 0;
+  const ptdSales = baseline ? (baseline.isCurrentWeek ? baseline.periodSalesActual : baseline.periodSalesActual + wtdSales) : 0;
+  const ptdPct = ptdSales > 0 ? (ptdFoodCost / ptdSales) * 100 : 0;
+  const ptdVarAmount = baseline ? ((ptdPct - baseline.periodBudgetPct) / 100) * ptdSales : 0;
+
+  const ytdFoodCost = baseline ? (baseline.isCurrentWeek ? baseline.ytdFoodCostActual : baseline.ytdFoodCostActual + wtdActualUsage) : 0;
+  const ytdSales = baseline ? (baseline.isCurrentWeek ? baseline.ytdSalesActual : baseline.ytdSalesActual + wtdSales) : 0;
+  const ytdPct = ytdSales > 0 ? (ytdFoodCost / ytdSales) * 100 : 0;
+  const ytdVarAmount = baseline ? ((ytdPct - baseline.ytdBudgetPct) / 100) * ytdSales : 0;
+
+  const varianceClass = (value: number) =>
+    value <= 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700';
 
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
@@ -3233,6 +3297,47 @@ function GuidedFinalFoodCostStep({
                   )}
                 </tbody>
               </table>
+            </div>
+          </>
+        )}
+
+        {summary && (
+          <>
+            {loadingPL && (
+              <p className="mt-4 text-sm text-slate-500">Loading P&L data...</p>
+            )}
+
+            {plError && !loadingPL && (
+              <p className="mt-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                {plError}
+              </p>
+            )}
+
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="border border-slate-200 rounded-lg p-4">
+                <p className="text-xs font-medium text-slate-500 uppercase">Week to Date</p>
+                <p className="text-lg font-semibold text-slate-800 mt-1">{formatPct(wtdPct)}</p>
+                <p className="text-xs text-slate-500 mt-1">Budget {formatPct(wtdBudgetPct)}</p>
+                <div className={`mt-2 px-2 py-1 rounded border text-xs font-medium ${varianceClass(wtdVariance)}`}>
+                  {wtdVariance > 0 ? '+' : ''}{formatPct(wtdVariance)} variance
+                </div>
+              </div>
+              <div className="border border-slate-200 rounded-lg p-4">
+                <p className="text-xs font-medium text-slate-500 uppercase">Period to Date</p>
+                <p className="text-lg font-semibold text-slate-800 mt-1">{formatPct(ptdPct)}</p>
+                <p className="text-xs text-slate-500 mt-1">Budget {baseline ? formatPct(baseline.periodBudgetPct) : '—'}</p>
+                <div className={`mt-2 px-2 py-1 rounded border text-xs font-medium ${varianceClass(ptdVarAmount)}`}>
+                  {ptdVarAmount > 0 ? '+' : ''}{formatCurrency(ptdVarAmount)} variance
+                </div>
+              </div>
+              <div className="border border-slate-200 rounded-lg p-4">
+                <p className="text-xs font-medium text-slate-500 uppercase">Year to Date</p>
+                <p className="text-lg font-semibold text-slate-800 mt-1">{formatPct(ytdPct)}</p>
+                <p className="text-xs text-slate-500 mt-1">Budget {baseline ? formatPct(baseline.ytdBudgetPct) : '—'}</p>
+                <div className={`mt-2 px-2 py-1 rounded border text-xs font-medium ${varianceClass(ytdVarAmount)}`}>
+                  {ytdVarAmount > 0 ? '+' : ''}{formatCurrency(ytdVarAmount)} variance
+                </div>
+              </div>
             </div>
           </>
         )}

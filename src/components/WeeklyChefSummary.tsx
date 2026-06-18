@@ -1116,14 +1116,10 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">On Hand Amount</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.on_hand_amount || ''}
-                  onChange={(e) => handleInputChange('on_hand_amount', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
+                <label className="block text-sm font-medium text-slate-700 mb-2">Ending Inventory Total <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  ${(formData.on_hand_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
               </div>
               <div className="md:col-span-3">
                 <label className="block text-sm font-medium text-slate-700 mb-2">Final Food Cost Comments <span className="text-xs text-slate-400">(from guide)</span></label>
@@ -1332,115 +1328,6 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   rows={3}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
                 />
-              </div>
-              <div className="md:col-span-3">
-                <label className="block text-sm font-medium text-slate-700 mb-2">COGs Checklist <span className="text-xs text-slate-400">(from guide)</span></label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <label className="flex items-center gap-2 text-sm text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={formData.cogs_confirm_sales}
-                      onChange={(e) => handleInputChange('cogs_confirm_sales', e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-slate-500"
-                    />
-                    Confirm Sales
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={formData.cogs_brownie_on_us}
-                      onChange={(e) => handleInputChange('cogs_brownie_on_us', e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-slate-500"
-                    />
-                    Brownie on Us
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={formData.cogs_recording_waste}
-                      onChange={(e) => handleInputChange('cogs_recording_waste', e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-slate-500"
-                    />
-                    Recording Waste
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={formData.cogs_internal_transfers}
-                      onChange={(e) => handleInputChange('cogs_internal_transfers', e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-slate-500"
-                    />
-                    Internal Transfers
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-slate-700 whitespace-nowrap">Petty Cash $</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={formData.cogs_petty_cash_amount || ''}
-                      onChange={(e) => handleInputChange('cogs_petty_cash_amount', parseFloat(e.target.value) || 0)}
-                      className="w-32 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="md:col-span-3">
-                <label className="block text-sm font-medium text-slate-700 mb-2">Purchases <span className="text-xs text-slate-400">(from guide)</span></label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <label className="flex items-center gap-2 text-sm text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={formData.purchases_invoices_confirmed}
-                      onChange={(e) => handleInputChange('purchases_invoices_confirmed', e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-slate-500"
-                    />
-                    Invoices Confirmed
-                  </label>
-                </div>
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Bakery</label>
-                    <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
-                      ${(formData.purchases_bakery_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Dairy</label>
-                    <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
-                      ${(formData.purchases_dairy_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Meat And Seafood</label>
-                    <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
-                      ${(formData.purchases_meat_seafood_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Other Food</label>
-                    <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
-                      ${(formData.purchases_other_food_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Produce</label>
-                    <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
-                      ${(formData.purchases_produce_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Total</label>
-                    <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-800 font-semibold">
-                      ${(
-                        (formData.purchases_bakery_amount || 0) +
-                        (formData.purchases_dairy_amount || 0) +
-                        (formData.purchases_meat_seafood_amount || 0) +
-                        (formData.purchases_other_food_amount || 0) +
-                        (formData.purchases_produce_amount || 0)
-                      ).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
