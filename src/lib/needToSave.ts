@@ -29,7 +29,7 @@ function getPeriodsInQuarter(quarter: number): number[] {
   return [10, 11, 12, 13];
 }
 
-async function getWeeksRemainingInYear(fiscalYear: number, currentPeriod: number, currentWeek: number): Promise<number> {
+export async function getWeeksRemainingInYear(fiscalYear: number, currentPeriod: number, currentWeek: number): Promise<number> {
   const safeWeek = Math.max(1, currentWeek);
   const { data } = await supabase
     .from('fiscal_calendar')

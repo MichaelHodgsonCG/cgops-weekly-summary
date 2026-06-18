@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ClipboardCheck, Upload, CheckCircle2, AlertCircle, X, Plus, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
-import { calculateNeedToSave, fetchLabourPlBaseline, NeedToSaveResult, LabourPlBaseline } from '../lib/needToSave';
+import { fetchLabourPlBaseline, getWeeksRemainingInYear, LabourPlBaseline } from '../lib/needToSave';
 
 const LOCATION_NAME = 'Test Package';
 
@@ -1070,7 +1070,7 @@ function GuidedLabourReviewStep({
   onNext: () => void;
 }) {
   const [baseline, setBaseline] = useState<LabourPlBaseline | null>(null);
-  const [needToSaveResult, setNeedToSaveResult] = useState<NeedToSaveResult | null>(null);
+  const [weeksRemainingInYear, setWeeksRemainingInYear] = useState(0);
   const [loadingPL, setLoadingPL] = useState(false);
   const [plError, setPlError] = useState('');
 
@@ -1083,15 +1083,15 @@ function GuidedLabourReviewStep({
 
     Promise.all([
       fetchLabourPlBaseline(locationId, fiscalYear, periodNumber, weekNumber),
-      calculateNeedToSave(locationId, fiscalYear, periodNumber, weekNumber),
+      getWeeksRemainingInYear(fiscalYear, periodNumber, weekNumber),
     ])
-      .then(([baselineResult, needToSave]) => {
+      .then(([baselineResult, weeksRemaining]) => {
         if (cancelled) return;
         if (!baselineResult) {
           setPlError('No P&L data found for this location yet.');
         }
         setBaseline(baselineResult);
-        setNeedToSaveResult(needToSave);
+        setWeeksRemainingInYear(weeksRemaining);
       })
       .catch(() => {
         if (!cancelled) setPlError('Failed to load P&L data.');
@@ -1125,12 +1125,9 @@ function GuidedLabourReviewStep({
   const varianceClass = (value: number) =>
     value <= 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700';
 
-  const basisLabel: Record<NeedToSaveResult['labour_basis'], string> = {
-    ytd: 'Year to Date',
-    qtr: 'Quarter to Date',
-    period: 'Period to Date',
-    none: 'On Track',
-  };
+  const safeWeeksRemaining = Math.max(weeksRemainingInYear, 1);
+  const needToSavePerWeek = ytdVarAmount > 0 ? ytdVarAmount / safeWeeksRemaining : 0;
+  const needToSavePerDay = needToSavePerWeek / 7;
 
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
@@ -1178,23 +1175,23 @@ function GuidedLabourReviewStep({
         </div>
       </div>
 
-      {needToSaveResult && needToSaveResult.labour_basis !== 'none' && (
+      {baseline && ytdVarAmount > 0 && (
         <div className="mt-6 border border-blue-200 bg-blue-50 rounded-lg p-4">
           <p className="text-xs font-medium text-blue-700 uppercase">
-            Need to Save — Labour ({basisLabel[needToSaveResult.labour_basis]})
+            Need to Save — Labour (Year to Date)
           </p>
           <p className="text-xs text-blue-700 mt-1">
-            {formatCurrency(needToSaveResult.labour_variance_dollars)} over budget across{' '}
-            {needToSaveResult.labour_weeks_remaining} week{needToSaveResult.labour_weeks_remaining === 1 ? '' : 's'} remaining
+            {formatCurrency(ytdVarAmount)} over budget across{' '}
+            {safeWeeksRemaining} week{safeWeeksRemaining === 1 ? '' : 's'} remaining in the fiscal year
           </p>
           <div className="mt-3 grid grid-cols-2 gap-4">
             <div>
               <p className="text-xs font-medium text-blue-700 uppercase">Per Week</p>
-              <p className="text-base font-semibold text-blue-900">{formatCurrency(needToSaveResult.labour_need_save_per_week)}</p>
+              <p className="text-base font-semibold text-blue-900">{formatCurrency(needToSavePerWeek)}</p>
             </div>
             <div>
               <p className="text-xs font-medium text-blue-700 uppercase">Per Day</p>
-              <p className="text-base font-semibold text-blue-900">{formatCurrency(needToSaveResult.labour_need_save_per_day)}</p>
+              <p className="text-base font-semibold text-blue-900">{formatCurrency(needToSavePerDay)}</p>
             </div>
           </div>
         </div>
