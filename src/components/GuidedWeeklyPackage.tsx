@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ClipboardCheck, Upload, CheckCircle2, AlertCircle, X, Plus, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { supabase } from '../lib/supabase';
 import { fetchLabourPlBaseline, fetchSalesPlBaseline, fetchFoodCostPlBaseline, getWeeksRemainingInYear, LabourPlBaseline, SalesPlBaseline, FoodCostPlBaseline } from '../lib/needToSave';
 
@@ -1491,6 +1493,8 @@ export function GuidedWeeklyPackage({
     content = (
       <GuidedFinalFoodCostRecapStep
         summary={foodCostSummary}
+        usageWeekRows={usageWeekRows}
+        locationName={locationName}
         comments={foodCostComments}
         onCommentsChange={handleFoodCostCommentsChange}
         onFieldsChange={onFieldsChange}
@@ -3657,6 +3661,10 @@ type FcapItem = {
   wk4: number;
 };
 
+function normalizeFcapItemName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 function parseFcapPaste(text: string): FcapItem[] {
   const lines = text.split('\n').map((l) => l.trimEnd()).filter((l) => l.trim() !== '');
   const items: FcapItem[] = [];
@@ -3693,6 +3701,8 @@ function parseFcapPaste(text: string): FcapItem[] {
 
 function GuidedFinalFoodCostRecapStep({
   summary,
+  usageWeekRows,
+  locationName,
   comments,
   onCommentsChange,
   onFieldsChange,
@@ -3704,6 +3714,8 @@ function GuidedFinalFoodCostRecapStep({
   onFinish,
 }: {
   summary: FoodCostSummary | null;
+  usageWeekRows: UsageReportRow[] | null;
+  locationName?: string;
   comments: string;
   onCommentsChange: (value: string) => void;
   onFieldsChange?: (updates: GuidedFieldUpdates) => void;
@@ -3785,6 +3797,27 @@ function GuidedFinalFoodCostRecapStep({
     };
   }, [locationId, fiscalYear, periodNumber]);
 
+  const currentWeekKey = (`wk${Math.min(Math.max(weekNumber ?? 1, 1), 4)}`) as 'wk1' | 'wk2' | 'wk3' | 'wk4';
+
+  useEffect(() => {
+    if (!usageWeekRows || usageWeekRows.length === 0) return;
+
+    const varianceByName = new Map(
+      usageWeekRows.map((row) => [normalizeFcapItemName(row.itemName), row.varianceAmount])
+    );
+
+    setFcapItems((prev) => {
+      let changed = false;
+      const next = prev.map((it) => {
+        const match = varianceByName.get(normalizeFcapItemName(it.item));
+        if (match === undefined || it[currentWeekKey] === match) return it;
+        changed = true;
+        return { ...it, [currentWeekKey]: match };
+      });
+      return changed ? next : prev;
+    });
+  }, [usageWeekRows, fcapItems.length, currentWeekKey]);
+
   const handleImportPaste = () => {
     const parsed = parseFcapPaste(fcapPasteText);
     if (parsed.length > 0) {
@@ -3847,6 +3880,87 @@ function GuidedFinalFoodCostRecapStep({
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'FCAP');
     XLSX.writeFile(workbook, `FCAP_${fiscalYear ?? ''}_P${periodNumber ?? ''}.xlsx`);
+  };
+
+  const handleExportFcapPdf = () => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const fmt = (value: number) =>
+      `${value < 0 ? '-' : ''}$${Math.abs(value).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`;
+
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Food Cost Action Plan', pageWidth / 2, 36, { align: 'center' });
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    const subtitle = [locationName, fiscalYear ? `Fiscal Year ${fiscalYear}` : '', periodNumber ? `Period ${periodNumber}` : '']
+      .filter(Boolean)
+      .join('   •   ');
+    doc.text(subtitle, pageWidth / 2, 54, { align: 'center' });
+
+    const rows = fcapItems.map((it) => {
+      const total = it.wk1 + it.wk2 + it.wk3 + it.wk4;
+      const ptdDifference = total - it.cost;
+      return [
+        it.item,
+        fmt(it.cost),
+        fmt(it.variancePerDay),
+        it.reason,
+        it.action,
+        it.manager,
+        it.teamMembers,
+        fmt(it.wk1),
+        fmt(it.wk2),
+        fmt(it.wk3),
+        fmt(it.wk4),
+        fmt(total),
+        fmt(ptdDifference),
+      ];
+    });
+
+    const totalsRow = [
+      'TOTALS',
+      fmt(fcapTotals.cost),
+      fmt(fcapTotals.variancePerDay),
+      '',
+      '',
+      '',
+      '',
+      fmt(fcapTotals.wk1),
+      fmt(fcapTotals.wk2),
+      fmt(fcapTotals.wk3),
+      fmt(fcapTotals.wk4),
+      fmt(fcapTotals.total),
+      fmt(fcapTotals.ptdDifference),
+    ];
+
+    autoTable(doc, {
+      startY: 70,
+      head: [['Item', 'Cost', 'Var/Day', 'Reason', 'Action', 'Manager', 'Team Members', 'WK1', 'WK2', 'WK3', 'WK4', 'Total', 'PTD Diff']],
+      body: rows,
+      foot: [totalsRow],
+      styles: { fontSize: 8, cellPadding: 5, valign: 'middle' },
+      headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
+      footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 90 },
+        3: { cellWidth: 100 },
+        4: { cellWidth: 110 },
+      },
+      margin: { left: 30, right: 30 },
+    });
+
+    const finalY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+    doc.setFontSize(9);
+    doc.setTextColor(120);
+    doc.text(`Generated ${new Date().toLocaleDateString()}`, 30, finalY + 20);
+
+    doc.save(`FCAP_${fiscalYear ?? ''}_P${periodNumber ?? ''}.pdf`);
   };
 
   const formatCurrency = (value: number) =>
@@ -4021,6 +4135,12 @@ function GuidedFinalFoodCostRecapStep({
 
         {fcapItems.length > 0 && (
           <>
+            {usageWeekRows && usageWeekRows.length > 0 && (
+              <p className="mt-4 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                {currentWeekKey.toUpperCase()} values below were auto-filled from this week's Usage Report where item
+                names match exactly. Adjust any value manually if needed.
+              </p>
+            )}
             <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50">
@@ -4138,6 +4258,12 @@ function GuidedFinalFoodCostRecapStep({
                 className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg font-medium text-sm hover:bg-slate-50 transition-colors"
               >
                 Export to Excel
+              </button>
+              <button
+                onClick={handleExportFcapPdf}
+                className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg font-medium text-sm hover:bg-slate-50 transition-colors"
+              >
+                Export to PDF (Kitchen Posting)
               </button>
             </div>
           </>
