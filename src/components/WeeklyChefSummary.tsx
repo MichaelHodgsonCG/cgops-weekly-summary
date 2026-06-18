@@ -53,6 +53,12 @@ interface WeeklySummaryData {
   cogs_recording_waste: boolean;
   cogs_petty_cash_amount: number;
   cogs_internal_transfers: boolean;
+  purchases_invoices_confirmed: boolean;
+  purchases_bakery_amount: number;
+  purchases_dairy_amount: number;
+  purchases_meat_seafood_amount: number;
+  purchases_other_food_amount: number;
+  purchases_produce_amount: number;
   lab_qtd_var_amount: number;
   labour_transfer_vacation: number;
   labour_transfer_management: number;
@@ -150,6 +156,12 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     cogs_recording_waste: false,
     cogs_petty_cash_amount: 0,
     cogs_internal_transfers: false,
+    purchases_invoices_confirmed: false,
+    purchases_bakery_amount: 0,
+    purchases_dairy_amount: 0,
+    purchases_meat_seafood_amount: 0,
+    purchases_other_food_amount: 0,
+    purchases_produce_amount: 0,
     lab_qtd_var_amount: 0,
     labour_transfer_vacation: 0,
     labour_transfer_management: 0,
@@ -493,6 +505,12 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     cogs_recording_waste: false,
     cogs_petty_cash_amount: 0,
     cogs_internal_transfers: false,
+    purchases_invoices_confirmed: false,
+    purchases_bakery_amount: 0,
+    purchases_dairy_amount: 0,
+    purchases_meat_seafood_amount: 0,
+    purchases_other_food_amount: 0,
+    purchases_produce_amount: 0,
     lab_qtd_var_amount: 0,
     labour_transfer_vacation: 0,
     labour_transfer_management: 0,
@@ -877,6 +895,12 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 cogs_recording_waste: formData.cogs_recording_waste,
                 cogs_petty_cash_amount: formData.cogs_petty_cash_amount,
                 cogs_internal_transfers: formData.cogs_internal_transfers,
+                purchases_invoices_confirmed: formData.purchases_invoices_confirmed,
+                purchases_bakery_amount: formData.purchases_bakery_amount,
+                purchases_dairy_amount: formData.purchases_dairy_amount,
+                purchases_meat_seafood_amount: formData.purchases_meat_seafood_amount,
+                purchases_other_food_amount: formData.purchases_other_food_amount,
+                purchases_produce_amount: formData.purchases_produce_amount,
               }}
               onFieldsChange={handleGuideFieldsChange}
               onClose={() => setShowGuide(false)}
@@ -1351,6 +1375,64 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                       onChange={(e) => handleInputChange('cogs_petty_cash_amount', parseFloat(e.target.value) || 0)}
                       className="w-32 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
+                  </div>
+                </div>
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Purchases <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={formData.purchases_invoices_confirmed}
+                      onChange={(e) => handleInputChange('purchases_invoices_confirmed', e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-slate-500"
+                    />
+                    Invoices Confirmed
+                  </label>
+                </div>
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Bakery</label>
+                    <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                      ${(formData.purchases_bakery_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Dairy</label>
+                    <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                      ${(formData.purchases_dairy_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Meat And Seafood</label>
+                    <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                      ${(formData.purchases_meat_seafood_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Other Food</label>
+                    <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                      ${(formData.purchases_other_food_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Produce</label>
+                    <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                      ${(formData.purchases_produce_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Total</label>
+                    <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-800 font-semibold">
+                      ${(
+                        (formData.purchases_bakery_amount || 0) +
+                        (formData.purchases_dairy_amount || 0) +
+                        (formData.purchases_meat_seafood_amount || 0) +
+                        (formData.purchases_other_food_amount || 0) +
+                        (formData.purchases_produce_amount || 0)
+                      ).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
                   </div>
                 </div>
               </div>

@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import { fetchLabourPlBaseline, fetchSalesPlBaseline, getWeeksRemainingInYear, LabourPlBaseline, SalesPlBaseline } from '../lib/needToSave';
 
-type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs';
+type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs' | 'purchases';
 
 type StepMeta = {
   section: number;
@@ -79,6 +79,14 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     sectionStepCount: 1,
     overallIndex: 8,
     stepLabel: 'COGs Checklist',
+  },
+  purchases: {
+    section: 4,
+    sectionLabel: 'Purchases',
+    sectionStepIndex: 1,
+    sectionStepCount: 1,
+    overallIndex: 9,
+    stepLabel: 'Purchases',
   },
 };
 
@@ -313,6 +321,7 @@ type MealPeriod = typeof MEAL_PERIODS[number];
 type SpeedOfServiceParseResult = {
   expediter: Record<MealPeriod, number> & { average: number };
   windowTime: Record<MealPeriod, number> & { average: number };
+  expo: Record<MealPeriod, number> & { average: number };
 };
 
 function parseTimeToSeconds(value: string): number {
@@ -356,6 +365,7 @@ function parseSpeedOfServiceReport(csvText: string): SpeedOfServiceParseResult {
 
   const expediter = {} as Record<MealPeriod, number> & { average: number };
   const windowTime = {} as Record<MealPeriod, number> & { average: number };
+  const expo = {} as Record<MealPeriod, number> & { average: number };
 
   MEAL_PERIODS.forEach((period) => {
     const dineInSeconds = findSeconds('Expediter', 'Dine In', period, avgBumpIdx);
@@ -371,6 +381,7 @@ function parseSpeedOfServiceReport(csvText: string): SpeedOfServiceParseResult {
 
     expediter[period] = dineInSeconds;
     windowTime[period] = expoSeconds - pivotSeconds;
+    expo[period] = expoSeconds;
   });
 
   const dineInAverage = findSeconds('Expediter', 'Dine In', 'Lunch', totalAvgBumpIdx);
@@ -383,8 +394,53 @@ function parseSpeedOfServiceReport(csvText: string): SpeedOfServiceParseResult {
 
   expediter.average = dineInAverage;
   windowTime.average = expoAverage - pivotAverage;
+  expo.average = expoAverage;
 
-  return { expediter, windowTime };
+  return { expediter, windowTime, expo };
+}
+
+const PURCHASE_CATEGORIES = ['Bakery', 'Dairy', 'Meat And Seafood', 'Other Food', 'Produce'] as const;
+type PurchaseCategory = typeof PURCHASE_CATEGORIES[number];
+
+type PurchasesParseResult = {
+  categories: { name: PurchaseCategory; amount: number }[];
+  total: number;
+};
+
+function parseCurrency(value: string): number {
+  const cleaned = value.replace(/[$,]/g, '').trim();
+  const negative = cleaned.startsWith('-');
+  const parsed = parseFloat(cleaned.replace(/^-/, '')) || 0;
+  return negative ? -parsed : parsed;
+}
+
+function parsePurchasesReport(csvText: string): PurchasesParseResult {
+  const lines = csvText.split(/\r?\n/).filter((line) => line.trim() !== '');
+  if (lines.length < 2) {
+    throw new Error('This report has no data rows.');
+  }
+
+  const rows = lines.slice(1).map((line) => parseCsvLine(line));
+
+  const totals: Record<PurchaseCategory, number> = {
+    Bakery: 0,
+    Dairy: 0,
+    'Meat And Seafood': 0,
+    'Other Food': 0,
+    Produce: 0,
+  };
+
+  rows.forEach((row) => {
+    const itemName = row[3]?.trim();
+    if (PURCHASE_CATEGORIES.includes(itemName as PurchaseCategory)) {
+      totals[itemName as PurchaseCategory] += parseCurrency(row[5] ?? '0');
+    }
+  });
+
+  const categories = PURCHASE_CATEGORIES.map((name) => ({ name, amount: totals[name] }));
+  const total = categories.reduce((sum, c) => sum + c.amount, 0);
+
+  return { categories, total };
 }
 
 function calculateTransferAmount(entry: TransferEntry): { dayWage: number; amount: number } {
@@ -452,6 +508,12 @@ export type GuidedFieldUpdates = {
   cogs_recording_waste?: boolean;
   cogs_petty_cash_amount?: number;
   cogs_internal_transfers?: boolean;
+  purchases_invoices_confirmed?: boolean;
+  purchases_bakery_amount?: number;
+  purchases_dairy_amount?: number;
+  purchases_meat_seafood_amount?: number;
+  purchases_other_food_amount?: number;
+  purchases_produce_amount?: number;
 };
 
 interface GuidedWeeklyPackageProps {
@@ -506,6 +568,12 @@ export function GuidedWeeklyPackage({
     initialValues?.cogs_petty_cash_amount !== undefined ? String(initialValues.cogs_petty_cash_amount) : ''
   );
   const [cogsInternalTransfers, setCogsInternalTransfers] = useState(initialValues?.cogs_internal_transfers ?? false);
+  const [purchasesInvoicesConfirmed, setPurchasesInvoicesConfirmed] = useState(
+    initialValues?.purchases_invoices_confirmed ?? false
+  );
+  const [purchasesFile, setPurchasesFile] = useState<File | null>(null);
+  const [purchasesResult, setPurchasesResult] = useState<PurchasesParseResult | null>(null);
+  const [purchasesError, setPurchasesError] = useState('');
 
   const handleSalesBudgetChange = (value: string) => {
     setSalesBudget(value);
@@ -631,6 +699,33 @@ export function GuidedWeeklyPackage({
     onFieldsChange?.({ cogs_internal_transfers: value });
   };
 
+  const handlePurchasesInvoicesConfirmedChange = (value: boolean) => {
+    setPurchasesInvoicesConfirmed(value);
+    onFieldsChange?.({ purchases_invoices_confirmed: value });
+  };
+
+  const handlePurchasesFileSelect = async (file: File) => {
+    setPurchasesFile(file);
+    setPurchasesError('');
+    setPurchasesResult(null);
+
+    try {
+      const text = await file.text();
+      const result = parsePurchasesReport(text);
+      setPurchasesResult(result);
+      const byName = Object.fromEntries(result.categories.map((c) => [c.name, c.amount]));
+      onFieldsChange?.({
+        purchases_bakery_amount: byName['Bakery'] ?? 0,
+        purchases_dairy_amount: byName['Dairy'] ?? 0,
+        purchases_meat_seafood_amount: byName['Meat And Seafood'] ?? 0,
+        purchases_other_food_amount: byName['Other Food'] ?? 0,
+        purchases_produce_amount: byName['Produce'] ?? 0,
+      });
+    } catch (err) {
+      setPurchasesError(err instanceof Error ? err.message : 'Failed to parse this report.');
+    }
+  };
+
   const transferTotals = summarizeTransfers(transferEntries);
   const discountsTotal = discountsResult
     ? discountsResult.categories.reduce((sum, c) => sum + c.totalAmount, 0)
@@ -725,7 +820,7 @@ export function GuidedWeeklyPackage({
         wtdSales={salesResult?.salesTotal ?? initialValues?.food_sales_labour_push ?? 0}
         wtdSalesBudget={parseFloat(salesBudget) || 0}
         discountsTotal={discountsTotal}
-        windowTimeAverage={speedResult?.windowTime.average ?? null}
+        expoAverage={speedResult?.expo.average ?? null}
         locationId={locationId}
         fiscalYear={fiscalYear}
         periodNumber={periodNumber}
@@ -750,6 +845,19 @@ export function GuidedWeeklyPackage({
         internalTransfers={cogsInternalTransfers}
         onInternalTransfersChange={handleCogsInternalTransfersChange}
         onBack={() => setStep('salesRecap')}
+        onNext={() => setStep('purchases')}
+      />
+    );
+  } else if (step === 'purchases') {
+    content = (
+      <GuidedPurchasesStep
+        invoicesConfirmed={purchasesInvoicesConfirmed}
+        onInvoicesConfirmedChange={handlePurchasesInvoicesConfirmedChange}
+        file={purchasesFile}
+        result={purchasesResult}
+        error={purchasesError}
+        onFileSelect={handlePurchasesFileSelect}
+        onBack={() => setStep('cogs')}
       />
     );
   } else {
@@ -1745,7 +1853,7 @@ function GuidedSalesRecapStep({
   wtdSales,
   wtdSalesBudget,
   discountsTotal,
-  windowTimeAverage,
+  expoAverage,
   locationId,
   fiscalYear,
   periodNumber,
@@ -1758,7 +1866,7 @@ function GuidedSalesRecapStep({
   wtdSales: number;
   wtdSalesBudget: number;
   discountsTotal: number;
-  windowTimeAverage: number | null;
+  expoAverage: number | null;
   locationId?: string;
   fiscalYear?: number;
   periodNumber?: number;
@@ -1873,7 +1981,7 @@ function GuidedSalesRecapStep({
         <div className="border border-slate-200 rounded-lg p-4">
           <p className="text-xs font-medium text-slate-500 uppercase">Line Times (Week)</p>
           <p className="text-lg font-semibold text-slate-800 mt-1">
-            {windowTimeAverage !== null ? formatSecondsAsTime(windowTimeAverage) : '—'}
+            {expoAverage !== null ? formatSecondsAsTime(expoAverage) : '—'}
           </p>
         </div>
       </div>
@@ -1919,6 +2027,7 @@ function GuidedCogsStep({
   internalTransfers,
   onInternalTransfersChange,
   onBack,
+  onNext,
 }: {
   confirmSales: boolean;
   onConfirmSalesChange: (value: boolean) => void;
@@ -1931,6 +2040,7 @@ function GuidedCogsStep({
   internalTransfers: boolean;
   onInternalTransfersChange: (value: boolean) => void;
   onBack: () => void;
+  onNext: () => void;
 }) {
   const sections: {
     title: string;
@@ -2047,6 +2157,12 @@ function GuidedCogsStep({
           className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
         >
           Back
+        </button>
+        <button
+          onClick={onNext}
+          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+        >
+          Next
         </button>
       </div>
     </div>
@@ -2203,6 +2319,141 @@ function GuidedSpeedOfServiceStep({
           className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
         >
           Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GuidedPurchasesStep({
+  invoicesConfirmed,
+  onInvoicesConfirmedChange,
+  file,
+  result,
+  error,
+  onFileSelect,
+  onBack,
+}: {
+  invoicesConfirmed: boolean;
+  onInvoicesConfirmedChange: (value: boolean) => void;
+  file: File | null;
+  result: PurchasesParseResult | null;
+  error: string;
+  onFileSelect: (file: File) => void;
+  onBack: () => void;
+}) {
+  const [dragActive, setDragActive] = useState(false);
+
+  const handleFiles = (files: FileList | null) => {
+    if (files && files.length > 0) {
+      onFileSelect(files[0]);
+    }
+  };
+
+  const formatCurrency = (value: number) =>
+    `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  return (
+    <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+      <StepProgressHeader meta={STEP_META.purchases} />
+
+      <div className="mt-4">
+        <h3 className="text-base font-semibold text-slate-800">1. Confirm Invoices</h3>
+        <ul className="mt-2 space-y-1 list-disc list-inside text-sm text-slate-600">
+          <li>Print Invoice Report: OC &gt; Reports &gt; Accounting &gt; Invoice Account Balances &gt; Select Date Range.</li>
+          <li>Organize invoices and ensure each invoice is on the invoice report.</li>
+        </ul>
+        <label className="mt-3 flex items-center gap-2 text-sm font-medium text-slate-700">
+          <input
+            type="checkbox"
+            checked={invoicesConfirmed}
+            onChange={(e) => onInvoicesConfirmedChange(e.target.checked)}
+            className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-slate-500"
+          />
+          All invoices are on the invoice report
+        </label>
+      </div>
+
+      <div className="mt-6">
+        <h3 className="text-base font-semibold text-slate-800">2. Upload General Ledger Report</h3>
+        <p className="text-sm text-slate-600 mt-1">
+          Run the GL report: OC &gt; Reports &gt; Accounting &gt; General Ledger &gt; Date Range &gt; save to CSV &gt; upload below.
+        </p>
+
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragActive(true);
+          }}
+          onDragLeave={() => setDragActive(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragActive(false);
+            handleFiles(e.dataTransfer.files);
+          }}
+          className={`mt-4 border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+            dragActive ? 'border-slate-800 bg-slate-50' : 'border-slate-300'
+          }`}
+        >
+          <Upload className="w-8 h-8 text-slate-400 mx-auto mb-3" />
+          <p className="text-slate-600 mb-3">Drag and drop your report here, or</p>
+          <label className="inline-block bg-slate-800 text-white px-4 py-2 rounded-lg cursor-pointer hover:bg-slate-700 transition-colors">
+            Browse Files
+            <input
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={(e) => handleFiles(e.target.files)}
+            />
+          </label>
+        </div>
+
+        {file && !error && result && (
+          <div className="mt-4 flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+            <CheckCircle2 className="w-5 h-5" />
+            <span className="text-sm font-medium">Uploaded: {file.name}</span>
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-4 flex items-center gap-2 text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+            <AlertCircle className="w-5 h-5" />
+            <span className="text-sm font-medium">{error}</span>
+          </div>
+        )}
+
+        {result && (
+          <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium text-slate-500">Category</th>
+                  <th className="px-3 py-2 text-right font-medium text-slate-500">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.categories.map((category) => (
+                  <tr key={category.name} className="border-t border-slate-200">
+                    <td className="px-3 py-2 text-slate-700">{category.name}</td>
+                    <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(category.amount)}</td>
+                  </tr>
+                ))}
+                <tr className="border-t border-slate-200 bg-slate-50">
+                  <td className="px-3 py-2 font-semibold text-slate-800">Total</td>
+                  <td className="px-3 py-2 text-right font-semibold text-slate-800">{formatCurrency(result.total)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-8 flex justify-between">
+        <button
+          onClick={onBack}
+          className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+        >
+          Back
         </button>
       </div>
     </div>
