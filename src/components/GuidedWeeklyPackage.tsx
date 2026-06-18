@@ -2060,7 +2060,7 @@ function GuidedCogsStep({
       title: '2. Brownie on Us',
       steps: [
         'Reports > Sales Mix > Sales Mix by Products > Sales Mix – by Product > Date Range (Ignore desired % of sales) > Run > Search "Brownie on us".',
-        'Refer to Brownie on Us Reporting Standard on GS if necessary.',
+        'Refer to Brownie on Us Reporting Standard in Discover if necessary.',
         'Enter in the brownie as an invoice: Open a new invoice > Vendor: Transfer Intercompany > invoice number: "Bak2ProP3W3" with the proper per/week > add appropriate date > total on the invoice: $0 > click expense tab > add 2 expenses: Bakery and Promo Other Comps > Description for both: Comp desserts > Enter the comp dessert $ on the bakery line as a negative and the same amount on the Promo line as a positive. (Net amount is zero) > Save the invoice.',
         'If needed, refer to the Transferring Dessert Comps Out of Food Cost Standard.',
       ],
@@ -2073,7 +2073,7 @@ function GuidedCogsStep({
         'Click on the appropriate date within the reporting week and click the New Icon.',
         'Record waste from waste sheets accordingly, there are 3 icons: Item - food items we purchase; Prep - food that is prepared in the kitchen; Product - menu items that are sold.',
         'Write down the total waste on the cheat sheet.',
-        'Refer to the Entering Waste Standard on GS if necessary.',
+        'Refer to the Entering Waste Standard in Discover if necessary.',
       ],
       control: 'checkbox',
     },
@@ -2380,8 +2380,15 @@ function GuidedPurchasesStep({
           Run the GL report: OC &gt; Reports &gt; Accounting &gt; General Ledger &gt; Date Range &gt; save to CSV &gt; upload below.
         </p>
 
+        {!invoicesConfirmed && (
+          <p className="mt-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+            Confirm all invoices are on the invoice report above before uploading the GL report.
+          </p>
+        )}
+
         <div
           onDragOver={(e) => {
+            if (!invoicesConfirmed) return;
             e.preventDefault();
             setDragActive(true);
           }}
@@ -2389,19 +2396,27 @@ function GuidedPurchasesStep({
           onDrop={(e) => {
             e.preventDefault();
             setDragActive(false);
+            if (!invoicesConfirmed) return;
             handleFiles(e.dataTransfer.files);
           }}
           className={`mt-4 border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-            dragActive ? 'border-slate-800 bg-slate-50' : 'border-slate-300'
+            !invoicesConfirmed ? 'opacity-50 border-slate-200' : dragActive ? 'border-slate-800 bg-slate-50' : 'border-slate-300'
           }`}
         >
           <Upload className="w-8 h-8 text-slate-400 mx-auto mb-3" />
           <p className="text-slate-600 mb-3">Drag and drop your report here, or</p>
-          <label className="inline-block bg-slate-800 text-white px-4 py-2 rounded-lg cursor-pointer hover:bg-slate-700 transition-colors">
+          <label
+            className={`inline-block px-4 py-2 rounded-lg transition-colors ${
+              invoicesConfirmed
+                ? 'bg-slate-800 text-white cursor-pointer hover:bg-slate-700'
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+            }`}
+          >
             Browse Files
             <input
               type="file"
               accept=".csv"
+              disabled={!invoicesConfirmed}
               className="hidden"
               onChange={(e) => handleFiles(e.target.files)}
             />
