@@ -5,6 +5,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { supabase } from '../lib/supabase';
 import { fetchLabourPlBaseline, fetchSalesPlBaseline, fetchFoodCostPlBaseline, getWeeksRemainingInYear, LabourPlBaseline, SalesPlBaseline, FoodCostPlBaseline } from '../lib/needToSave';
+import { exportChefSummaryToPdf } from '../lib/chefSummaryExport';
 
 type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs' | 'purchases' | 'usageReview' | 'finalFoodCost' | 'finalFoodCostRecap' | 'team' | 'facilities' | 'features' | 'audit' | 'recap';
 
@@ -747,6 +748,7 @@ export type GuidedFieldUpdates = {
   ideal_usage_amount?: number;
   waste_amount?: number;
   on_hand_amount?: number;
+  food_sales_oc?: number;
   qsr_expo_time?: string;
   window_time?: string;
   sous_vac_days?: number;
@@ -1520,6 +1522,7 @@ export function GuidedWeeklyPackage({
         summary={foodCostSummary}
         error={foodCostError}
         onFileSelect={handleFoodCostFileSelect}
+        onFieldsChange={handleFieldsChange}
         onBack={() => setStep('usageReview')}
         onFinish={() => setStep('finalFoodCostRecap')}
       />
@@ -3496,6 +3499,7 @@ function GuidedFinalFoodCostStep({
   summary,
   error,
   onFileSelect,
+  onFieldsChange,
   onBack,
   onFinish,
 }: {
@@ -3503,10 +3507,16 @@ function GuidedFinalFoodCostStep({
   summary: FoodCostSummary | null;
   error: string;
   onFileSelect: (file: File) => void;
+  onFieldsChange?: (updates: GuidedFieldUpdates) => void;
   onBack: () => void;
   onFinish: () => void;
 }) {
   const [dragActive, setDragActive] = useState(false);
+
+  useEffect(() => {
+    onFieldsChange?.({ food_sales_oc: summary?.foodSalesOC ?? 0 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summary]);
 
   const handleFiles = (files: FileList | null) => {
     if (files && files.length > 0) {
@@ -4806,13 +4816,6 @@ function GuidedRecapStep({
   const [exportingPdf, setExportingPdf] = useState(false);
   const [pdfError, setPdfError] = useState('');
 
-  const fmtPct = (value?: number) => `${(value ?? 0).toFixed(2)}%`;
-  const fmtCurrency = (value?: number) =>
-    `${(value ?? 0) < 0 ? '-' : ''}$${Math.abs(value ?? 0).toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-
   const handleExportFullSummaryPdf = async () => {
     setExportingPdf(true);
     setPdfError('');
@@ -4872,80 +4875,99 @@ function GuidedRecapStep({
         }
       }
 
-      const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
-      const pageWidth = doc.internal.pageSize.getWidth();
+      const m = recapMetrics;
+      const foodSalesPush = m.food_sales_labour_push ?? m.recap_sales_wtd_actual ?? 0;
+      const foodSalesOC = m.food_sales_oc ?? 0;
+      const labourSpent = m.labour_spent ?? 0;
+      const usageAmount = m.usage_amount ?? 0;
+      const idealUsageAmount = m.ideal_usage_amount ?? 0;
+      const budgetFoodCostPct = 0;
+      const labourBudgetPct = m.labour_budget_pct ?? 0;
+      const budgetFoodSalesPeriod = m.budget_food_sales_period ?? 0;
+      const weekBudget = budgetFoodSalesPeriod > 0 ? budgetFoodSalesPeriod / 4 : 0;
+      const actualFoodCostPct = foodSalesPush > 0 ? (usageAmount / foodSalesPush) * 100 : 0;
+      const fcVariance = actualFoodCostPct - budgetFoodCostPct;
+      const theoreticalFoodCostPct = foodSalesPush > 0 ? (idealUsageAmount / foodSalesPush) * 100 : 0;
+      const theoreticalVariance = actualFoodCostPct - theoreticalFoodCostPct;
+      const labourCostPct = foodSalesPush > 0 ? (labourSpent / foodSalesPush) * 100 : 0;
+      const lcVariance = labourCostPct - labourBudgetPct;
 
-      doc.setFontSize(18);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Weekly Chef Summary', pageWidth / 2, 36, { align: 'center' });
+      const exportData = {
+        location_id: '',
+        week_number: weekNumber ?? 0,
+        period_number: periodNumber ?? 0,
+        fiscal_year: fiscalYear ?? 0,
+        budget_food_cost_pct: budgetFoodCostPct,
+        on_hand_amount: 0,
+        sage_food_sales_qtd: m.recap_sales_ytd_actual ?? 0,
+        sage_fcost_qtd_pct: m.recap_fc_ytd_pct ?? 0,
+        food_cost_ptd_pct: m.recap_fc_ptd_pct ?? 0,
+        sage_sales_budget_qtd: m.recap_sales_ytd_budget ?? 0,
+        fc_qtd_pct: m.recap_fc_ytd_pct ?? 0,
+        qtd_variance_pct: 0,
+        usage_amount: usageAmount,
+        ideal_usage_amount: idealUsageAmount,
+        cogs_qtd: 0,
+        food_sales_labour_push: foodSalesPush,
+        food_sales_oc: foodSalesOC,
+        week_variance_amount: foodSalesPush - foodSalesOC,
+        budget_food_sales_period: budgetFoodSalesPeriod,
+        qtd_variance_amount: (m.recap_sales_ytd_actual ?? 0) - (m.recap_sales_ytd_budget ?? 0),
+        labour_budget_pct: labourBudgetPct,
+        sage_labour_budget_qtd_pct: m.recap_labour_ytd_budget_pct ?? 0,
+        sage_lcost_qtd_pct: m.recap_labour_ytd_pct ?? 0,
+        labour_cost_ptd_pct: m.recap_labour_ptd_pct ?? 0,
+        labour_qtd_pct: m.recap_labour_ytd_pct ?? 0,
+        lab_ptd_var_amount: 0,
+        qtd_labour_variance_pct: 0,
+        labour_spent: labourSpent,
+        overtime_amount: 0,
+        lab_qtd_var_amount: m.recap_labour_ytd_variance_amount ?? 0,
+        ebidta_budget_period_pct: 0,
+        ebidta_ptd_pct: 0,
+        ebidta_variance_pct: 0,
+        qsr_weekend_lunch_time: '',
+        qsr_expo_time: '',
+        teamshare_amount: 0,
+        petty_cash: 0,
+        waste_amount: 0,
+        last_audit_score_pct: auditScore ? parseFloat(auditScore) || 0 : 0,
+        boh_promo_amount: 0,
+        promo_ptd: 0,
+        promo_qtd: 0,
+        sous_vac_days: 0,
+        food_cost_summary: foodCostComments,
+        labour_summary: labourReviewActionPlan,
+        boh_promo_summary: salesActionPlan,
+        notes: '',
+        action_plan_summary: salesActionPlan,
+        rm_issues_cleaning_focus: [rmIssues, cleaningFocus].filter(Boolean).join('\n\n'),
+        ideal_cooks: 0,
+        current_cooks: 0,
+        ideal_prep: 0,
+        current_prep: 0,
+        ideal_dish: 0,
+        current_dish: 0,
+        ideal_other: 0,
+        current_other: 0,
+        hiring_notes: hiringNotes,
+        tm_mots_of_note: tmMotsOfNote,
+        development_path_updates: developmentPathUpdates,
+        feature_items: featureItems,
+        ai_summary: narrative,
+      };
 
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'normal');
-      const subtitle = [locationName, fiscalYear ? `Fiscal Year ${fiscalYear}` : '', periodNumber ? `Period ${periodNumber}` : '', weekNumber ? `Week ${weekNumber}` : '']
-        .filter(Boolean)
-        .join('   •   ');
-      doc.text(subtitle, pageWidth / 2, 54, { align: 'center' });
-
-      autoTable(doc, {
-        startY: 70,
-        head: [['', 'Week to Date', 'Period to Date', 'Year to Date']],
-        body: [
-          [
-            'Sales',
-            fmtCurrency(recapMetrics.recap_sales_wtd_actual),
-            '—',
-            fmtCurrency(recapMetrics.recap_sales_ytd_actual),
-          ],
-          [
-            'Food Cost %',
-            fmtPct(recapMetrics.recap_fc_wtd_pct),
-            fmtPct(recapMetrics.recap_fc_ptd_pct),
-            fmtPct(recapMetrics.recap_fc_ytd_pct),
-          ],
-          [
-            'Labour %',
-            fmtPct(recapMetrics.recap_labour_wtd_pct),
-            fmtPct(recapMetrics.recap_labour_ptd_pct),
-            fmtPct(recapMetrics.recap_labour_ytd_pct),
-          ],
-        ],
-        styles: { fontSize: 9, cellPadding: 6, halign: 'center' },
-        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
-        columnStyles: { 0: { fontStyle: 'bold', halign: 'left' } },
-        margin: { left: 30, right: 30 },
-        tableWidth: pageWidth - 60,
-      });
-
-      let y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 18;
-
-      autoTable(doc, {
-        startY: y,
-        head: [['Audit Score']],
-        body: [[auditScore ? `${auditScore}%` : '—']],
-        styles: { fontSize: 9, cellPadding: 6, halign: 'center' },
-        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
-        margin: { left: 30, right: 30 },
-        tableWidth: pageWidth - 60,
-      });
-
-      y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 24;
-
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Weekly Summary', 30, y);
-      y += 16;
-
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      const wrapped = doc.splitTextToSize(narrative || 'No summary recorded.', pageWidth - 60);
-      doc.text(wrapped, 30, y);
-
-      const finalY = y + wrapped.length * 14 + 10;
-      doc.setFontSize(9);
-      doc.setTextColor(120);
-      doc.text(`Generated ${new Date().toLocaleDateString()}`, 30, Math.min(finalY, doc.internal.pageSize.getHeight() - 30));
-
-      doc.save(`Chef_Summary_${fiscalYear ?? ''}_P${periodNumber ?? ''}_W${weekNumber ?? ''}.pdf`);
+      exportChefSummaryToPdf(
+        exportData,
+        locationName ?? '',
+        weekBudget,
+        actualFoodCostPct,
+        fcVariance,
+        theoreticalFoodCostPct,
+        theoreticalVariance,
+        labourCostPct,
+        lcVariance
+      );
     } catch (err) {
       setPdfError(err instanceof Error ? err.message : 'Failed to export PDF.');
     } finally {

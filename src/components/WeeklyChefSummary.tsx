@@ -229,7 +229,8 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
   const [deleting, setDeleting] = useState(false);
 
   const weekBudget = formData.budget_food_sales_period > 0 ? formData.budget_food_sales_period / 4 : 0;
-  const weekVarianceAmount = formData.food_sales_labour_push > 0 ? formData.food_sales_labour_push - weekBudget : 0;
+  // Sales Variance = Food Sales (Push) - Food Sales OC
+  const salesVarianceAmount = formData.food_sales_labour_push - formData.food_sales_oc;
   const actualFoodCostPct = formData.food_sales_labour_push > 0 ? (formData.usage_amount / formData.food_sales_labour_push) * 100 : 0;
   const fcVariance = actualFoodCostPct - formData.budget_food_cost_pct;
   const theoreticalFoodCostPct = formData.food_sales_labour_push > 0 ? (formData.ideal_usage_amount / formData.food_sales_labour_push) * 100 : 0;
@@ -303,7 +304,17 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     locId: string,
     fiscalYear: number,
     periodNumber: number
-  ): Promise<{ budget_food_sales_period: number; sage_food_sales_qtd: number; sage_sales_budget_qtd: number; budget_food_cost_pct: number; labour_budget_pct: number } | null> => {
+  ): Promise<{
+    budget_food_sales_period: number;
+    sage_food_sales_qtd: number;
+    sage_sales_budget_qtd: number;
+    budget_food_cost_pct: number;
+    labour_budget_pct: number;
+    fc_qtd_pct: number;
+    food_cost_ptd_pct: number;
+    labour_qtd_pct: number;
+    labour_cost_ptd_pct: number;
+  } | null> => {
     try {
       const quarterPeriods = getQuarterPeriods(periodNumber);
 
@@ -372,11 +383,16 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
 
       let sage_food_sales_qtd = 0;
       let sage_sales_budget_qtd = 0;
+      let food_cost_qtd_actual = 0;
+      let labour_qtd_actual = 0;
 
       const periodsInQtr = [...new Set(uploads.map(u => {
         const cal = calWeeks.find(c => c.end_date === u.week_ending_date);
         return cal?.period;
       }).filter(Boolean))] as number[];
+
+      let food_cost_ptd_pct = 0;
+      let labour_cost_ptd_pct = 0;
 
       for (const p of periodsInQtr) {
         const periodUploads = uploads.filter(u => {
@@ -388,14 +404,43 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
           const foodSalesItem = lineItems.find(
             i => i.upload_id === latestUpload.id && i.line_item_name === 'Food Sales'
           );
+          const foodCostItem = lineItems.find(
+            i => i.upload_id === latestUpload.id && i.line_item_name === 'Cost of Sales (Food)'
+          );
+          const labourItem = lineItems.find(
+            i => i.upload_id === latestUpload.id && i.line_item_name === 'Kitchen Labour'
+          );
           if (foodSalesItem) {
             sage_food_sales_qtd += foodSalesItem.current_actual || 0;
             sage_sales_budget_qtd += foodSalesItem.current_budget || 0;
           }
+          if (foodCostItem) {
+            food_cost_qtd_actual += foodCostItem.current_actual || 0;
+          }
+          if (labourItem) {
+            labour_qtd_actual += labourItem.current_actual || 0;
+          }
+          if (p === periodNumber) {
+            food_cost_ptd_pct = foodCostItem?.current_actual_pct || 0;
+            labour_cost_ptd_pct = labourItem?.current_actual_pct || 0;
+          }
         }
       }
 
-      return { budget_food_sales_period, sage_food_sales_qtd, sage_sales_budget_qtd, budget_food_cost_pct, labour_budget_pct };
+      const fc_qtd_pct = sage_food_sales_qtd > 0 ? (food_cost_qtd_actual / sage_food_sales_qtd) * 100 : 0;
+      const labour_qtd_pct = sage_food_sales_qtd > 0 ? (labour_qtd_actual / sage_food_sales_qtd) * 100 : 0;
+
+      return {
+        budget_food_sales_period,
+        sage_food_sales_qtd,
+        sage_sales_budget_qtd,
+        budget_food_cost_pct,
+        labour_budget_pct,
+        fc_qtd_pct,
+        food_cost_ptd_pct,
+        labour_qtd_pct,
+        labour_cost_ptd_pct,
+      };
     } catch {
       return null;
     }
@@ -452,6 +497,10 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
         result.sage_sales_budget_qtd = plData.sage_sales_budget_qtd;
         result.budget_food_cost_pct = plData.budget_food_cost_pct;
         result.labour_budget_pct = plData.labour_budget_pct;
+        result.fc_qtd_pct = plData.fc_qtd_pct;
+        result.food_cost_ptd_pct = plData.food_cost_ptd_pct;
+        result.labour_qtd_pct = plData.labour_qtd_pct;
+        result.labour_cost_ptd_pct = plData.labour_cost_ptd_pct;
       } else if (prev) {
         result.budget_food_sales_period = prev.budget_food_sales_period;
         result.budget_food_cost_pct = prev.budget_food_cost_pct;
@@ -660,7 +709,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
         .upsert({
           ...formData,
           week_budget: weekBudget,
-          week_variance_amount: weekVarianceAmount,
+          week_variance_amount: salesVarianceAmount,
           qtd_variance_amount: formData.sage_food_sales_qtd - formData.sage_sales_budget_qtd,
           food_cost_ptd_pct: ptdData.food_cost_ptd_pct,
           labour_cost_ptd_pct: ptdData.labour_cost_ptd_pct,
@@ -979,7 +1028,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
             <h3 className="text-lg font-semibold text-slate-900 mb-4">Sales Data</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Food Sales Labour Push</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Food Sales (Push)</label>
                 <input
                   type="number"
                   step="0.01"
@@ -1021,9 +1070,9 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">+/- Budget <span className="text-xs text-slate-400">(calculated)</span></label>
-                <div className={`w-full px-3 py-2 border rounded-lg font-medium ${weekVarianceAmount >= 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
-                  {weekVarianceAmount >= 0 ? '+' : ''}${weekVarianceAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <label className="block text-sm font-medium text-slate-700 mb-2">Sales Variance <span className="text-xs text-slate-400">(calculated)</span></label>
+                <div className={`w-full px-3 py-2 border rounded-lg font-medium ${salesVarianceAmount >= 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                  {salesVarianceAmount >= 0 ? '+' : ''}${salesVarianceAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </div>
               <div>
