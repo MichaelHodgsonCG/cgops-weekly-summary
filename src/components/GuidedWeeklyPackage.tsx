@@ -1735,15 +1735,19 @@ function GuidedSalesRecapStep({
     };
   }, [locationId, fiscalYear, periodNumber, weekNumber]);
 
+  const periodBudgetFull = baseline?.periodSalesBudget ?? wtdSalesBudget;
+  const weekBudget = periodBudgetFull / 4;
+  const weekOfPeriod = weekNumber ?? 1;
+  const ptdSalesBudget = weekBudget * weekOfPeriod;
+  const ytdSalesBudget = (baseline?.ytdSalesBudget ?? 0) + ptdSalesBudget;
+
   const ptdSales = baseline ? (baseline.isCurrentWeek ? baseline.periodSalesActual : baseline.periodSalesActual + wtdSales) : 0;
-  const ptdSalesBudget = baseline?.periodSalesBudget ?? 0;
   const ptdVariance = ptdSales - ptdSalesBudget;
 
   const ytdSales = baseline ? (baseline.isCurrentWeek ? baseline.ytdSalesActual : baseline.ytdSalesActual + wtdSales) : 0;
-  const ytdSalesBudget = baseline?.ytdSalesBudget ?? 0;
   const ytdVariance = ytdSales - ytdSalesBudget;
 
-  const wtdVariance = wtdSales - wtdSalesBudget;
+  const wtdVariance = wtdSales - weekBudget;
 
   const formatCurrency = (value: number) =>
     `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -1774,7 +1778,7 @@ function GuidedSalesRecapStep({
         <div className="border border-slate-200 rounded-lg p-4">
           <p className="text-xs font-medium text-slate-500 uppercase">Week to Date</p>
           <p className="text-lg font-semibold text-slate-800 mt-1">{formatCurrency(wtdSales)}</p>
-          <p className="text-xs text-slate-500 mt-1">Budget {formatCurrency(wtdSalesBudget)}</p>
+          <p className="text-xs text-slate-500 mt-1">Budget {formatCurrency(weekBudget)}</p>
           <div className={`mt-2 px-2 py-1 rounded border text-xs font-medium ${varianceClass(wtdVariance)}`}>
             {wtdVariance >= 0 ? '+' : ''}{formatCurrency(wtdVariance)} variance
           </div>
