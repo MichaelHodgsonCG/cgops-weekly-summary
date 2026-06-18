@@ -3902,6 +3902,40 @@ function GuidedFinalFoodCostRecapStep({
       .join('   •   ');
     doc.text(subtitle, pageWidth / 2, 54, { align: 'center' });
 
+    autoTable(doc, {
+      startY: 70,
+      head: [['', 'Week to Date', 'Period to Date', 'Year to Date']],
+      body: [
+        ['Actual %', formatPct(wtdPct), formatPct(ptdPct), formatPct(ytdPct)],
+        ['Budget %', formatPct(wtdBudgetPct), baseline ? formatPct(baseline.periodBudgetPct) : '—', baseline ? formatPct(baseline.ytdBudgetPct) : '—'],
+        [
+          'Variance',
+          `${wtdVariance > 0 ? '+' : ''}${formatPct(wtdVariance)}`,
+          `${ptdVarAmount > 0 ? '+' : ''}${fmt(ptdVarAmount)}`,
+          `${ytdVarAmount > 0 ? '+' : ''}${fmt(ytdVarAmount)}`,
+        ],
+      ],
+      styles: { fontSize: 9, cellPadding: 6, halign: 'center' },
+      headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
+      columnStyles: { 0: { fontStyle: 'bold', halign: 'left' } },
+      margin: { left: 30, right: 30 },
+      tableWidth: pageWidth - 60,
+    });
+
+    const ntsY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 14;
+
+    if (ytdVarAmount > 0) {
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(180, 60, 0);
+      doc.text(
+        `Need to Save (Year to Date): ${fmt(ytdVarAmount)} over budget across ${safeWeeksRemaining} week${safeWeeksRemaining === 1 ? '' : 's'} remaining — ${fmt(needToSavePerWeek)}/week, ${fmt(needToSavePerDay)}/day`,
+        30,
+        ntsY
+      );
+      doc.setTextColor(0);
+    }
+
     const rows = fcapItems.map((it) => {
       const total = it.wk1 + it.wk2 + it.wk3 + it.wk4;
       const ptdDifference = total - it.cost;
@@ -3939,7 +3973,7 @@ function GuidedFinalFoodCostRecapStep({
     ];
 
     autoTable(doc, {
-      startY: 70,
+      startY: ytdVarAmount > 0 ? ntsY + 12 : ntsY,
       head: [['Item', 'Cost', 'Var/Day', 'Reason', 'Action', 'Manager', 'Team Members', 'WK1', 'WK2', 'WK3', 'WK4', 'Total', 'PTD Diff']],
       body: rows,
       foot: [totalsRow],
