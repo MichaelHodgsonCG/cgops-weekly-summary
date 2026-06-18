@@ -768,7 +768,9 @@ export function GuidedWeeklyPackage({
   const [foodCostSummary, setFoodCostSummary] = useState<FoodCostSummary | null>(() => {
     if (!initialValues?.final_food_cost_items) return null;
     try {
-      return JSON.parse(initialValues.final_food_cost_items) as FoodCostSummary;
+      const parsed = JSON.parse(initialValues.final_food_cost_items);
+      if (!parsed || !Array.isArray(parsed.categories)) return null;
+      return parsed as FoodCostSummary;
     } catch {
       return null;
     }
