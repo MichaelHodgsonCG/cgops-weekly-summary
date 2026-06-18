@@ -1227,9 +1227,17 @@ function GuidedLabourReviewStep({
                 </div>
               </div>
             </>
+          ) : ptdVarAmount > 0 ? (
+            <p className="text-xs text-green-700 mt-1">
+              Labour on track year to date. Explain your plan to get labour back on track for the period.
+            </p>
+          ) : wtdVariance > 0 ? (
+            <p className="text-xs text-green-700 mt-1">
+              Labour on track year to date and period to date. Explain your plan to get labour back on track for the week.
+            </p>
           ) : (
             <p className="text-xs text-green-700 mt-1">
-              On track — {formatCurrency(Math.abs(ytdVarAmount))} under budget year to date. No savings needed.
+              Labour on track, YTD, PTD and WTD!
             </p>
           )}
         </div>
