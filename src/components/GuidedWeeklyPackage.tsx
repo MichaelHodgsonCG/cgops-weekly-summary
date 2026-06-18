@@ -488,14 +488,14 @@ function buildUsageFlaggedItems(
   const fourWeekByName = new Map(fourWeekRows.map((row) => [row.itemName, row.varianceAmount]));
 
   const underUsed = [...weekRows]
-    .filter((row) => row.varianceAmount > 0)
-    .sort((a, b) => b.varianceAmount - a.varianceAmount)
-    .slice(0, 10);
-
-  const overUsed = [...weekRows]
     .filter((row) => row.varianceAmount < 0)
     .sort((a, b) => a.varianceAmount - b.varianceAmount)
     .slice(0, 5);
+
+  const overUsed = [...weekRows]
+    .filter((row) => row.varianceAmount > 0)
+    .sort((a, b) => b.varianceAmount - a.varianceAmount)
+    .slice(0, 10);
 
   const toFlagged = (row: UsageReportRow, direction: 'under' | 'over'): UsageFlaggedItem => ({
     itemName: row.itemName,
