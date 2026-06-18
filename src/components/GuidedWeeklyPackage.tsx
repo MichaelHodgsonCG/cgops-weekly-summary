@@ -1229,7 +1229,7 @@ function GuidedLabourReviewStep({
             </>
           ) : ptdVarAmount > 0 ? (
             <p className="text-xs text-green-700 mt-1">
-              Labour on track year to date. Explain your plan to get labour back on track for the period.
+              Labour on track year to date. Focus on getting labour back on track for the period.
             </p>
           ) : wtdVariance > 0 ? (
             <p className="text-xs text-green-700 mt-1">
