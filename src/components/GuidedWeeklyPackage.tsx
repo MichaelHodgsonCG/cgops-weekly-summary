@@ -3480,36 +3480,6 @@ function GuidedFinalFoodCostStep({
   const pctOfPushSales = (value: number) =>
     summary && summary.pushSales !== 0 ? (value / summary.pushSales) * 100 : 0;
 
-  const wtdActualUsage = totals?.actualUsage ?? 0;
-  const wtdSales = summary?.pushSales ?? 0;
-  const wtdPct = pctOfPushSales(wtdActualUsage);
-  const wtdBudgetPct = baseline?.periodBudgetPct ?? 0;
-  const wtdVariance = wtdPct - wtdBudgetPct;
-
-  const ptdFoodCost = baseline ? (baseline.isCurrentWeek ? baseline.periodFoodCostActual : baseline.periodFoodCostActual + wtdActualUsage) : 0;
-  const ptdSales = baseline ? (baseline.isCurrentWeek ? baseline.periodSalesActual : baseline.periodSalesActual + wtdSales) : 0;
-  const ptdPct = ptdSales > 0 ? (ptdFoodCost / ptdSales) * 100 : 0;
-  const ptdVarAmount = baseline ? ((ptdPct - baseline.periodBudgetPct) / 100) * ptdSales : 0;
-
-  const ytdFoodCost = baseline ? (baseline.isCurrentWeek ? baseline.ytdFoodCostActual : baseline.ytdFoodCostActual + wtdActualUsage) : 0;
-  const ytdSales = baseline ? (baseline.isCurrentWeek ? baseline.ytdSalesActual : baseline.ytdSalesActual + wtdSales) : 0;
-  const ytdPct = ytdSales > 0 ? (ytdFoodCost / ytdSales) * 100 : 0;
-  const ytdVarAmount = baseline ? ((ytdPct - baseline.ytdBudgetPct) / 100) * ytdSales : 0;
-
-  const safeWeeksRemaining = Math.max(weeksRemainingInYear, 1);
-  const needToSavePerWeek = ytdVarAmount > 0 ? ytdVarAmount / safeWeeksRemaining : 0;
-  const needToSavePerDay = needToSavePerWeek / 7;
-
-  useEffect(() => {
-    onFieldsChange?.({
-      fc_need_save_per_week: parseFloat(needToSavePerWeek.toFixed(2)),
-      fc_need_save_per_day: parseFloat(needToSavePerDay.toFixed(2)),
-    });
-  }, [needToSavePerWeek, needToSavePerDay]);
-
-  const varianceClass = (value: number) =>
-    value <= 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700';
-
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
       <StepProgressHeader meta={STEP_META.finalFoodCost} />
