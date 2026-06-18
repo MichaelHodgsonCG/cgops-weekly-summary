@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import { fetchLabourPlBaseline, getWeeksRemainingInYear, LabourPlBaseline } from '../lib/needToSave';
 
-type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts';
+type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService';
 
 type StepMeta = {
   section: number;
@@ -55,6 +55,14 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     sectionStepCount: 1,
     overallIndex: 5,
     stepLabel: 'Discounts',
+  },
+  speedOfService: {
+    section: 3,
+    sectionLabel: 'Speed of Service',
+    sectionStepIndex: 1,
+    sectionStepCount: 1,
+    overallIndex: 6,
+    stepLabel: 'Speed of Service',
   },
 };
 
@@ -283,6 +291,86 @@ function buildDiscountsSummary(result: DiscountsParseResult): string {
   return sentences.join(' ');
 }
 
+const MEAL_PERIODS = ['Lunch', 'Dinner', 'Night'] as const;
+type MealPeriod = typeof MEAL_PERIODS[number];
+
+type SpeedOfServiceParseResult = {
+  expediter: Record<MealPeriod, number> & { average: number };
+  windowTime: Record<MealPeriod, number> & { average: number };
+};
+
+function parseTimeToSeconds(value: string): number {
+  const [minutes, seconds] = value.trim().split(':').map((v) => parseInt(v, 10));
+  return (minutes || 0) * 60 + (seconds || 0);
+}
+
+function formatSecondsAsTime(totalSeconds: number): string {
+  const sign = totalSeconds < 0 ? '-' : '';
+  const abs = Math.abs(Math.round(totalSeconds));
+  const minutes = Math.floor(abs / 60);
+  const seconds = abs % 60;
+  return `${sign}${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function parseSpeedOfServiceReport(csvText: string): SpeedOfServiceParseResult {
+  const lines = csvText.split(/\r?\n/).filter((line) => line.trim() !== '');
+  if (lines.length < 2) {
+    throw new Error('This report has no data rows.');
+  }
+
+  const header = parseCsvLine(lines[0]);
+  const viewTypeIdx = header.indexOf('View Type');
+  const viewIdx = header.indexOf('View');
+  const mealPeriodIdx = header.indexOf('Meal Period');
+  const avgBumpIdx = header.indexOf('Average Bump Time');
+  const totalAvgBumpIdx = header.indexOf('Total Average Bump Time');
+
+  if (viewTypeIdx === -1 || viewIdx === -1 || mealPeriodIdx === -1 || avgBumpIdx === -1 || totalAvgBumpIdx === -1) {
+    throw new Error('This report is missing expected columns.');
+  }
+
+  const rows = lines.slice(1).map((line) => parseCsvLine(line));
+
+  const findSeconds = (viewType: string, view: string, mealPeriod: string, column: number) => {
+    const row = rows.find(
+      (r) => r[viewTypeIdx] === viewType && r[viewIdx] === view && r[mealPeriodIdx] === mealPeriod
+    );
+    return row ? parseTimeToSeconds(row[column]) : null;
+  };
+
+  const expediter = {} as Record<MealPeriod, number> & { average: number };
+  const windowTime = {} as Record<MealPeriod, number> & { average: number };
+
+  MEAL_PERIODS.forEach((period) => {
+    const dineInSeconds = findSeconds('Expediter', 'Dine In', period, avgBumpIdx);
+    const expoSeconds = findSeconds('Expediter', 'Expo', period, avgBumpIdx);
+    const pivotSeconds = findSeconds('Assembler', 'Pivot', period, avgBumpIdx);
+
+    if (dineInSeconds === null) {
+      throw new Error(`Could not find Expediter / Dine In data for ${period}.`);
+    }
+    if (expoSeconds === null || pivotSeconds === null) {
+      throw new Error(`Could not find Expediter / Expo or Assembler / Pivot data for ${period}.`);
+    }
+
+    expediter[period] = dineInSeconds;
+    windowTime[period] = expoSeconds - pivotSeconds;
+  });
+
+  const dineInAverage = findSeconds('Expediter', 'Dine In', 'Lunch', totalAvgBumpIdx);
+  const expoAverage = findSeconds('Expediter', 'Expo', 'Lunch', totalAvgBumpIdx);
+  const pivotAverage = findSeconds('Assembler', 'Pivot', 'Lunch', totalAvgBumpIdx);
+
+  if (dineInAverage === null || expoAverage === null || pivotAverage === null) {
+    throw new Error('Could not find the total average bump times in this report.');
+  }
+
+  expediter.average = dineInAverage;
+  windowTime.average = expoAverage - pivotAverage;
+
+  return { expediter, windowTime };
+}
+
 function calculateTransferAmount(entry: TransferEntry): { dayWage: number; amount: number } {
   const annualWage = parseFloat(entry.annualWage) || 0;
   const days = parseFloat(entry.days) || 0;
@@ -341,6 +429,7 @@ export type GuidedFieldUpdates = {
   labour_transfer_notes?: string;
   labour_review_action_plan?: string;
   discount_review_notes?: string;
+  speed_of_service_notes?: string;
 };
 
 interface GuidedWeeklyPackageProps {
@@ -383,6 +472,10 @@ export function GuidedWeeklyPackage({
   const [discountsResult, setDiscountsResult] = useState<DiscountsParseResult | null>(null);
   const [discountsError, setDiscountsError] = useState('');
   const [discountReviewNotes, setDiscountReviewNotes] = useState(initialValues?.discount_review_notes ?? '');
+  const [speedFile, setSpeedFile] = useState<File | null>(null);
+  const [speedResult, setSpeedResult] = useState<SpeedOfServiceParseResult | null>(null);
+  const [speedError, setSpeedError] = useState('');
+  const [speedOfServiceNotes, setSpeedOfServiceNotes] = useState(initialValues?.speed_of_service_notes ?? '');
 
   const handleSalesBudgetChange = (value: string) => {
     setSalesBudget(value);
@@ -459,6 +552,25 @@ export function GuidedWeeklyPackage({
     onFieldsChange?.({ discount_review_notes: value });
   };
 
+  const handleSpeedFileSelect = async (file: File) => {
+    setSpeedFile(file);
+    setSpeedError('');
+    setSpeedResult(null);
+
+    try {
+      const text = await file.text();
+      const result = parseSpeedOfServiceReport(text);
+      setSpeedResult(result);
+    } catch (err) {
+      setSpeedError(err instanceof Error ? err.message : 'Failed to parse this report.');
+    }
+  };
+
+  const handleSpeedOfServiceNotesChange = (value: string) => {
+    setSpeedOfServiceNotes(value);
+    onFieldsChange?.({ speed_of_service_notes: value });
+  };
+
   const transferTotals = summarizeTransfers(transferEntries);
 
   let content;
@@ -528,6 +640,19 @@ export function GuidedWeeklyPackage({
         notes={discountReviewNotes}
         onNotesChange={handleDiscountReviewNotesChange}
         onBack={() => setStep('review')}
+        onNext={() => setStep('speedOfService')}
+      />
+    );
+  } else if (step === 'speedOfService') {
+    content = (
+      <GuidedSpeedOfServiceStep
+        file={speedFile}
+        result={speedResult}
+        error={speedError}
+        onFileSelect={handleSpeedFileSelect}
+        notes={speedOfServiceNotes}
+        onNotesChange={handleSpeedOfServiceNotesChange}
+        onBack={() => setStep('discounts')}
       />
     );
   } else {
@@ -1343,6 +1468,7 @@ function GuidedDiscountsStep({
   notes,
   onNotesChange,
   onBack,
+  onNext,
 }: {
   file: File | null;
   result: DiscountsParseResult | null;
@@ -1351,6 +1477,7 @@ function GuidedDiscountsStep({
   notes: string;
   onNotesChange: (value: string) => void;
   onBack: () => void;
+  onNext: () => void;
 }) {
   const [dragActive, setDragActive] = useState(false);
 
@@ -1493,6 +1620,160 @@ function GuidedDiscountsStep({
               onChange={(e) => onNotesChange(e.target.value)}
               rows={3}
               placeholder="Comment on the items above — root causes, trends, or corrective action."
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="mt-8 flex justify-between">
+        <button
+          onClick={onBack}
+          className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+        >
+          Back
+        </button>
+        <button
+          onClick={onNext}
+          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GuidedSpeedOfServiceStep({
+  file,
+  result,
+  error,
+  onFileSelect,
+  notes,
+  onNotesChange,
+  onBack,
+}: {
+  file: File | null;
+  result: SpeedOfServiceParseResult | null;
+  error: string;
+  onFileSelect: (file: File) => void;
+  notes: string;
+  onNotesChange: (value: string) => void;
+  onBack: () => void;
+}) {
+  const [dragActive, setDragActive] = useState(false);
+
+  const handleFiles = (files: FileList | null) => {
+    if (files && files.length > 0) {
+      onFileSelect(files[0]);
+    }
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+      <StepProgressHeader meta={STEP_META.speedOfService} />
+
+      <div className="mt-6">
+        <h3 className="text-base font-semibold text-slate-800">Upload Speed of Service Summary</h3>
+        <p className="text-sm text-slate-600 mt-1">
+          Upload the Speed of Service Summary report (CSV) for this week below.
+        </p>
+
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragActive(true);
+          }}
+          onDragLeave={() => setDragActive(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragActive(false);
+            handleFiles(e.dataTransfer.files);
+          }}
+          className={`mt-4 border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+            dragActive ? 'border-slate-800 bg-slate-50' : 'border-slate-300'
+          }`}
+        >
+          <Upload className="w-8 h-8 text-slate-400 mx-auto mb-3" />
+          <p className="text-slate-600 mb-3">Drag and drop your report here, or</p>
+          <label className="inline-block bg-slate-800 text-white px-4 py-2 rounded-lg cursor-pointer hover:bg-slate-700 transition-colors">
+            Browse Files
+            <input
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={(e) => handleFiles(e.target.files)}
+            />
+          </label>
+        </div>
+
+        {file && !error && result && (
+          <div className="mt-4 flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+            <CheckCircle2 className="w-5 h-5" />
+            <span className="text-sm font-medium">Uploaded: {file.name}</span>
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-4 flex items-center gap-2 text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+            <AlertCircle className="w-5 h-5" />
+            <span className="text-sm font-medium">{error}</span>
+          </div>
+        )}
+
+        {result && (
+          <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium text-slate-500"></th>
+                  {MEAL_PERIODS.map((period) => (
+                    <th key={period} className="px-3 py-2 text-right font-medium text-slate-500">
+                      {period}
+                    </th>
+                  ))}
+                  <th className="px-3 py-2 text-right font-medium text-slate-500">Average</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-t border-slate-200">
+                  <td className="px-3 py-2 text-slate-700 whitespace-nowrap font-medium">Expediter</td>
+                  {MEAL_PERIODS.map((period) => (
+                    <td key={period} className="px-3 py-2 text-right text-slate-700">
+                      {formatSecondsAsTime(result.expediter[period])}
+                    </td>
+                  ))}
+                  <td className="px-3 py-2 text-right font-semibold text-slate-800">
+                    {formatSecondsAsTime(result.expediter.average)}
+                  </td>
+                </tr>
+                <tr className="border-t border-slate-200">
+                  <td className="px-3 py-2 text-slate-700 whitespace-nowrap font-medium">Window Time</td>
+                  {MEAL_PERIODS.map((period) => (
+                    <td key={period} className="px-3 py-2 text-right text-slate-700">
+                      {formatSecondsAsTime(result.windowTime[period])}
+                    </td>
+                  ))}
+                  <td className="px-3 py-2 text-right font-semibold text-slate-800">
+                    {formatSecondsAsTime(result.windowTime.average)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="px-3 py-2 text-xs text-slate-400 border-t border-slate-200">
+              Window Time = Expo bump time − Pivot bump time
+            </p>
+          </div>
+        )}
+
+        {result && (
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-slate-700 mb-2">Chef Comment</label>
+            <textarea
+              value={notes}
+              onChange={(e) => onNotesChange(e.target.value)}
+              rows={3}
+              placeholder="Comment on speed of service performance — trends, bottlenecks, or corrective action."
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
             />
           </div>

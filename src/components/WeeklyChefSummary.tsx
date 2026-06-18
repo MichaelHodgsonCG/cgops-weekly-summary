@@ -46,6 +46,7 @@ interface WeeklySummaryData {
   overtime_notes: string;
   labour_review_action_plan: string;
   discount_review_notes: string;
+  speed_of_service_notes: string;
   lab_qtd_var_amount: number;
   labour_transfer_vacation: number;
   labour_transfer_management: number;
@@ -136,6 +137,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     overtime_notes: '',
     labour_review_action_plan: '',
     discount_review_notes: '',
+    speed_of_service_notes: '',
     lab_qtd_var_amount: 0,
     labour_transfer_vacation: 0,
     labour_transfer_management: 0,
@@ -472,6 +474,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     overtime_notes: '',
     labour_review_action_plan: '',
     discount_review_notes: '',
+    speed_of_service_notes: '',
     lab_qtd_var_amount: 0,
     labour_transfer_vacation: 0,
     labour_transfer_management: 0,
@@ -849,6 +852,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 labour_transfer_notes: formData.labour_transfer_notes,
                 labour_review_action_plan: formData.labour_review_action_plan,
                 discount_review_notes: formData.discount_review_notes,
+                speed_of_service_notes: formData.speed_of_service_notes,
               }}
               onFieldsChange={handleGuideFieldsChange}
               onClose={() => setShowGuide(false)}
@@ -1253,6 +1257,15 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 <textarea
                   value={formData.discount_review_notes}
                   onChange={(e) => handleInputChange('discount_review_notes', e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                />
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Speed of Service Comments <span className="text-xs text-slate-400">(from guide)</span></label>
+                <textarea
+                  value={formData.speed_of_service_notes}
+                  onChange={(e) => handleInputChange('speed_of_service_notes', e.target.value)}
                   rows={3}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
                 />
