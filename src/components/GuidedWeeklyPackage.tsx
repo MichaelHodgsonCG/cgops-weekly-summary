@@ -422,6 +422,7 @@ export function GuidedWeeklyPackage({
       <GuidedTransfersStep
         entries={transferEntries}
         onEntriesChange={handleTransferEntriesChange}
+        salesResult={salesResult}
         onBack={() => setStep('sales')}
         onNext={() => setStep('overtime')}
       />
@@ -730,6 +731,25 @@ function GuidedSalesStep({
             </table>
           </div>
         )}
+
+        {result && (
+          <div className="mt-4 grid grid-cols-2 gap-4">
+            <div className="border border-slate-200 rounded-lg p-4">
+              <p className="text-xs font-medium text-slate-500 uppercase">Sales Total</p>
+              <p className="text-lg font-semibold text-slate-800 mt-1">
+                {formatCurrency(result.salesTotal)}
+              </p>
+            </div>
+            <div className="border border-slate-200 rounded-lg p-4">
+              <p className="text-xs font-medium text-slate-500 uppercase">Labour %</p>
+              <p className="text-lg font-semibold text-slate-800 mt-1">
+                {result.salesTotal > 0
+                  ? `${((result.labourTotal / result.salesTotal) * 100).toFixed(2)}%`
+                  : '—'}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="mt-8 flex justify-between">
@@ -753,11 +773,13 @@ function GuidedSalesStep({
 function GuidedTransfersStep({
   entries,
   onEntriesChange,
+  salesResult,
   onBack,
   onNext,
 }: {
   entries: TransferEntry[];
   onEntriesChange: (entries: TransferEntry[]) => void;
+  salesResult: ProfitCenterParseResult | null;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -777,6 +799,8 @@ function GuidedTransfersStep({
   };
 
   const totals = summarizeTransfers(entries);
+  const totalTransferred = totals.vacation + totals.management + totals.other;
+  const netLabour = salesResult ? salesResult.labourTotal - totalTransferred : 0;
 
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
@@ -883,6 +907,25 @@ function GuidedTransfersStep({
           </div>
         ))}
       </div>
+
+      {salesResult && (
+        <div className="mt-4 grid grid-cols-2 gap-4">
+          <div className="border border-slate-200 rounded-lg p-4">
+            <p className="text-xs font-medium text-slate-500 uppercase">Sales Total</p>
+            <p className="text-lg font-semibold text-slate-800 mt-1">
+              {formatCurrency(salesResult.salesTotal)}
+            </p>
+          </div>
+          <div className="border border-slate-200 rounded-lg p-4">
+            <p className="text-xs font-medium text-slate-500 uppercase">Labour % (after transfers)</p>
+            <p className="text-lg font-semibold text-slate-800 mt-1">
+              {salesResult.salesTotal > 0
+                ? `${((netLabour / salesResult.salesTotal) * 100).toFixed(2)}%`
+                : '—'}
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="mt-8 flex justify-between">
         <button
