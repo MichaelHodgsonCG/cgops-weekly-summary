@@ -403,9 +403,10 @@ export function GuidedWeeklyPackage({
       const buffer = await file.arrayBuffer();
       const result = parseProfitCenterReport(buffer);
       setSalesResult(result);
+      const totals = summarizeTransfers(transferEntries);
       onFieldsChange?.({
         food_sales_labour_push: result.salesTotal,
-        labour_spent: result.labourTotal,
+        labour_spent: result.labourTotal - totals.vacation - totals.management - totals.other,
         overtime_amount: result.overtimeTotal,
       });
     } catch (err) {
@@ -421,6 +422,9 @@ export function GuidedWeeklyPackage({
       labour_transfer_management: summary.management,
       labour_transfer_other: summary.other,
       labour_transfer_notes: summary.notes,
+      ...(salesResult
+        ? { labour_spent: salesResult.labourTotal - summary.vacation - summary.management - summary.other }
+        : {}),
     });
   };
 
