@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import { fetchLabourPlBaseline, fetchSalesPlBaseline, getWeeksRemainingInYear, LabourPlBaseline, SalesPlBaseline } from '../lib/needToSave';
 
-type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs' | 'purchases';
+type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs' | 'purchases' | 'usageReview';
 
 type StepMeta = {
   section: number;
@@ -87,6 +87,14 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     sectionStepCount: 1,
     overallIndex: 9,
     stepLabel: 'Purchases',
+  },
+  usageReview: {
+    section: 5,
+    sectionLabel: 'Usage Review',
+    sectionStepIndex: 1,
+    sectionStepCount: 1,
+    overallIndex: 10,
+    stepLabel: 'Over/Under Usage Review',
   },
 };
 
@@ -443,6 +451,67 @@ function parsePurchasesReport(csvText: string): PurchasesParseResult {
   return { categories, total };
 }
 
+type UsageReportRow = {
+  itemName: string;
+  varianceAmount: number;
+};
+
+function parseUsageReport(csvText: string): UsageReportRow[] {
+  const lines = csvText.split(/\r?\n/).filter((line) => line.trim() !== '');
+  if (lines.length < 2) {
+    throw new Error('This report has no data rows.');
+  }
+
+  return lines
+    .slice(1)
+    .map((line) => parseCsvLine(line))
+    .map((row) => ({
+      itemName: row[35]?.trim() ?? '',
+      varianceAmount: parseCurrency(row[39] ?? '0'),
+    }))
+    .filter((row) => row.itemName !== '');
+}
+
+type UsageFlaggedItem = {
+  itemName: string;
+  direction: 'under' | 'over';
+  weekVariance: number;
+  fourWeekVariance: number | null;
+  confirmed: boolean;
+  comment: string;
+};
+
+function buildUsageFlaggedItems(
+  weekRows: UsageReportRow[],
+  fourWeekRows: UsageReportRow[]
+): UsageFlaggedItem[] {
+  const fourWeekByName = new Map(fourWeekRows.map((row) => [row.itemName, row.varianceAmount]));
+
+  const underUsed = [...weekRows]
+    .filter((row) => row.varianceAmount > 0)
+    .sort((a, b) => b.varianceAmount - a.varianceAmount)
+    .slice(0, 10);
+
+  const overUsed = [...weekRows]
+    .filter((row) => row.varianceAmount < 0)
+    .sort((a, b) => a.varianceAmount - b.varianceAmount)
+    .slice(0, 5);
+
+  const toFlagged = (row: UsageReportRow, direction: 'under' | 'over'): UsageFlaggedItem => ({
+    itemName: row.itemName,
+    direction,
+    weekVariance: row.varianceAmount,
+    fourWeekVariance: fourWeekByName.has(row.itemName) ? fourWeekByName.get(row.itemName)! : null,
+    confirmed: false,
+    comment: '',
+  });
+
+  return [
+    ...underUsed.map((row) => toFlagged(row, 'under')),
+    ...overUsed.map((row) => toFlagged(row, 'over')),
+  ];
+}
+
 function calculateTransferAmount(entry: TransferEntry): { dayWage: number; amount: number } {
   const annualWage = parseFloat(entry.annualWage) || 0;
   const days = parseFloat(entry.days) || 0;
@@ -514,6 +583,7 @@ export type GuidedFieldUpdates = {
   purchases_meat_seafood_amount?: number;
   purchases_other_food_amount?: number;
   purchases_produce_amount?: number;
+  usage_review_items?: string;
 };
 
 interface GuidedWeeklyPackageProps {
@@ -574,6 +644,20 @@ export function GuidedWeeklyPackage({
   const [purchasesFile, setPurchasesFile] = useState<File | null>(null);
   const [purchasesResult, setPurchasesResult] = useState<PurchasesParseResult | null>(null);
   const [purchasesError, setPurchasesError] = useState('');
+  const [usageWeekFile, setUsageWeekFile] = useState<File | null>(null);
+  const [usageWeekRows, setUsageWeekRows] = useState<UsageReportRow[] | null>(null);
+  const [usageWeekError, setUsageWeekError] = useState('');
+  const [usageFourWeekFile, setUsageFourWeekFile] = useState<File | null>(null);
+  const [usageFourWeekRows, setUsageFourWeekRows] = useState<UsageReportRow[] | null>(null);
+  const [usageFourWeekError, setUsageFourWeekError] = useState('');
+  const [usageFlaggedItems, setUsageFlaggedItems] = useState<UsageFlaggedItem[]>(() => {
+    if (!initialValues?.usage_review_items) return [];
+    try {
+      return JSON.parse(initialValues.usage_review_items) as UsageFlaggedItem[];
+    } catch {
+      return [];
+    }
+  });
 
   const handleSalesBudgetChange = (value: string) => {
     setSalesBudget(value);
@@ -726,6 +810,52 @@ export function GuidedWeeklyPackage({
     }
   };
 
+  const handleUsageWeekFileSelect = async (file: File) => {
+    setUsageWeekFile(file);
+    setUsageWeekError('');
+    setUsageWeekRows(null);
+
+    try {
+      const text = await file.text();
+      const rows = parseUsageReport(text);
+      setUsageWeekRows(rows);
+      if (usageFourWeekRows) {
+        const flagged = buildUsageFlaggedItems(rows, usageFourWeekRows);
+        setUsageFlaggedItems(flagged);
+        onFieldsChange?.({ usage_review_items: JSON.stringify(flagged) });
+      }
+    } catch (err) {
+      setUsageWeekError(err instanceof Error ? err.message : 'Failed to parse this report.');
+    }
+  };
+
+  const handleUsageFourWeekFileSelect = async (file: File) => {
+    setUsageFourWeekFile(file);
+    setUsageFourWeekError('');
+    setUsageFourWeekRows(null);
+
+    try {
+      const text = await file.text();
+      const rows = parseUsageReport(text);
+      setUsageFourWeekRows(rows);
+      if (usageWeekRows) {
+        const flagged = buildUsageFlaggedItems(usageWeekRows, rows);
+        setUsageFlaggedItems(flagged);
+        onFieldsChange?.({ usage_review_items: JSON.stringify(flagged) });
+      }
+    } catch (err) {
+      setUsageFourWeekError(err instanceof Error ? err.message : 'Failed to parse this report.');
+    }
+  };
+
+  const handleUsageItemChange = (index: number, updates: Partial<UsageFlaggedItem>) => {
+    setUsageFlaggedItems((prev) => {
+      const next = prev.map((item, i) => (i === index ? { ...item, ...updates } : item));
+      onFieldsChange?.({ usage_review_items: JSON.stringify(next) });
+      return next;
+    });
+  };
+
   const transferTotals = summarizeTransfers(transferEntries);
   const discountsTotal = discountsResult
     ? discountsResult.categories.reduce((sum, c) => sum + c.totalAmount, 0)
@@ -858,6 +988,24 @@ export function GuidedWeeklyPackage({
         error={purchasesError}
         onFileSelect={handlePurchasesFileSelect}
         onBack={() => setStep('cogs')}
+        onNext={() => setStep('usageReview')}
+      />
+    );
+  } else if (step === 'usageReview') {
+    content = (
+      <GuidedUsageReviewStep
+        weekFile={usageWeekFile}
+        weekRows={usageWeekRows}
+        weekError={usageWeekError}
+        onWeekFileSelect={handleUsageWeekFileSelect}
+        fourWeekFile={usageFourWeekFile}
+        fourWeekRows={usageFourWeekRows}
+        fourWeekError={usageFourWeekError}
+        onFourWeekFileSelect={handleUsageFourWeekFileSelect}
+        flaggedItems={usageFlaggedItems}
+        onItemChange={handleUsageItemChange}
+        onBack={() => setStep('purchases')}
+        onFinish={() => onClose?.()}
       />
     );
   } else {
@@ -2333,6 +2481,7 @@ function GuidedPurchasesStep({
   error,
   onFileSelect,
   onBack,
+  onNext,
 }: {
   invoicesConfirmed: boolean;
   onInvoicesConfirmedChange: (value: boolean) => void;
@@ -2341,6 +2490,7 @@ function GuidedPurchasesStep({
   error: string;
   onFileSelect: (file: File) => void;
   onBack: () => void;
+  onNext: () => void;
 }) {
   const [dragActive, setDragActive] = useState(false);
 
@@ -2469,6 +2619,218 @@ function GuidedPurchasesStep({
           className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
         >
           Back
+        </button>
+        <button
+          onClick={onNext}
+          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function UsageReportUploadZone({
+  title,
+  instructions,
+  file,
+  rowCount,
+  error,
+  onFileSelect,
+}: {
+  title: string;
+  instructions: string;
+  file: File | null;
+  rowCount: number | null;
+  error: string;
+  onFileSelect: (file: File) => void;
+}) {
+  const [dragActive, setDragActive] = useState(false);
+
+  const handleFiles = (files: FileList | null) => {
+    if (files && files.length > 0) {
+      onFileSelect(files[0]);
+    }
+  };
+
+  return (
+    <div className="mt-6">
+      <h3 className="text-base font-semibold text-slate-800">{title}</h3>
+      <p className="text-sm text-slate-600 mt-1">{instructions}</p>
+
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragActive(true);
+        }}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragActive(false);
+          handleFiles(e.dataTransfer.files);
+        }}
+        className={`mt-4 border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+          dragActive ? 'border-slate-800 bg-slate-50' : 'border-slate-300'
+        }`}
+      >
+        <Upload className="w-8 h-8 text-slate-400 mx-auto mb-3" />
+        <p className="text-slate-600 mb-3">Drag and drop your report here, or</p>
+        <label className="inline-block px-4 py-2 rounded-lg bg-slate-800 text-white cursor-pointer hover:bg-slate-700 transition-colors">
+          Browse Files
+          <input type="file" accept=".csv" className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+        </label>
+      </div>
+
+      {file && !error && rowCount !== null && (
+        <div className="mt-4 flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+          <CheckCircle2 className="w-5 h-5" />
+          <span className="text-sm font-medium">
+            Uploaded: {file.name} ({rowCount} items)
+          </span>
+        </div>
+      )}
+
+      {error && (
+        <div className="mt-4 flex items-center gap-2 text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+          <AlertCircle className="w-5 h-5" />
+          <span className="text-sm font-medium">{error}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GuidedUsageReviewStep({
+  weekFile,
+  weekRows,
+  weekError,
+  onWeekFileSelect,
+  fourWeekFile,
+  fourWeekRows,
+  fourWeekError,
+  onFourWeekFileSelect,
+  flaggedItems,
+  onItemChange,
+  onBack,
+  onFinish,
+}: {
+  weekFile: File | null;
+  weekRows: UsageReportRow[] | null;
+  weekError: string;
+  onWeekFileSelect: (file: File) => void;
+  fourWeekFile: File | null;
+  fourWeekRows: UsageReportRow[] | null;
+  fourWeekError: string;
+  onFourWeekFileSelect: (file: File) => void;
+  flaggedItems: UsageFlaggedItem[];
+  onItemChange: (index: number, updates: Partial<UsageFlaggedItem>) => void;
+  onBack: () => void;
+  onFinish: () => void;
+}) {
+  const formatCurrency = (value: number) =>
+    `${value < 0 ? '-' : ''}$${Math.abs(value).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+
+  const underItems = flaggedItems.filter((item) => item.direction === 'under');
+  const overItems = flaggedItems.filter((item) => item.direction === 'over');
+
+  const renderItemRow = (item: UsageFlaggedItem) => {
+    const trend =
+      item.fourWeekVariance === null
+        ? 'No 4-week data'
+        : Math.sign(item.fourWeekVariance) === Math.sign(item.weekVariance)
+        ? 'Trend (consistent over 4 weeks)'
+        : 'One-off (differs from 4-week trend)';
+
+    return (
+      <div key={`${item.direction}-${item.itemName}`} className="border border-slate-200 rounded-lg p-4 mt-3">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <p className="font-medium text-slate-800">{item.itemName}</p>
+          <div className="flex items-center gap-4 text-sm">
+            <span className="text-slate-600">Week: {formatCurrency(item.weekVariance)}</span>
+            <span className="text-slate-600">
+              4-Week: {item.fourWeekVariance === null ? 'N/A' : formatCurrency(item.fourWeekVariance)}
+            </span>
+            <span className="text-slate-500">{trend}</span>
+          </div>
+        </div>
+        <label className="mt-3 flex items-center gap-2 text-sm font-medium text-slate-700">
+          <input
+            type="checkbox"
+            checked={item.confirmed}
+            onChange={(e) => onItemChange(flaggedItems.indexOf(item), { confirmed: e.target.checked })}
+            className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-slate-500"
+          />
+          Reviewed and confirmed
+        </label>
+        <textarea
+          value={item.comment}
+          onChange={(e) => onItemChange(flaggedItems.indexOf(item), { comment: e.target.value })}
+          placeholder="Comment (e.g. count error, missed invoice, waste, portioning issue)"
+          className="mt-2 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
+          rows={2}
+        />
+      </div>
+    );
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+      <StepProgressHeader meta={STEP_META.usageReview} />
+
+      <div className="mt-4">
+        <h3 className="text-base font-semibold text-slate-800">Run the Reports</h3>
+        <ul className="mt-2 space-y-1 list-disc list-inside text-sm text-slate-600">
+          <li>OC &gt; Reports &gt; Usage Summary - Top 25 / Bottom 10 &gt; Select Date Range &gt; Category: Food &gt; Run Report &gt; Save to CSV.</li>
+          <li>Run it twice: once for the reporting week, once for the trailing 4 weeks.</li>
+        </ul>
+      </div>
+
+      <UsageReportUploadZone
+        title="1. Upload Reporting Week Report"
+        instructions="Select the reporting week's date range, then upload the saved CSV."
+        file={weekFile}
+        rowCount={weekRows ? weekRows.length : null}
+        error={weekError}
+        onFileSelect={onWeekFileSelect}
+      />
+
+      <UsageReportUploadZone
+        title="2. Upload Trailing 4-Week Report"
+        instructions="Select a date range covering the trailing 4 weeks, then upload the saved CSV."
+        file={fourWeekFile}
+        rowCount={fourWeekRows ? fourWeekRows.length : null}
+        error={fourWeekError}
+        onFileSelect={onFourWeekFileSelect}
+      />
+
+      {flaggedItems.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-base font-semibold text-slate-800">3. Review Flagged Items</h3>
+
+          <p className="mt-2 text-sm font-medium text-slate-700">Under-Used (potential count errors or missed invoices)</p>
+          {underItems.map((item) => renderItemRow(item))}
+
+          <p className="mt-6 text-sm font-medium text-slate-700">Over-Used (potential operational or count issues)</p>
+          {overItems.map((item) => renderItemRow(item))}
+        </div>
+      )}
+
+      <div className="mt-8 flex justify-between">
+        <button
+          onClick={onBack}
+          className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+        >
+          Back
+        </button>
+        <button
+          onClick={onFinish}
+          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+        >
+          Finish
         </button>
       </div>
     </div>

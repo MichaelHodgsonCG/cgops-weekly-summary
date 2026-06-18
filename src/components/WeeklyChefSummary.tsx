@@ -59,6 +59,7 @@ interface WeeklySummaryData {
   purchases_meat_seafood_amount: number;
   purchases_other_food_amount: number;
   purchases_produce_amount: number;
+  usage_review_items: string;
   lab_qtd_var_amount: number;
   labour_transfer_vacation: number;
   labour_transfer_management: number;
@@ -162,6 +163,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     purchases_meat_seafood_amount: 0,
     purchases_other_food_amount: 0,
     purchases_produce_amount: 0,
+    usage_review_items: '[]',
     lab_qtd_var_amount: 0,
     labour_transfer_vacation: 0,
     labour_transfer_management: 0,
@@ -511,6 +513,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     purchases_meat_seafood_amount: 0,
     purchases_other_food_amount: 0,
     purchases_produce_amount: 0,
+    usage_review_items: '[]',
     lab_qtd_var_amount: 0,
     labour_transfer_vacation: 0,
     labour_transfer_management: 0,
@@ -901,6 +904,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 purchases_meat_seafood_amount: formData.purchases_meat_seafood_amount,
                 purchases_other_food_amount: formData.purchases_other_food_amount,
                 purchases_produce_amount: formData.purchases_produce_amount,
+                usage_review_items: formData.usage_review_items,
               }}
               onFieldsChange={handleGuideFieldsChange}
               onClose={() => setShowGuide(false)}
