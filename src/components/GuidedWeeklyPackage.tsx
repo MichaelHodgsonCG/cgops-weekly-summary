@@ -522,15 +522,17 @@ type FoodCostCategorySummary = {
 
 type FoodCostSummary = {
   foodSalesOC: number;
+  pushSales: number;
   categories: FoodCostCategorySummary[];
 };
 
 function buildFoodCostSummary(
   parsed: FoodCostParseResult,
-  glPurchasesByCategory: Record<PurchaseCategory, number>
+  glPurchasesByCategory: Record<PurchaseCategory, number>,
+  pushSales: number
 ): FoodCostSummary {
   const { foodSalesOC, rows } = parsed;
-  const pctOfSales = (value: number) => (foodSalesOC !== 0 ? (value / foodSalesOC) * 100 : 0);
+  const pctOfSales = (value: number) => (pushSales !== 0 ? (value / pushSales) * 100 : 0);
 
   const categories = rows.map((row) => {
     const glPurchases = glPurchasesByCategory[FOOD_COST_TO_PURCHASE_CATEGORY[row.category]] ?? 0;
@@ -552,7 +554,7 @@ function buildFoodCostSummary(
     };
   });
 
-  return { foodSalesOC, categories };
+  return { foodSalesOC, pushSales, categories };
 }
 
 
@@ -994,7 +996,8 @@ export function GuidedWeeklyPackage({
             'Other Food': initialValues?.purchases_other_food_amount ?? 0,
             Produce: initialValues?.purchases_produce_amount ?? 0,
           };
-      const summary = buildFoodCostSummary(parsed, glPurchasesByCategory);
+      const pushSales = salesResult?.salesTotal ?? initialValues?.food_sales_labour_push ?? 0;
+      const summary = buildFoodCostSummary(parsed, glPurchasesByCategory, pushSales);
       setFoodCostSummary(summary);
       onFieldsChange?.({ final_food_cost_items: JSON.stringify(summary) });
     } catch (err) {
@@ -3035,7 +3038,23 @@ function GuidedFinalFoodCostStep({
 
   const formatPct = (value: number) => `${value.toFixed(2)}%`;
 
-  const totalVariance = summary ? summary.categories.reduce((sum, c) => sum + c.variance, 0) : 0;
+  const totals = summary
+    ? summary.categories.reduce(
+        (acc, c) => ({
+          opening: acc.opening + c.opening,
+          glPurchases: acc.glPurchases + c.glPurchases,
+          closing: acc.closing + c.closing,
+          waste: acc.waste + c.waste,
+          actualUsage: acc.actualUsage + c.actualUsage,
+          idealUsage: acc.idealUsage + c.idealUsage,
+          variance: acc.variance + c.variance,
+        }),
+        { opening: 0, glPurchases: 0, closing: 0, waste: 0, actualUsage: 0, idealUsage: 0, variance: 0 }
+      )
+    : null;
+
+  const pctOfPushSales = (value: number) =>
+    summary && summary.pushSales !== 0 ? (value / summary.pushSales) * 100 : 0;
 
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
@@ -3089,10 +3108,19 @@ function GuidedFinalFoodCostStep({
 
         {summary && (
           <>
-            <div className="mt-4 inline-flex items-baseline gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
-              <span className="text-sm font-medium text-slate-500">Food Sales (OC):</span>
-              <span className="text-lg font-semibold text-slate-800">{formatCurrency(summary.foodSalesOC)}</span>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <div className="inline-flex items-baseline gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
+                <span className="text-sm font-medium text-slate-500">Food Sales (Push):</span>
+                <span className="text-lg font-semibold text-slate-800">{formatCurrency(summary.pushSales)}</span>
+              </div>
+              <div className="inline-flex items-baseline gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
+                <span className="text-sm font-medium text-slate-500">Food Sales (OC):</span>
+                <span className="text-lg font-semibold text-slate-800">{formatCurrency(summary.foodSalesOC)}</span>
+              </div>
             </div>
+            <p className="mt-1 text-xs text-slate-400">
+              Percentages below are calculated against Food Sales (Push).
+            </p>
 
             <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden overflow-x-auto">
               <table className="w-full text-sm">
@@ -3133,12 +3161,30 @@ function GuidedFinalFoodCostStep({
                       </td>
                     </tr>
                   ))}
-                  <tr className="border-t border-slate-200 bg-slate-50">
-                    <td className="px-3 py-2 font-semibold text-slate-800" colSpan={7}>
-                      Total Variance
-                    </td>
-                    <td className="px-3 py-2 text-right font-semibold text-slate-800">{formatCurrency(totalVariance)}</td>
-                  </tr>
+                  {totals && (
+                    <tr className="border-t border-slate-200 bg-slate-50">
+                      <td className="px-3 py-2 font-semibold text-slate-800">Total</td>
+                      <td className="px-3 py-2 text-right font-semibold text-slate-800">{formatCurrency(totals.opening)}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-slate-800">{formatCurrency(totals.glPurchases)}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-slate-800">{formatCurrency(totals.closing)}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-slate-800">
+                        {formatCurrency(totals.waste)}
+                        <div className="text-xs text-slate-400">{formatPct(pctOfPushSales(totals.waste))}</div>
+                      </td>
+                      <td className="px-3 py-2 text-right font-semibold text-slate-800">
+                        {formatCurrency(totals.actualUsage)}
+                        <div className="text-xs text-slate-400">{formatPct(pctOfPushSales(totals.actualUsage))}</div>
+                      </td>
+                      <td className="px-3 py-2 text-right font-semibold text-slate-800">
+                        {formatCurrency(totals.idealUsage)}
+                        <div className="text-xs text-slate-400">{formatPct(pctOfPushSales(totals.idealUsage))}</div>
+                      </td>
+                      <td className="px-3 py-2 text-right font-semibold text-slate-800">
+                        {formatCurrency(totals.variance)}
+                        <div className="text-xs text-slate-400">{formatPct(pctOfPushSales(totals.variance))}</div>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
