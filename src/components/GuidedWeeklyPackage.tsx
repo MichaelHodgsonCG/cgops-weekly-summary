@@ -400,6 +400,8 @@ export function GuidedWeeklyPackage({
     }
   };
 
+  const transferTotals = summarizeTransfers(transferEntries);
+
   let content;
 
   if (step === 'sales') {
@@ -441,7 +443,11 @@ export function GuidedWeeklyPackage({
     content = (
       <GuidedLabourReviewStep
         wtdSales={salesResult?.salesTotal ?? initialValues?.food_sales_labour_push ?? 0}
-        wtdLabour={salesResult?.labourTotal ?? initialValues?.labour_spent ?? 0}
+        wtdLabour={
+          salesResult
+            ? salesResult.labourTotal - transferTotals.vacation - transferTotals.management - transferTotals.other
+            : initialValues?.labour_spent ?? 0
+        }
         wtdBudgetPct={parseFloat(labourBudgetPct) || 0}
         locationId={locationId}
         fiscalYear={fiscalYear}
@@ -1197,25 +1203,35 @@ function GuidedLabourReviewStep({
         </div>
       </div>
 
-      {baseline && ytdVarAmount > 0 && (
-        <div className="mt-6 border border-blue-200 bg-blue-50 rounded-lg p-4">
-          <p className="text-xs font-medium text-blue-700 uppercase">
+      {baseline && (
+        <div className={`mt-6 border rounded-lg p-4 ${
+          ytdVarAmount > 0 ? 'border-blue-200 bg-blue-50' : 'border-green-200 bg-green-50'
+        }`}>
+          <p className={`text-xs font-medium uppercase ${ytdVarAmount > 0 ? 'text-blue-700' : 'text-green-700'}`}>
             Need to Save — Labour (Year to Date)
           </p>
-          <p className="text-xs text-blue-700 mt-1">
-            {formatCurrency(ytdVarAmount)} over budget across{' '}
-            {safeWeeksRemaining} week{safeWeeksRemaining === 1 ? '' : 's'} remaining in the fiscal year
-          </p>
-          <div className="mt-3 grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs font-medium text-blue-700 uppercase">Per Week</p>
-              <p className="text-base font-semibold text-blue-900">{formatCurrency(needToSavePerWeek)}</p>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-blue-700 uppercase">Per Day</p>
-              <p className="text-base font-semibold text-blue-900">{formatCurrency(needToSavePerDay)}</p>
-            </div>
-          </div>
+          {ytdVarAmount > 0 ? (
+            <>
+              <p className="text-xs text-blue-700 mt-1">
+                {formatCurrency(ytdVarAmount)} over budget across{' '}
+                {safeWeeksRemaining} week{safeWeeksRemaining === 1 ? '' : 's'} remaining in the fiscal year
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-medium text-blue-700 uppercase">Per Week</p>
+                  <p className="text-base font-semibold text-blue-900">{formatCurrency(needToSavePerWeek)}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-blue-700 uppercase">Per Day</p>
+                  <p className="text-base font-semibold text-blue-900">{formatCurrency(needToSavePerDay)}</p>
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="text-xs text-green-700 mt-1">
+              On track — {formatCurrency(Math.abs(ytdVarAmount))} under budget year to date. No savings needed.
+            </p>
+          )}
         </div>
       )}
 
