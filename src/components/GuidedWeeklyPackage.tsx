@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import { fetchLabourPlBaseline, fetchSalesPlBaseline, getWeeksRemainingInYear, LabourPlBaseline, SalesPlBaseline } from '../lib/needToSave';
 
-type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap';
+type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs';
 
 type StepMeta = {
   section: number;
@@ -46,31 +46,39 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     sectionStepIndex: 4,
     sectionStepCount: 4,
     overallIndex: 4,
-    stepLabel: 'Sales and Labour Review',
+    stepLabel: 'Labour Review',
   },
   discounts: {
     section: 2,
-    sectionLabel: 'Discounts',
+    sectionLabel: 'Sales and Execution',
     sectionStepIndex: 1,
-    sectionStepCount: 1,
+    sectionStepCount: 3,
     overallIndex: 5,
     stepLabel: 'Discounts',
   },
   speedOfService: {
-    section: 3,
-    sectionLabel: 'Speed of Service',
-    sectionStepIndex: 1,
-    sectionStepCount: 1,
+    section: 2,
+    sectionLabel: 'Sales and Execution',
+    sectionStepIndex: 2,
+    sectionStepCount: 3,
     overallIndex: 6,
     stepLabel: 'Speed of Service',
   },
   salesRecap: {
-    section: 4,
-    sectionLabel: 'Sales & Execution Recap',
-    sectionStepIndex: 1,
-    sectionStepCount: 1,
+    section: 2,
+    sectionLabel: 'Sales and Execution',
+    sectionStepIndex: 3,
+    sectionStepCount: 3,
     overallIndex: 7,
     stepLabel: 'Sales & Execution Recap',
+  },
+  cogs: {
+    section: 3,
+    sectionLabel: 'COGs',
+    sectionStepIndex: 1,
+    sectionStepCount: 1,
+    overallIndex: 8,
+    stepLabel: 'COGs Checklist',
   },
 };
 
@@ -439,6 +447,11 @@ export type GuidedFieldUpdates = {
   discount_review_notes?: string;
   speed_of_service_notes?: string;
   sales_action_plan?: string;
+  cogs_confirm_sales?: boolean;
+  cogs_brownie_on_us?: boolean;
+  cogs_recording_waste?: boolean;
+  cogs_petty_cash_amount?: number;
+  cogs_internal_transfers?: boolean;
 };
 
 interface GuidedWeeklyPackageProps {
@@ -486,6 +499,13 @@ export function GuidedWeeklyPackage({
   const [speedError, setSpeedError] = useState('');
   const [speedOfServiceNotes, setSpeedOfServiceNotes] = useState(initialValues?.speed_of_service_notes ?? '');
   const [salesActionPlan, setSalesActionPlan] = useState(initialValues?.sales_action_plan ?? '');
+  const [cogsConfirmSales, setCogsConfirmSales] = useState(initialValues?.cogs_confirm_sales ?? false);
+  const [cogsBrownieOnUs, setCogsBrownieOnUs] = useState(initialValues?.cogs_brownie_on_us ?? false);
+  const [cogsRecordingWaste, setCogsRecordingWaste] = useState(initialValues?.cogs_recording_waste ?? false);
+  const [cogsPettyCashAmount, setCogsPettyCashAmount] = useState(
+    initialValues?.cogs_petty_cash_amount !== undefined ? String(initialValues.cogs_petty_cash_amount) : ''
+  );
+  const [cogsInternalTransfers, setCogsInternalTransfers] = useState(initialValues?.cogs_internal_transfers ?? false);
 
   const handleSalesBudgetChange = (value: string) => {
     setSalesBudget(value);
@@ -584,6 +604,31 @@ export function GuidedWeeklyPackage({
   const handleSalesActionPlanChange = (value: string) => {
     setSalesActionPlan(value);
     onFieldsChange?.({ sales_action_plan: value });
+  };
+
+  const handleCogsConfirmSalesChange = (value: boolean) => {
+    setCogsConfirmSales(value);
+    onFieldsChange?.({ cogs_confirm_sales: value });
+  };
+
+  const handleCogsBrownieOnUsChange = (value: boolean) => {
+    setCogsBrownieOnUs(value);
+    onFieldsChange?.({ cogs_brownie_on_us: value });
+  };
+
+  const handleCogsRecordingWasteChange = (value: boolean) => {
+    setCogsRecordingWaste(value);
+    onFieldsChange?.({ cogs_recording_waste: value });
+  };
+
+  const handleCogsPettyCashAmountChange = (value: string) => {
+    setCogsPettyCashAmount(value);
+    onFieldsChange?.({ cogs_petty_cash_amount: parseFloat(value) || 0 });
+  };
+
+  const handleCogsInternalTransfersChange = (value: boolean) => {
+    setCogsInternalTransfers(value);
+    onFieldsChange?.({ cogs_internal_transfers: value });
   };
 
   const transferTotals = summarizeTransfers(transferEntries);
@@ -688,6 +733,23 @@ export function GuidedWeeklyPackage({
         actionPlan={salesActionPlan}
         onActionPlanChange={handleSalesActionPlanChange}
         onBack={() => setStep('speedOfService')}
+        onNext={() => setStep('cogs')}
+      />
+    );
+  } else if (step === 'cogs') {
+    content = (
+      <GuidedCogsStep
+        confirmSales={cogsConfirmSales}
+        onConfirmSalesChange={handleCogsConfirmSalesChange}
+        brownieOnUs={cogsBrownieOnUs}
+        onBrownieOnUsChange={handleCogsBrownieOnUsChange}
+        recordingWaste={cogsRecordingWaste}
+        onRecordingWasteChange={handleCogsRecordingWasteChange}
+        pettyCashAmount={cogsPettyCashAmount}
+        onPettyCashAmountChange={handleCogsPettyCashAmountChange}
+        internalTransfers={cogsInternalTransfers}
+        onInternalTransfersChange={handleCogsInternalTransfersChange}
+        onBack={() => setStep('salesRecap')}
       />
     );
   } else {
@@ -1691,6 +1753,7 @@ function GuidedSalesRecapStep({
   actionPlan,
   onActionPlanChange,
   onBack,
+  onNext,
 }: {
   wtdSales: number;
   wtdSalesBudget: number;
@@ -1703,6 +1766,7 @@ function GuidedSalesRecapStep({
   actionPlan: string;
   onActionPlanChange: (value: string) => void;
   onBack: () => void;
+  onNext: () => void;
 }) {
   const [baseline, setBaseline] = useState<SalesPlBaseline | null>(null);
   const [loadingPL, setLoadingPL] = useState(false);
@@ -1823,6 +1887,158 @@ function GuidedSalesRecapStep({
           placeholder="Based on sales, discounts, and line times above, what's the plan for the week ahead?"
           className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
         />
+      </div>
+
+      <div className="mt-8 flex justify-between">
+        <button
+          onClick={onBack}
+          className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+        >
+          Back
+        </button>
+        <button
+          onClick={onNext}
+          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GuidedCogsStep({
+  confirmSales,
+  onConfirmSalesChange,
+  brownieOnUs,
+  onBrownieOnUsChange,
+  recordingWaste,
+  onRecordingWasteChange,
+  pettyCashAmount,
+  onPettyCashAmountChange,
+  internalTransfers,
+  onInternalTransfersChange,
+  onBack,
+}: {
+  confirmSales: boolean;
+  onConfirmSalesChange: (value: boolean) => void;
+  brownieOnUs: boolean;
+  onBrownieOnUsChange: (value: boolean) => void;
+  recordingWaste: boolean;
+  onRecordingWasteChange: (value: boolean) => void;
+  pettyCashAmount: string;
+  onPettyCashAmountChange: (value: string) => void;
+  internalTransfers: boolean;
+  onInternalTransfersChange: (value: boolean) => void;
+  onBack: () => void;
+}) {
+  const sections: {
+    title: string;
+    steps: string[];
+    control: 'checkbox' | 'amount';
+  }[] = [
+    {
+      title: '1. Confirm Sales',
+      steps: [
+        'Click the sales tab.',
+        'Hover over each day on the calendar to see if there are mismatched or unlinked sales.',
+        'If there are, click on the day and review the items. Fix what you can or email Culinary/Beverage Directors for assistance.',
+      ],
+      control: 'checkbox',
+    },
+    {
+      title: '2. Brownie on Us',
+      steps: [
+        'Reports > Sales Mix > Sales Mix by Products > Sales Mix – by Product > Date Range (Ignore desired % of sales) > Run > Search "Brownie on us".',
+        'Refer to Brownie on Us Reporting Standard on GS if necessary.',
+        'Enter in the brownie as an invoice: Open a new invoice > Vendor: Transfer Intercompany > invoice number: "Bak2ProP3W3" with the proper per/week > add appropriate date > total on the invoice: $0 > click expense tab > add 2 expenses: Bakery and Promo Other Comps > Description for both: Comp desserts > Enter the comp dessert $ on the bakery line as a negative and the same amount on the Promo line as a positive. (Net amount is zero) > Save the invoice.',
+        'If needed, refer to the Transferring Dessert Comps Out of Food Cost Standard.',
+      ],
+      control: 'checkbox',
+    },
+    {
+      title: '3. Recording Waste',
+      steps: [
+        'Click on the waste icon.',
+        'Click on the appropriate date within the reporting week and click the New Icon.',
+        'Record waste from waste sheets accordingly, there are 3 icons: Item - food items we purchase; Prep - food that is prepared in the kitchen; Product - menu items that are sold.',
+        'Write down the total waste on the cheat sheet.',
+        'Refer to the Entering Waste Standard on GS if necessary.',
+      ],
+      control: 'checkbox',
+    },
+    {
+      title: '4. Entering Petty Cash',
+      steps: [
+        'Get all petty cash receipts from the GM.',
+        'Enter items like you are entering an invoice.',
+        'Use the name of the store and date as the invoice number.',
+        'You may only expense items under $50. All other items should be entered as items.',
+      ],
+      control: 'amount',
+    },
+    {
+      title: '5. Internal Transfers',
+      steps: [
+        'Enter items like you are entering an invoice or credit. Ensure to transfer food items only and the bar transfers similar beverage item only. For example, the Kitchen transfers out Limes (Food) and the bar transfers in Limes (Bar).',
+        'Use the following invoice number schemes: Kitchen to bar: kit2barP4W1 (current period and week that we are in); Bar to Kitchen: bar2kitP4W1 (current period and week that we are in).',
+        'Save as you normally would and print out to go in the invoices folder.',
+        'Refer to the OC Transfer Standards on Push if necessary, internal transfers are external transfers are similar.',
+      ],
+      control: 'checkbox',
+    },
+  ];
+
+  const checkboxState: Record<string, [boolean, (value: boolean) => void]> = {
+    '1. Confirm Sales': [confirmSales, onConfirmSalesChange],
+    '2. Brownie on Us': [brownieOnUs, onBrownieOnUsChange],
+    '3. Recording Waste': [recordingWaste, onRecordingWasteChange],
+    '5. Internal Transfers': [internalTransfers, onInternalTransfersChange],
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+      <StepProgressHeader meta={STEP_META.cogs} />
+
+      <p className="mt-4 text-sm text-slate-600 leading-relaxed">
+        Work through each Optimum Control task for the week and confirm it's done.
+      </p>
+
+      <div className="mt-6 space-y-6">
+        {sections.map((section) => (
+          <div key={section.title} className="border border-slate-200 rounded-lg p-4">
+            <p className="text-sm font-semibold text-slate-800">{section.title}</p>
+            <ul className="mt-2 space-y-1 list-disc list-inside text-sm text-slate-600">
+              {section.steps.map((step, idx) => (
+                <li key={idx}>{step}</li>
+              ))}
+            </ul>
+
+            {section.control === 'checkbox' ? (
+              <label className="mt-3 flex items-center gap-2 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={checkboxState[section.title][0]}
+                  onChange={(e) => checkboxState[section.title][1](e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-slate-500"
+                />
+                Done
+              </label>
+            ) : (
+              <div className="mt-3">
+                <label className="block text-xs font-medium text-slate-500 mb-1">Petty Cash Entered ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={pettyCashAmount}
+                  onChange={(e) => onPettyCashAmountChange(e.target.value)}
+                  placeholder="0.00"
+                  className="w-40 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
+                />
+              </div>
+            )}
+          </div>
+        ))}
       </div>
 
       <div className="mt-8 flex justify-between">

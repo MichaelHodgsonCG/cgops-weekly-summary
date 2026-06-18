@@ -48,6 +48,11 @@ interface WeeklySummaryData {
   discount_review_notes: string;
   speed_of_service_notes: string;
   sales_action_plan: string;
+  cogs_confirm_sales: boolean;
+  cogs_brownie_on_us: boolean;
+  cogs_recording_waste: boolean;
+  cogs_petty_cash_amount: number;
+  cogs_internal_transfers: boolean;
   lab_qtd_var_amount: number;
   labour_transfer_vacation: number;
   labour_transfer_management: number;
@@ -140,6 +145,11 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     discount_review_notes: '',
     speed_of_service_notes: '',
     sales_action_plan: '',
+    cogs_confirm_sales: false,
+    cogs_brownie_on_us: false,
+    cogs_recording_waste: false,
+    cogs_petty_cash_amount: 0,
+    cogs_internal_transfers: false,
     lab_qtd_var_amount: 0,
     labour_transfer_vacation: 0,
     labour_transfer_management: 0,
@@ -478,6 +488,11 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     discount_review_notes: '',
     speed_of_service_notes: '',
     sales_action_plan: '',
+    cogs_confirm_sales: false,
+    cogs_brownie_on_us: false,
+    cogs_recording_waste: false,
+    cogs_petty_cash_amount: 0,
+    cogs_internal_transfers: false,
     lab_qtd_var_amount: 0,
     labour_transfer_vacation: 0,
     labour_transfer_management: 0,
@@ -857,6 +872,11 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 discount_review_notes: formData.discount_review_notes,
                 speed_of_service_notes: formData.speed_of_service_notes,
                 sales_action_plan: formData.sales_action_plan,
+                cogs_confirm_sales: formData.cogs_confirm_sales,
+                cogs_brownie_on_us: formData.cogs_brownie_on_us,
+                cogs_recording_waste: formData.cogs_recording_waste,
+                cogs_petty_cash_amount: formData.cogs_petty_cash_amount,
+                cogs_internal_transfers: formData.cogs_internal_transfers,
               }}
               onFieldsChange={handleGuideFieldsChange}
               onClose={() => setShowGuide(false)}
@@ -1282,6 +1302,57 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   rows={3}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
                 />
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-slate-700 mb-2">COGs Checklist <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={formData.cogs_confirm_sales}
+                      onChange={(e) => handleInputChange('cogs_confirm_sales', e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-slate-500"
+                    />
+                    Confirm Sales
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={formData.cogs_brownie_on_us}
+                      onChange={(e) => handleInputChange('cogs_brownie_on_us', e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-slate-500"
+                    />
+                    Brownie on Us
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={formData.cogs_recording_waste}
+                      onChange={(e) => handleInputChange('cogs_recording_waste', e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-slate-500"
+                    />
+                    Recording Waste
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={formData.cogs_internal_transfers}
+                      onChange={(e) => handleInputChange('cogs_internal_transfers', e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-slate-500"
+                    />
+                    Internal Transfers
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-slate-700 whitespace-nowrap">Petty Cash $</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={formData.cogs_petty_cash_amount || ''}
+                      onChange={(e) => handleInputChange('cogs_petty_cash_amount', parseFloat(e.target.value) || 0)}
+                      className="w-32 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
