@@ -4,8 +4,6 @@ import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import { fetchLabourPlBaseline, getWeeksRemainingInYear, LabourPlBaseline } from '../lib/needToSave';
 
-const LOCATION_NAME = 'Test Package';
-
 type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts';
 
 type StepMeta = {
@@ -301,6 +299,7 @@ interface GuidedWeeklyPackageProps {
   onFieldsChange?: (updates: GuidedFieldUpdates) => void;
   onClose?: () => void;
   locationId?: string;
+  locationName?: string;
   fiscalYear?: number;
   periodNumber?: number;
   weekNumber?: number;
@@ -311,12 +310,12 @@ export function GuidedWeeklyPackage({
   onFieldsChange,
   onClose,
   locationId,
+  locationName = '',
   fiscalYear,
   periodNumber,
   weekNumber,
 }: GuidedWeeklyPackageProps) {
   const [step, setStep] = useState<GuidedStep>('start');
-  const [locationName, setLocationName] = useState(LOCATION_NAME);
   const [salesBudget, setSalesBudget] = useState(
     initialValues?.budget_food_sales_period ? String(initialValues.budget_food_sales_period) : ''
   );
@@ -334,22 +333,6 @@ export function GuidedWeeklyPackage({
   const [discountsFile, setDiscountsFile] = useState<File | null>(null);
   const [discountsResult, setDiscountsResult] = useState<DiscountsParseResult | null>(null);
   const [discountsError, setDiscountsError] = useState('');
-
-  useEffect(() => {
-    loadLocation();
-  }, []);
-
-  const loadLocation = async () => {
-    const { data } = await supabase
-      .from('locations')
-      .select('name')
-      .eq('name', LOCATION_NAME)
-      .maybeSingle();
-
-    if (data) {
-      setLocationName(data.name);
-    }
-  };
 
   const handleSalesBudgetChange = (value: string) => {
     setSalesBudget(value);
@@ -547,7 +530,7 @@ function GuidedPackageStart({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 mt-6">
+      <div className="grid grid-cols-3 gap-4 mt-6">
         <div className="bg-slate-50 rounded-lg p-4">
           <p className="text-xs font-medium text-slate-500 uppercase">Restaurant</p>
           <p className="text-base font-semibold text-slate-800">{locationName}</p>
@@ -555,10 +538,6 @@ function GuidedPackageStart({
         <div className="bg-slate-50 rounded-lg p-4">
           <p className="text-xs font-medium text-slate-500 uppercase">Reporting Period</p>
           <p className="text-base font-semibold text-slate-800">P11 W2</p>
-        </div>
-        <div className="bg-slate-50 rounded-lg p-4">
-          <p className="text-xs font-medium text-slate-500 uppercase">Due Date</p>
-          <p className="text-base font-semibold text-slate-800">TBD</p>
         </div>
         <div className="bg-slate-50 rounded-lg p-4">
           <p className="text-xs font-medium text-slate-500 uppercase">Steps</p>
@@ -577,7 +556,7 @@ function GuidedPackageStart({
       </div>
 
       <p className="text-slate-600 mt-6 leading-relaxed">
-        Welcome Chef. This guided workflow will walk you through each report required for your
+        Welcome, Chef. This guided workflow will walk you through each report required for your
         weekly culinary package.
       </p>
 

@@ -849,6 +849,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
               onFieldsChange={handleGuideFieldsChange}
               onClose={() => setShowGuide(false)}
               locationId={locationId}
+              locationName={locationName}
               fiscalYear={formData.fiscal_year}
               periodNumber={formData.period_number}
               weekNumber={formData.week_number}
