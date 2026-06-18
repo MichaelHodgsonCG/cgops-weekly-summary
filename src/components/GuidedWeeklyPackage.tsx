@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import { fetchLabourPlBaseline, fetchSalesPlBaseline, getWeeksRemainingInYear, LabourPlBaseline, SalesPlBaseline } from '../lib/needToSave';
 
-type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs' | 'purchases' | 'usageReview';
+type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs' | 'purchases' | 'usageReview' | 'finalFoodCost';
 
 type StepMeta = {
   section: number;
@@ -95,6 +95,14 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     sectionStepCount: 1,
     overallIndex: 10,
     stepLabel: 'Over/Under Usage Review',
+  },
+  finalFoodCost: {
+    section: 6,
+    sectionLabel: 'Final Food Cost Report',
+    sectionStepIndex: 1,
+    sectionStepCount: 1,
+    overallIndex: 11,
+    stepLabel: 'Final Food Cost Report',
   },
 };
 
@@ -451,6 +459,79 @@ function parsePurchasesReport(csvText: string): PurchasesParseResult {
   return { categories, total };
 }
 
+const FOOD_COST_CATEGORIES = ['Bakery', 'Dairy', 'Meat And Seafood', 'Other', 'Produce'] as const;
+type FoodCostCategory = typeof FOOD_COST_CATEGORIES[number];
+
+const FOOD_COST_TO_PURCHASE_CATEGORY: Record<FoodCostCategory, PurchaseCategory> = {
+  Bakery: 'Bakery',
+  Dairy: 'Dairy',
+  'Meat And Seafood': 'Meat And Seafood',
+  Other: 'Other Food',
+  Produce: 'Produce',
+};
+
+type FoodCostReportRow = {
+  category: FoodCostCategory;
+  opening: number;
+  closing: number;
+  waste: number;
+  actualUsageReport: number;
+  idealUsage: number;
+};
+
+function parseFoodCostReport(csvText: string): FoodCostReportRow[] {
+  const lines = csvText.split(/\r?\n/).filter((line) => line.trim() !== '');
+  if (lines.length < 2) {
+    throw new Error('This report has no data rows.');
+  }
+
+  return lines
+    .slice(1)
+    .map((line) => parseCsvLine(line))
+    .filter((row) => FOOD_COST_CATEGORIES.includes(row[66]?.trim() as FoodCostCategory))
+    .map((row) => ({
+      category: row[66].trim() as FoodCostCategory,
+      opening: parseCurrency(row[67] ?? '0'),
+      closing: parseCurrency(row[69] ?? '0'),
+      actualUsageReport: parseCurrency(row[70] ?? '0'),
+      idealUsage: parseCurrency(row[72] ?? '0'),
+      waste: parseCurrency(row[74] ?? '0'),
+    }));
+}
+
+type FoodCostCategorySummary = {
+  category: FoodCostCategory;
+  opening: number;
+  closing: number;
+  waste: number;
+  glPurchases: number;
+  recomputedUsage: number;
+  actualUsageReport: number;
+  idealUsage: number;
+  variance: number;
+};
+
+function buildFoodCostSummary(
+  rows: FoodCostReportRow[],
+  glPurchasesByCategory: Record<PurchaseCategory, number>
+): FoodCostCategorySummary[] {
+  return rows.map((row) => {
+    const glPurchases = glPurchasesByCategory[FOOD_COST_TO_PURCHASE_CATEGORY[row.category]] ?? 0;
+    const recomputedUsage = row.opening + glPurchases - row.closing - row.waste;
+    return {
+      category: row.category,
+      opening: row.opening,
+      closing: row.closing,
+      waste: row.waste,
+      glPurchases,
+      recomputedUsage,
+      actualUsageReport: row.actualUsageReport,
+      idealUsage: row.idealUsage,
+      variance: recomputedUsage - row.actualUsageReport,
+    };
+  });
+}
+
 type UsageReportRow = {
   itemName: string;
   varianceAmount: number;
@@ -584,6 +665,7 @@ export type GuidedFieldUpdates = {
   purchases_other_food_amount?: number;
   purchases_produce_amount?: number;
   usage_review_items?: string;
+  final_food_cost_items?: string;
 };
 
 interface GuidedWeeklyPackageProps {
@@ -658,6 +740,16 @@ export function GuidedWeeklyPackage({
       return [];
     }
   });
+  const [foodCostFile, setFoodCostFile] = useState<File | null>(null);
+  const [foodCostSummary, setFoodCostSummary] = useState<FoodCostCategorySummary[] | null>(() => {
+    if (!initialValues?.final_food_cost_items) return null;
+    try {
+      return JSON.parse(initialValues.final_food_cost_items) as FoodCostCategorySummary[];
+    } catch {
+      return null;
+    }
+  });
+  const [foodCostError, setFoodCostError] = useState('');
 
   const handleSalesBudgetChange = (value: string) => {
     setSalesBudget(value);
@@ -856,6 +948,34 @@ export function GuidedWeeklyPackage({
     });
   };
 
+  const handleFoodCostFileSelect = async (file: File) => {
+    setFoodCostFile(file);
+    setFoodCostError('');
+    setFoodCostSummary(null);
+
+    try {
+      const text = await file.text();
+      const rows = parseFoodCostReport(text);
+      const glPurchasesByCategory: Record<PurchaseCategory, number> = purchasesResult
+        ? (Object.fromEntries(purchasesResult.categories.map((c) => [c.name, c.amount])) as Record<
+            PurchaseCategory,
+            number
+          >)
+        : {
+            Bakery: initialValues?.purchases_bakery_amount ?? 0,
+            Dairy: initialValues?.purchases_dairy_amount ?? 0,
+            'Meat And Seafood': initialValues?.purchases_meat_seafood_amount ?? 0,
+            'Other Food': initialValues?.purchases_other_food_amount ?? 0,
+            Produce: initialValues?.purchases_produce_amount ?? 0,
+          };
+      const summary = buildFoodCostSummary(rows, glPurchasesByCategory);
+      setFoodCostSummary(summary);
+      onFieldsChange?.({ final_food_cost_items: JSON.stringify(summary) });
+    } catch (err) {
+      setFoodCostError(err instanceof Error ? err.message : 'Failed to parse this report.');
+    }
+  };
+
   const transferTotals = summarizeTransfers(transferEntries);
   const discountsTotal = discountsResult
     ? discountsResult.categories.reduce((sum, c) => sum + c.totalAmount, 0)
@@ -1005,6 +1125,17 @@ export function GuidedWeeklyPackage({
         flaggedItems={usageFlaggedItems}
         onItemChange={handleUsageItemChange}
         onBack={() => setStep('purchases')}
+        onFinish={() => setStep('finalFoodCost')}
+      />
+    );
+  } else if (step === 'finalFoodCost') {
+    content = (
+      <GuidedFinalFoodCostStep
+        file={foodCostFile}
+        summary={foodCostSummary}
+        error={foodCostError}
+        onFileSelect={handleFoodCostFileSelect}
+        onBack={() => setStep('usageReview')}
         onFinish={() => onClose?.()}
       />
     );
@@ -2818,6 +2949,147 @@ function GuidedUsageReviewStep({
           {overItems.map((item) => renderItemRow(item))}
         </div>
       )}
+
+      <div className="mt-8 flex justify-between">
+        <button
+          onClick={onBack}
+          className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+        >
+          Back
+        </button>
+        <button
+          onClick={onFinish}
+          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GuidedFinalFoodCostStep({
+  file,
+  summary,
+  error,
+  onFileSelect,
+  onBack,
+  onFinish,
+}: {
+  file: File | null;
+  summary: FoodCostCategorySummary[] | null;
+  error: string;
+  onFileSelect: (file: File) => void;
+  onBack: () => void;
+  onFinish: () => void;
+}) {
+  const [dragActive, setDragActive] = useState(false);
+
+  const handleFiles = (files: FileList | null) => {
+    if (files && files.length > 0) {
+      onFileSelect(files[0]);
+    }
+  };
+
+  const formatCurrency = (value: number) =>
+    `${value < 0 ? '-' : ''}$${Math.abs(value).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+
+  const totalVariance = summary ? summary.reduce((sum, c) => sum + c.variance, 0) : 0;
+
+  return (
+    <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+      <StepProgressHeader meta={STEP_META.finalFoodCost} />
+
+      <div className="mt-4">
+        <h3 className="text-base font-semibold text-slate-800">Run the Report</h3>
+        <ul className="mt-2 space-y-1 list-disc list-inside text-sm text-slate-600">
+          <li>OC &gt; Reports &gt; Usage Summary - Group Totals &gt; Select Date Range &gt; Category: Food &gt; Run Report &gt; Save to CSV.</li>
+          <li>Usage is recomputed using your GL purchase totals from the Purchases step, not this report's own purchase figures.</li>
+        </ul>
+      </div>
+
+      <div className="mt-6">
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragActive(true);
+          }}
+          onDragLeave={() => setDragActive(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragActive(false);
+            handleFiles(e.dataTransfer.files);
+          }}
+          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+            dragActive ? 'border-slate-800 bg-slate-50' : 'border-slate-300'
+          }`}
+        >
+          <Upload className="w-8 h-8 text-slate-400 mx-auto mb-3" />
+          <p className="text-slate-600 mb-3">Drag and drop your report here, or</p>
+          <label className="inline-block px-4 py-2 rounded-lg bg-slate-800 text-white cursor-pointer hover:bg-slate-700 transition-colors">
+            Browse Files
+            <input type="file" accept=".csv" className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+          </label>
+        </div>
+
+        {file && !error && summary && (
+          <div className="mt-4 flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+            <CheckCircle2 className="w-5 h-5" />
+            <span className="text-sm font-medium">Uploaded: {file.name}</span>
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-4 flex items-center gap-2 text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+            <AlertCircle className="w-5 h-5" />
+            <span className="text-sm font-medium">{error}</span>
+          </div>
+        )}
+
+        {summary && (
+          <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium text-slate-500">Category</th>
+                  <th className="px-3 py-2 text-right font-medium text-slate-500">Opening</th>
+                  <th className="px-3 py-2 text-right font-medium text-slate-500">GL Purchases</th>
+                  <th className="px-3 py-2 text-right font-medium text-slate-500">Closing</th>
+                  <th className="px-3 py-2 text-right font-medium text-slate-500">Waste</th>
+                  <th className="px-3 py-2 text-right font-medium text-slate-500">Recomputed Usage</th>
+                  <th className="px-3 py-2 text-right font-medium text-slate-500">Report Actual Usage</th>
+                  <th className="px-3 py-2 text-right font-medium text-slate-500">Ideal Usage</th>
+                  <th className="px-3 py-2 text-right font-medium text-slate-500">Variance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.map((row) => (
+                  <tr key={row.category} className="border-t border-slate-200">
+                    <td className="px-3 py-2 text-slate-700">{row.category}</td>
+                    <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(row.opening)}</td>
+                    <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(row.glPurchases)}</td>
+                    <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(row.closing)}</td>
+                    <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(row.waste)}</td>
+                    <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(row.recomputedUsage)}</td>
+                    <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(row.actualUsageReport)}</td>
+                    <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(row.idealUsage)}</td>
+                    <td className="px-3 py-2 text-right font-medium text-slate-800">{formatCurrency(row.variance)}</td>
+                  </tr>
+                ))}
+                <tr className="border-t border-slate-200 bg-slate-50">
+                  <td className="px-3 py-2 font-semibold text-slate-800" colSpan={8}>
+                    Total Variance
+                  </td>
+                  <td className="px-3 py-2 text-right font-semibold text-slate-800">{formatCurrency(totalVariance)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <div className="mt-8 flex justify-between">
         <button
