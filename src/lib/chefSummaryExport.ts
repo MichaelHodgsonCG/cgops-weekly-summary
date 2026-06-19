@@ -547,10 +547,11 @@ export function exportChefSummaryToPdf(
   y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 4;
 
   if (data.sous_vac_days) {
+    y += 8;
     doc.setFontSize(7.5);
     doc.setFont('helvetica', 'italic');
     doc.setTextColor(100);
-    doc.text(`Sous Vac Days this period: ${data.sous_vac_days}`, margin, y + 8);
+    doc.text(`Sous Vac Days this period: ${data.sous_vac_days}`, margin, y);
     doc.setTextColor(0, 0, 0);
     y += 14;
   } else {
