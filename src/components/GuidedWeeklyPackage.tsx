@@ -1626,6 +1626,7 @@ export function GuidedWeeklyPackage({
         generating={generatingSummary}
         error={summaryError}
         recapMetrics={recapMetrics}
+        foodCostSummary={foodCostSummary}
         onBack={() => setStep('audit')}
         onFinish={() => onClose?.()}
       />
@@ -4785,6 +4786,7 @@ function GuidedRecapStep({
   generating,
   error,
   recapMetrics,
+  foodCostSummary,
   onBack,
   onFinish,
 }: {
@@ -4810,6 +4812,7 @@ function GuidedRecapStep({
   generating: boolean;
   error: string;
   recapMetrics: GuidedFieldUpdates;
+  foodCostSummary: FoodCostSummary | null;
   onBack: () => void;
   onFinish: () => void;
 }) {
@@ -4961,6 +4964,17 @@ function GuidedRecapStep({
         ai_summary: narrative,
       };
 
+      const foodCostCategories = foodCostSummary?.categories.map((c) => ({
+        category: c.category,
+        opening: c.opening,
+        glPurchases: c.glPurchases,
+        closing: c.closing,
+        waste: c.waste,
+        actualUsage: c.actualUsage,
+        idealUsage: c.idealUsage,
+        variance: c.variance,
+      }));
+
       exportChefSummaryToPdf(
         exportData,
         locationName ?? '',
@@ -4976,7 +4990,8 @@ function GuidedRecapStep({
         m.recap_sales_wtd_actual,
         m.recap_sales_wtd_budget,
         m.recap_fc_wtd_pct,
-        m.recap_labour_wtd_pct
+        m.recap_labour_wtd_pct,
+        foodCostCategories
       );
     } catch (err) {
       setPdfError(err instanceof Error ? err.message : 'Failed to export PDF.');

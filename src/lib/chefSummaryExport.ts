@@ -8,6 +8,17 @@ interface FeatureItem {
   notes: string;
 }
 
+export interface FoodCostCategoryRow {
+  category: string;
+  opening: number;
+  glPurchases: number;
+  closing: number;
+  waste: number;
+  actualUsage: number;
+  idealUsage: number;
+  variance: number;
+}
+
 interface WeeklySummaryData {
   location_id: string;
   week_number: number;
@@ -253,7 +264,8 @@ export function exportChefSummaryToPdf(
   recapWtdSalesActual?: number,
   recapWtdSalesBudget?: number,
   recapWtdFcPct?: number,
-  recapWtdLabourPct?: number
+  recapWtdLabourPct?: number,
+  foodCostCategories?: FoodCostCategoryRow[]
 ) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -411,14 +423,14 @@ export function exportChefSummaryToPdf(
   });
   const lcTableY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
 
-  y = Math.max(salesTableY, fcTableY, lcTableY) + 14;
+  y = Math.max(salesTableY, fcTableY, lcTableY) + 10;
 
   // Top 3 things that happened this week
-  doc.setFontSize(10.5);
+  doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
   doc.text('Top 3 Things That Happened This Week', margin, y);
-  y += 13;
-  doc.setFontSize(9);
+  y += 12;
+  doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
 
   const weeklyHighlights = [
@@ -432,7 +444,64 @@ export function exportChefSummaryToPdf(
     const line = bullet ? `• ${bullet}` : '• ____________________________________________________';
     const wrapped = doc.splitTextToSize(line, contentWidth);
     doc.text(wrapped.slice(0, 1), margin, y);
-    y += 13;
+    y += 11;
+  }
+
+  // COGS / category breakdown
+  if (foodCostCategories && foodCostCategories.length > 0) {
+    y += 6;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('COGS by Category', margin, y);
+    y += 4;
+
+    const totals = foodCostCategories.reduce(
+      (acc, c) => ({
+        opening: acc.opening + c.opening,
+        glPurchases: acc.glPurchases + c.glPurchases,
+        closing: acc.closing + c.closing,
+        waste: acc.waste + c.waste,
+        actualUsage: acc.actualUsage + c.actualUsage,
+        idealUsage: acc.idealUsage + c.idealUsage,
+        variance: acc.variance + c.variance,
+      }),
+      { opening: 0, glPurchases: 0, closing: 0, waste: 0, actualUsage: 0, idealUsage: 0, variance: 0 }
+    );
+    const salesBase = data.food_sales_labour_push || data.food_sales_oc || 0;
+    const pctOf = (v: number) => (salesBase > 0 ? ` (${((v / salesBase) * 100).toFixed(2)}%)` : '');
+
+    autoTable(doc, {
+      startY: y + 6,
+      head: [['Category', 'Opening', 'GL Purchases', 'Closing', 'Waste', 'Actual Usage', 'Ideal Usage', 'Variance']],
+      body: [
+        ...foodCostCategories.map((c) => [
+          c.category,
+          currency(c.opening),
+          currency(c.glPurchases),
+          currency(c.closing),
+          `${currency(c.waste)}${pctOf(c.waste)}`,
+          `${currency(c.actualUsage)}${pctOf(c.actualUsage)}`,
+          `${currency(c.idealUsage)}${pctOf(c.idealUsage)}`,
+          `${currency(c.variance)}${pctOf(c.variance)}`,
+        ]),
+        [
+          { content: 'Total', styles: { fontStyle: 'bold' as const } },
+          { content: currency(totals.opening), styles: { fontStyle: 'bold' as const } },
+          { content: currency(totals.glPurchases), styles: { fontStyle: 'bold' as const } },
+          { content: currency(totals.closing), styles: { fontStyle: 'bold' as const } },
+          { content: `${currency(totals.waste)}${pctOf(totals.waste)}`, styles: { fontStyle: 'bold' as const } },
+          { content: `${currency(totals.actualUsage)}${pctOf(totals.actualUsage)}`, styles: { fontStyle: 'bold' as const } },
+          { content: `${currency(totals.idealUsage)}${pctOf(totals.idealUsage)}`, styles: { fontStyle: 'bold' as const } },
+          { content: `${currency(totals.variance)}${pctOf(totals.variance)}`, styles: { fontStyle: 'bold' as const } },
+        ],
+      ],
+      styles: { fontSize: 6.5, cellPadding: 2.5, halign: 'center' },
+      headStyles: { ...headStyles, fontSize: 6.5 },
+      columnStyles: { 0: { halign: 'left', fontStyle: 'bold' } },
+      margin: { left: margin, right: margin },
+      tableWidth: contentWidth,
+    });
+    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 4;
   }
 
   doc.setFontSize(8);
@@ -577,10 +646,9 @@ export function exportChefSummaryToPdf(
   ].slice(0, 3);
 
   const boxTop = y;
-  doc.setFontSize(10.5);
-  doc.setFont('helvetica', 'bold');
   const titleLines = ["NEXT WEEK'S PRIORITIES"];
-  let boxContentY = boxTop + 16;
+  const titleRowHeight = 22; // room for the 10.5pt bold title baseline + padding before content starts
+  let boxContentY = boxTop + titleRowHeight;
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
   const priorityLines = priorities.length > 0
@@ -588,7 +656,7 @@ export function exportChefSummaryToPdf(
     : ['• ____________________________________________________'];
   const wrappedPriorityLines = priorityLines.flatMap((l) => doc.splitTextToSize(l, contentWidth - 16));
   const noteLine = '(Full detail in Food Cost Action Plan / Labour Action Plan)';
-  const boxHeight = 16 + wrappedPriorityLines.length * 10.5 + 16;
+  const boxHeight = titleRowHeight + wrappedPriorityLines.length * 10.5 + 16;
 
   doc.setDrawColor(30, 41, 59);
   doc.setLineWidth(1);
@@ -608,13 +676,6 @@ export function exportChefSummaryToPdf(
   doc.setTextColor(100);
   doc.text(noteLine, margin + 8, boxContentY);
   doc.setTextColor(0, 0, 0);
-
-  y = boxTop + boxHeight + 24;
-
-  // Sign-off line
-  doc.setFontSize(9.5);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Chef: ______________________      Ops Leader: ______________________      Date: ______________', margin, y);
 
   doc.setFontSize(8);
   doc.setTextColor(120);

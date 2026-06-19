@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, LogOut, ChevronDown, FileText, AlertTriangle, Download, ClipboardCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
-import { exportChefSummaryToExcel, exportChefSummaryToPdf } from '../lib/chefSummaryExport';
+import { exportChefSummaryToExcel, exportChefSummaryToPdf, FoodCostCategoryRow } from '../lib/chefSummaryExport';
 import { GuidedWeeklyPackage, GuidedFieldUpdates } from './GuidedWeeklyPackage';
 
 interface FeatureItem {
@@ -793,6 +793,26 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
       weekEndingDate = undefined;
     }
 
+    let foodCostCategories: FoodCostCategoryRow[] | undefined;
+    try {
+      const parsed = JSON.parse(formData.final_food_cost_items || '[]');
+      const categories = Array.isArray(parsed) ? parsed : parsed?.categories;
+      if (Array.isArray(categories) && categories.length > 0) {
+        foodCostCategories = categories.map((c: Record<string, unknown>) => ({
+          category: String(c.category ?? ''),
+          opening: Number(c.opening) || 0,
+          glPurchases: Number(c.glPurchases) || 0,
+          closing: Number(c.closing) || 0,
+          waste: Number(c.waste) || 0,
+          actualUsage: Number(c.actualUsage) || 0,
+          idealUsage: Number(c.idealUsage) || 0,
+          variance: Number(c.variance) || 0,
+        }));
+      }
+    } catch {
+      foodCostCategories = undefined;
+    }
+
     exportChefSummaryToPdf(
       formData,
       locationName,
@@ -804,7 +824,12 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
       labourCostPct,
       lcVariance,
       user?.name,
-      weekEndingDate
+      weekEndingDate,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      foodCostCategories
     );
   };
 
