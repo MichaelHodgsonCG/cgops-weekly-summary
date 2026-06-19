@@ -122,7 +122,7 @@ interface WeeklyChefSummaryProps {
 }
 
 export function WeeklyChefSummary({ locationId, locationName, summaryId }: WeeklyChefSummaryProps) {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const [formData, setFormData] = useState<WeeklySummaryData>({
     location_id: locationId,
     week_number: 1,
@@ -778,7 +778,21 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     );
   };
 
-  const handleExportPdf = () => {
+  const handleExportPdf = async () => {
+    let weekEndingDate: string | undefined;
+    try {
+      const { data: calWeek } = await supabase
+        .from('fiscal_calendar')
+        .select('end_date')
+        .eq('fiscal_year', formData.fiscal_year)
+        .eq('period', formData.period_number)
+        .eq('week', formData.week_number)
+        .maybeSingle();
+      weekEndingDate = calWeek?.end_date;
+    } catch {
+      weekEndingDate = undefined;
+    }
+
     exportChefSummaryToPdf(
       formData,
       locationName,
@@ -788,7 +802,9 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
       theoreticalFoodCostPct,
       theoreticalVariance,
       labourCostPct,
-      lcVariance
+      lcVariance,
+      user?.name,
+      weekEndingDate
     );
   };
 

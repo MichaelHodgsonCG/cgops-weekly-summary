@@ -4941,7 +4941,11 @@ function GuidedRecapStep({
         boh_promo_summary: salesActionPlan,
         notes: '',
         action_plan_summary: salesActionPlan,
+        sales_action_plan: salesActionPlan,
         rm_issues_cleaning_focus: [rmIssues, cleaningFocus].filter(Boolean).join('\n\n'),
+        rm_issues: rmIssues,
+        cleaning_focus: cleaningFocus,
+        audit_score_comment: auditScoreComment,
         ideal_cooks: 0,
         current_cooks: 0,
         ideal_prep: 0,
@@ -4966,7 +4970,13 @@ function GuidedRecapStep({
         theoreticalFoodCostPct,
         theoreticalVariance,
         labourCostPct,
-        lcVariance
+        lcVariance,
+        undefined,
+        undefined,
+        m.recap_sales_wtd_actual,
+        m.recap_sales_wtd_budget,
+        m.recap_fc_wtd_pct,
+        m.recap_labour_wtd_pct
       );
     } catch (err) {
       setPdfError(err instanceof Error ? err.message : 'Failed to export PDF.');
