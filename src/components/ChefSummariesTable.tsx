@@ -24,7 +24,7 @@ interface ChefSummary {
   usage_amount: number | null;
   ideal_usage_amount: number | null;
   cogs_qtd: number | null;
-  food_sales_silverware: number | null;
+  food_sales_labour_push: number | null;
   food_sales_oc: number | null;
   week_variance_amount: number | null;
   budget_food_sales_period: number | null;
@@ -100,6 +100,7 @@ export function ChefSummariesTable({ fiscalYear, period, week }: ChefSummariesTa
 
     const transformedData = (data || []).map((item: any) => ({
       ...item,
+      food_sales_labour_push: item.food_sales_labour_push ?? item.food_sales_silverware ?? 0,
       location_name: item.locations?.name || 'Unknown'
     }));
 
@@ -265,8 +266,8 @@ export function ChefSummariesTable({ fiscalYear, period, week }: ChefSummariesTa
                 </button>
               </th>
               <th className="px-4 py-3 text-right font-semibold text-slate-700">
-                <button onClick={() => handleSort('food_sales_silverware')} className="flex items-center gap-1 ml-auto hover:text-slate-900">
-                  Food Sales Silverware <SortIcon column="food_sales_silverware" />
+                <button onClick={() => handleSort('food_sales_labour_push')} className="flex items-center gap-1 ml-auto hover:text-slate-900">
+                  Food Sales Labour Push <SortIcon column="food_sales_labour_push" />
                 </button>
               </th>
               <th className="px-4 py-3 text-right font-semibold text-slate-700">
@@ -460,7 +461,7 @@ export function ChefSummariesTable({ fiscalYear, period, week }: ChefSummariesTa
                 <td className="px-4 py-3 text-right text-slate-600">{formatCurrency(summary.usage_amount)}</td>
                 <td className="px-4 py-3 text-right text-slate-600">{formatCurrency(summary.ideal_usage_amount)}</td>
                 <td className="px-4 py-3 text-right text-slate-600">{formatCurrency(summary.cogs_qtd)}</td>
-                <td className="px-4 py-3 text-right text-slate-600">{formatCurrency(summary.food_sales_silverware)}</td>
+                <td className="px-4 py-3 text-right text-slate-600">{formatCurrency(summary.food_sales_labour_push)}</td>
                 <td className="px-4 py-3 text-right text-slate-600">{formatCurrency(summary.food_sales_oc)}</td>
                 <td className="px-4 py-3 text-right text-slate-600">{formatCurrency(summary.week_variance_amount)}</td>
                 <td className="px-4 py-3 text-right text-slate-600">{formatCurrency(summary.budget_food_sales_period)}</td>

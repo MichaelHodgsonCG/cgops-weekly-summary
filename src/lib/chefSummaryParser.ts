@@ -15,7 +15,7 @@ export interface ChefSummaryData {
   usage_amount: number;
   ideal_usage_amount: number;
   cogs_qtd: number;
-  food_sales_silverware: number;
+  food_sales_labour_push: number;
   food_sales_oc: number;
   week_variance_amount: number;
   budget_food_sales_period: number;
@@ -169,7 +169,7 @@ export function parseChefSummaryCSV(csvText: string): ChefSummaryData {
   data.cogs_qtd = parseNumber(getCell(lines[7], 5));
 
   // Line 9 (index 8): FOOD SALES SILVERWARE:,"$72,889 ",FOOD SALES OC:,"$72,843 ",WEEK VARIANCE:,"($4,252)"
-  data.food_sales_silverware = parseNumber(getCell(lines[8], 1));
+  data.food_sales_labour_push = parseNumber(getCell(lines[8], 1));
   data.food_sales_oc = parseNumber(getCell(lines[8], 3));
   data.week_variance_amount = parseNumber(getCell(lines[8], 5));
 

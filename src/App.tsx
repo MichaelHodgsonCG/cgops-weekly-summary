@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, BarChart3, Trophy, TrendingUp, Menu, X, LogOut, Settings, User, Book } from 'lucide-react';
+import { LayoutDashboard, BarChart3, Trophy, TrendingUp, Menu, X, LogOut, Settings, User, Book, ClipboardCheck } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import LocationDetail from './components/LocationDetail';
 import UploadPage from './components/UploadPage';
@@ -13,10 +13,11 @@ import { LocationDashboard } from './components/LocationDashboard';
 import { ChefSummaryDashboard } from './components/ChefSummaryDashboard';
 import { ChefConsolidationView } from './components/ChefConsolidationView';
 import UserSettings from './components/UserSettings';
+import { GuidedWeeklyPackage } from './components/GuidedWeeklyPackage';
 import { useAuth } from './lib/auth';
 import { supabase } from './lib/supabase';
 
-type View = 'dashboard' | 'upload' | 'detail' | 'portfolio' | 'compare' | 'rankings' | 'trends' | 'admin' | 'settings' | 'chef-summary' | 'chef';
+type View = 'dashboard' | 'upload' | 'detail' | 'portfolio' | 'compare' | 'rankings' | 'trends' | 'admin' | 'settings' | 'chef-summary' | 'chef' | 'guided-package';
 
 
 function AppContent() {
@@ -77,6 +78,7 @@ function AppContent() {
     { id: 'dashboard' as View, label: 'P&L', icon: LayoutDashboard, mobile: true },
     { id: 'trends' as View, label: 'Trends', icon: TrendingUp, mobile: true },
     { id: 'chef' as View, label: 'Chef', icon: Book, mobile: true },
+    { id: 'guided-package' as View, label: 'Guided Package', icon: ClipboardCheck, mobile: false },
   ];
 
   return (
@@ -226,6 +228,7 @@ function AppContent() {
         {view === 'trends' && selectedWeek && <TrendsView weekEndingDate={selectedWeek} />}
         {view === 'chef' && <ChefConsolidationView />}
         {view === 'chef-summary' && <ChefSummaryDashboard />}
+        {view === 'guided-package' && <GuidedWeeklyPackage />}
         {view === 'dashboard' && (
           <Dashboard
             onLocationClick={handleLocationClick}

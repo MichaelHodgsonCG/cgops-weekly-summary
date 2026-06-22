@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Save, Plus, Trash2, LogOut, ChevronDown, FileText, AlertTriangle, Download, RefreshCw } from 'lucide-react';
+import { Save, Plus, Trash2, LogOut, ChevronDown, FileText, AlertTriangle, Download, ClipboardCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
-import { exportChefSummaryToExcel } from '../lib/chefSummaryExport';
-import { calculateNeedToSave, NeedToSaveBasis } from '../lib/needToSave';
+import { exportChefSummaryToExcel, exportChefSummaryToPdf, FoodCostCategoryRow } from '../lib/chefSummaryExport';
+import { GuidedWeeklyPackage, GuidedFieldUpdates } from './GuidedWeeklyPackage';
 
 interface FeatureItem {
   name: string;
@@ -28,7 +28,7 @@ interface WeeklySummaryData {
   usage_amount: number;
   ideal_usage_amount: number;
   cogs_qtd: number;
-  food_sales_silverware: number;
+  food_sales_labour_push: number;
   food_sales_oc: number;
   week_variance_amount: number;
   budget_food_sales_period: number;
@@ -42,12 +42,36 @@ interface WeeklySummaryData {
   qtd_labour_variance_pct: number;
   labour_spent: number;
   overtime_amount: number;
+  overtime_notes: string;
+  labour_review_action_plan: string;
+  discount_review_notes: string;
+  speed_of_service_notes: string;
+  sales_action_plan: string;
+  cogs_confirm_sales: boolean;
+  cogs_brownie_on_us: boolean;
+  cogs_recording_waste: boolean;
+  cogs_petty_cash_amount: number;
+  cogs_internal_transfers: boolean;
+  purchases_invoices_confirmed: boolean;
+  purchases_bakery_amount: number;
+  purchases_dairy_amount: number;
+  purchases_meat_seafood_amount: number;
+  purchases_other_food_amount: number;
+  purchases_produce_amount: number;
+  usage_review_items: string;
+  final_food_cost_items: string;
+  final_food_cost_comments: string;
   lab_qtd_var_amount: number;
+  labour_transfer_vacation: number;
+  labour_transfer_management: number;
+  labour_transfer_other: number;
+  labour_transfer_notes: string;
   ebidta_budget_period_pct: number;
   ebidta_ptd_pct: number;
   ebidta_variance_pct: number;
   qsr_weekend_lunch_time: string;
   qsr_expo_time: string;
+  window_time: string;
   teamshare_amount: number;
   petty_cash: number;
   waste_amount: number;
@@ -65,7 +89,11 @@ interface WeeklySummaryData {
   boh_promo_summary: string;
   notes: string;
   action_plan_summary: string;
-  rm_issues_cleaning_focus: string;
+  rm_issues: string;
+  cleaning_focus: string;
+  features_notes: string;
+  audit_score_comment: string;
+  ai_summary: string;
   ideal_cooks: number;
   current_cooks: number;
   ideal_prep: number;
@@ -94,7 +122,7 @@ interface WeeklyChefSummaryProps {
 }
 
 export function WeeklyChefSummary({ locationId, locationName, summaryId }: WeeklyChefSummaryProps) {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const [formData, setFormData] = useState<WeeklySummaryData>({
     location_id: locationId,
     week_number: 1,
@@ -111,7 +139,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     usage_amount: 0,
     ideal_usage_amount: 0,
     cogs_qtd: 0,
-    food_sales_silverware: 0,
+    food_sales_labour_push: 0,
     food_sales_oc: 0,
     week_variance_amount: 0,
     budget_food_sales_period: 0,
@@ -125,11 +153,35 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     qtd_labour_variance_pct: 0,
     labour_spent: 0,
     overtime_amount: 0,
+    overtime_notes: '',
+    labour_review_action_plan: '',
+    discount_review_notes: '',
+    speed_of_service_notes: '',
+    sales_action_plan: '',
+    cogs_confirm_sales: false,
+    cogs_brownie_on_us: false,
+    cogs_recording_waste: false,
+    cogs_petty_cash_amount: 0,
+    cogs_internal_transfers: false,
+    purchases_invoices_confirmed: false,
+    purchases_bakery_amount: 0,
+    purchases_dairy_amount: 0,
+    purchases_meat_seafood_amount: 0,
+    purchases_other_food_amount: 0,
+    purchases_produce_amount: 0,
+    usage_review_items: '[]',
+    final_food_cost_items: '[]',
+    final_food_cost_comments: '',
     lab_qtd_var_amount: 0,
+    labour_transfer_vacation: 0,
+    labour_transfer_management: 0,
+    labour_transfer_other: 0,
+    labour_transfer_notes: '',
     ebidta_budget_period_pct: 0,
     ebidta_ptd_pct: 0,
     ebidta_variance_pct: 0,
     qsr_weekend_lunch_time: '',
+    window_time: '',
     qsr_expo_time: '',
     teamshare_amount: 0,
     petty_cash: 0,
@@ -148,7 +200,11 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     boh_promo_summary: '',
     notes: '',
     action_plan_summary: '',
-    rm_issues_cleaning_focus: '',
+    rm_issues: '',
+    cleaning_focus: '',
+    features_notes: '',
+    audit_score_comment: '',
+    ai_summary: '',
     ideal_cooks: 0,
     current_cooks: 0,
     ideal_prep: 0,
@@ -169,26 +225,19 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
   const [savedSummaries, setSavedSummaries] = useState<SavedSummaryOption[]>([]);
   const [activeSummaryId, setActiveSummaryId] = useState<string | null>(summaryId || null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [calculatingNTS, setCalculatingNTS] = useState(false);
-  const [ntsContext, setNtsContext] = useState<{
-    fc_basis: NeedToSaveBasis;
-    fc_variance_dollars: number;
-    fc_weeks_remaining: number;
-    labour_basis: NeedToSaveBasis;
-    labour_variance_dollars: number;
-    labour_weeks_remaining: number;
-  } | null>(null);
 
   const weekBudget = formData.budget_food_sales_period > 0 ? formData.budget_food_sales_period / 4 : 0;
-  const weekVarianceAmount = formData.food_sales_silverware > 0 ? formData.food_sales_silverware - weekBudget : 0;
-  const actualFoodCostPct = formData.food_sales_silverware > 0 ? (formData.usage_amount / formData.food_sales_silverware) * 100 : 0;
+  // Sales Variance = Food Sales (Push) - Food Sales OC
+  const salesVarianceAmount = formData.food_sales_labour_push - formData.food_sales_oc;
+  const actualFoodCostPct = formData.food_sales_labour_push > 0 ? (formData.usage_amount / formData.food_sales_labour_push) * 100 : 0;
   const fcVariance = actualFoodCostPct - formData.budget_food_cost_pct;
-  const theoreticalFoodCostPct = formData.food_sales_silverware > 0 ? (formData.ideal_usage_amount / formData.food_sales_silverware) * 100 : 0;
+  const theoreticalFoodCostPct = formData.food_sales_labour_push > 0 ? (formData.ideal_usage_amount / formData.food_sales_labour_push) * 100 : 0;
   const theoreticalVariance = actualFoodCostPct - theoreticalFoodCostPct;
-  const labourCostPct = formData.food_sales_silverware > 0 ? (formData.labour_spent / formData.food_sales_silverware) * 100 : 0;
+  const labourCostPct = formData.food_sales_labour_push > 0 ? (formData.labour_spent / formData.food_sales_labour_push) * 100 : 0;
   const lcVariance = labourCostPct - formData.labour_budget_pct;
-  const foodSalesSWvsOC = formData.food_sales_oc - formData.food_sales_silverware;
+  const foodSalesSWvsOC = formData.food_sales_oc - formData.food_sales_labour_push;
 
   useEffect(() => {
     const init = async () => {
@@ -233,7 +282,10 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
 
       if (error) throw error;
       if (data) {
-        setFormData(data);
+        setFormData({
+          ...data,
+          food_sales_labour_push: data.food_sales_labour_push || (data as any).food_sales_silverware || 0
+        });
         setActiveSummaryId(id);
       }
     } catch (error) {
@@ -255,7 +307,17 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     locId: string,
     fiscalYear: number,
     periodNumber: number
-  ): Promise<{ budget_food_sales_period: number; sage_food_sales_qtd: number; sage_sales_budget_qtd: number; budget_food_cost_pct: number; labour_budget_pct: number } | null> => {
+  ): Promise<{
+    budget_food_sales_period: number;
+    sage_food_sales_qtd: number;
+    sage_sales_budget_qtd: number;
+    budget_food_cost_pct: number;
+    labour_budget_pct: number;
+    fc_qtd_pct: number;
+    food_cost_ptd_pct: number;
+    labour_qtd_pct: number;
+    labour_cost_ptd_pct: number;
+  } | null> => {
     try {
       const quarterPeriods = getQuarterPeriods(periodNumber);
 
@@ -324,11 +386,16 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
 
       let sage_food_sales_qtd = 0;
       let sage_sales_budget_qtd = 0;
+      let food_cost_qtd_actual = 0;
+      let labour_qtd_actual = 0;
 
       const periodsInQtr = [...new Set(uploads.map(u => {
         const cal = calWeeks.find(c => c.end_date === u.week_ending_date);
         return cal?.period;
       }).filter(Boolean))] as number[];
+
+      let food_cost_ptd_pct = 0;
+      let labour_cost_ptd_pct = 0;
 
       for (const p of periodsInQtr) {
         const periodUploads = uploads.filter(u => {
@@ -340,14 +407,43 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
           const foodSalesItem = lineItems.find(
             i => i.upload_id === latestUpload.id && i.line_item_name === 'Food Sales'
           );
+          const foodCostItem = lineItems.find(
+            i => i.upload_id === latestUpload.id && i.line_item_name === 'Cost of Sales (Food)'
+          );
+          const labourItem = lineItems.find(
+            i => i.upload_id === latestUpload.id && i.line_item_name === 'Kitchen Labour'
+          );
           if (foodSalesItem) {
             sage_food_sales_qtd += foodSalesItem.current_actual || 0;
             sage_sales_budget_qtd += foodSalesItem.current_budget || 0;
           }
+          if (foodCostItem) {
+            food_cost_qtd_actual += foodCostItem.current_actual || 0;
+          }
+          if (labourItem) {
+            labour_qtd_actual += labourItem.current_actual || 0;
+          }
+          if (p === periodNumber) {
+            food_cost_ptd_pct = foodCostItem?.current_actual_pct || 0;
+            labour_cost_ptd_pct = labourItem?.current_actual_pct || 0;
+          }
         }
       }
 
-      return { budget_food_sales_period, sage_food_sales_qtd, sage_sales_budget_qtd, budget_food_cost_pct, labour_budget_pct };
+      const fc_qtd_pct = sage_food_sales_qtd > 0 ? (food_cost_qtd_actual / sage_food_sales_qtd) * 100 : 0;
+      const labour_qtd_pct = sage_food_sales_qtd > 0 ? (labour_qtd_actual / sage_food_sales_qtd) * 100 : 0;
+
+      return {
+        budget_food_sales_period,
+        sage_food_sales_qtd,
+        sage_sales_budget_qtd,
+        budget_food_cost_pct,
+        labour_budget_pct,
+        fc_qtd_pct,
+        food_cost_ptd_pct,
+        labour_qtd_pct,
+        labour_cost_ptd_pct,
+      };
     } catch {
       return null;
     }
@@ -404,6 +500,10 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
         result.sage_sales_budget_qtd = plData.sage_sales_budget_qtd;
         result.budget_food_cost_pct = plData.budget_food_cost_pct;
         result.labour_budget_pct = plData.labour_budget_pct;
+        result.fc_qtd_pct = plData.fc_qtd_pct;
+        result.food_cost_ptd_pct = plData.food_cost_ptd_pct;
+        result.labour_qtd_pct = plData.labour_qtd_pct;
+        result.labour_cost_ptd_pct = plData.labour_cost_ptd_pct;
       } else if (prev) {
         result.budget_food_sales_period = prev.budget_food_sales_period;
         result.budget_food_cost_pct = prev.budget_food_cost_pct;
@@ -439,7 +539,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     usage_amount: 0,
     ideal_usage_amount: 0,
     cogs_qtd: 0,
-    food_sales_silverware: 0,
+    food_sales_labour_push: 0,
     food_sales_oc: 0,
     week_variance_amount: 0,
     budget_food_sales_period: 0,
@@ -453,11 +553,35 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     qtd_labour_variance_pct: 0,
     labour_spent: 0,
     overtime_amount: 0,
+    overtime_notes: '',
+    labour_review_action_plan: '',
+    discount_review_notes: '',
+    speed_of_service_notes: '',
+    sales_action_plan: '',
+    cogs_confirm_sales: false,
+    cogs_brownie_on_us: false,
+    cogs_recording_waste: false,
+    cogs_petty_cash_amount: 0,
+    cogs_internal_transfers: false,
+    purchases_invoices_confirmed: false,
+    purchases_bakery_amount: 0,
+    purchases_dairy_amount: 0,
+    purchases_meat_seafood_amount: 0,
+    purchases_other_food_amount: 0,
+    purchases_produce_amount: 0,
+    usage_review_items: '[]',
+    final_food_cost_items: '[]',
+    final_food_cost_comments: '',
     lab_qtd_var_amount: 0,
+    labour_transfer_vacation: 0,
+    labour_transfer_management: 0,
+    labour_transfer_other: 0,
+    labour_transfer_notes: '',
     ebidta_budget_period_pct: 0,
     ebidta_ptd_pct: 0,
     ebidta_variance_pct: 0,
     qsr_weekend_lunch_time: '',
+    window_time: '',
     qsr_expo_time: '',
     teamshare_amount: 0,
     petty_cash: 0,
@@ -476,7 +600,11 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     boh_promo_summary: '',
     notes: '',
     action_plan_summary: '',
-    rm_issues_cleaning_focus: '',
+    rm_issues: '',
+    cleaning_focus: '',
+    features_notes: '',
+    audit_score_comment: '',
+    ai_summary: '',
     ideal_cooks: 0,
     current_cooks: 0,
     ideal_prep: 0,
@@ -506,6 +634,10 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleGuideFieldsChange = (updates: GuidedFieldUpdates) => {
+    setFormData(prev => ({ ...prev, ...updates }));
+  };
+
   const addFeatureItem = () => {
     setFormData(prev => ({
       ...prev,
@@ -527,41 +659,6 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
         i === index ? { ...item, [field]: value } : item
       )
     }));
-  };
-
-  const handleCalculateNeedToSave = async () => {
-    setCalculatingNTS(true);
-    try {
-      const result = await calculateNeedToSave(
-        locationId,
-        formData.fiscal_year,
-        formData.period_number,
-        formData.week_number
-      );
-      if (result) {
-        setFormData(prev => ({
-          ...prev,
-          fc_need_save_per_week: parseFloat(result.fc_need_save_per_week.toFixed(2)),
-          fc_need_save_per_day: parseFloat(result.fc_need_save_per_day.toFixed(2)),
-          labour_need_save_per_week: parseFloat(result.labour_need_save_per_week.toFixed(2)),
-          labour_need_save_per_day: parseFloat(result.labour_need_save_per_day.toFixed(2)),
-        }));
-        setNtsContext({
-          fc_basis: result.fc_basis,
-          fc_variance_dollars: result.fc_variance_dollars,
-          fc_weeks_remaining: result.fc_weeks_remaining,
-          labour_basis: result.labour_basis,
-          labour_variance_dollars: result.labour_variance_dollars,
-          labour_weeks_remaining: result.labour_weeks_remaining,
-        });
-      } else {
-        setMessage({ type: 'error', text: 'No P&L data found for this location. Upload a P&L statement first.' });
-      }
-    } catch (err) {
-      setMessage({ type: 'error', text: 'Failed to calculate need-to-save values.' });
-    } finally {
-      setCalculatingNTS(false);
-    }
   };
 
   const fetchPTDFromPL = async (): Promise<{ food_cost_ptd_pct: number; labour_cost_ptd_pct: number }> => {
@@ -615,7 +712,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
         .upsert({
           ...formData,
           week_budget: weekBudget,
-          week_variance_amount: weekVarianceAmount,
+          week_variance_amount: salesVarianceAmount,
           qtd_variance_amount: formData.sage_food_sales_qtd - formData.sage_sales_budget_qtd,
           food_cost_ptd_pct: ptdData.food_cost_ptd_pct,
           labour_cost_ptd_pct: ptdData.labour_cost_ptd_pct,
@@ -684,6 +781,61 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     );
   };
 
+  const handleExportPdf = async () => {
+    let weekEndingDate: string | undefined;
+    try {
+      const { data: calWeek } = await supabase
+        .from('fiscal_calendar')
+        .select('end_date')
+        .eq('fiscal_year', formData.fiscal_year)
+        .eq('period', formData.period_number)
+        .eq('week', formData.week_number)
+        .maybeSingle();
+      weekEndingDate = calWeek?.end_date;
+    } catch {
+      weekEndingDate = undefined;
+    }
+
+    let foodCostCategories: FoodCostCategoryRow[] | undefined;
+    try {
+      const parsed = JSON.parse(formData.final_food_cost_items || '[]');
+      const categories = Array.isArray(parsed) ? parsed : parsed?.categories;
+      if (Array.isArray(categories) && categories.length > 0) {
+        foodCostCategories = categories.map((c: Record<string, unknown>) => ({
+          category: String(c.category ?? ''),
+          opening: Number(c.opening) || 0,
+          glPurchases: Number(c.glPurchases) || 0,
+          closing: Number(c.closing) || 0,
+          waste: Number(c.waste) || 0,
+          actualUsage: Number(c.actualUsage) || 0,
+          idealUsage: Number(c.idealUsage) || 0,
+          variance: Number(c.variance) || 0,
+        }));
+      }
+    } catch {
+      foodCostCategories = undefined;
+    }
+
+    exportChefSummaryToPdf(
+      formData,
+      locationName,
+      weekBudget,
+      actualFoodCostPct,
+      fcVariance,
+      theoreticalFoodCostPct,
+      theoreticalVariance,
+      labourCostPct,
+      lcVariance,
+      user?.name,
+      weekEndingDate,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      foodCostCategories
+    );
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 p-6 flex items-center justify-center">
@@ -736,6 +888,14 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             </div>
+            <button
+              onClick={() => setShowGuide(true)}
+              className="flex items-center gap-1.5 px-3 py-2 text-slate-700 hover:bg-slate-100 border border-slate-300 rounded-lg transition-colors text-sm shrink-0"
+              title="Open the guided weekly package"
+            >
+              <ClipboardCheck className="w-4 h-4" />
+              <span>Guided Package</span>
+            </button>
             {activeSummaryId && (
               <button
                 onClick={() => setShowDeleteConfirm(true)}
@@ -797,6 +957,75 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
           </div>
         )}
 
+        {showGuide && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 backdrop-blur-sm py-8 px-4">
+            <GuidedWeeklyPackage
+              initialValues={{
+                budget_food_sales_period: formData.budget_food_sales_period,
+                labour_budget_pct: formData.labour_budget_pct,
+                food_sales_labour_push: formData.food_sales_labour_push,
+                labour_spent: formData.labour_spent,
+                overtime_amount: formData.overtime_amount,
+                overtime_notes: formData.overtime_notes,
+                boh_promo_amount: formData.boh_promo_amount,
+                labour_transfer_vacation: formData.labour_transfer_vacation,
+                labour_transfer_management: formData.labour_transfer_management,
+                labour_transfer_other: formData.labour_transfer_other,
+                labour_transfer_notes: formData.labour_transfer_notes,
+                labour_review_action_plan: formData.labour_review_action_plan,
+                discount_review_notes: formData.discount_review_notes,
+                speed_of_service_notes: formData.speed_of_service_notes,
+                sales_action_plan: formData.sales_action_plan,
+                cogs_confirm_sales: formData.cogs_confirm_sales,
+                cogs_brownie_on_us: formData.cogs_brownie_on_us,
+                cogs_recording_waste: formData.cogs_recording_waste,
+                cogs_petty_cash_amount: formData.cogs_petty_cash_amount,
+                cogs_internal_transfers: formData.cogs_internal_transfers,
+                purchases_invoices_confirmed: formData.purchases_invoices_confirmed,
+                purchases_bakery_amount: formData.purchases_bakery_amount,
+                purchases_dairy_amount: formData.purchases_dairy_amount,
+                purchases_meat_seafood_amount: formData.purchases_meat_seafood_amount,
+                purchases_other_food_amount: formData.purchases_other_food_amount,
+                purchases_produce_amount: formData.purchases_produce_amount,
+                usage_review_items: formData.usage_review_items,
+                final_food_cost_items: formData.final_food_cost_items,
+                final_food_cost_comments: formData.final_food_cost_comments,
+                usage_amount: formData.usage_amount,
+                ideal_usage_amount: formData.ideal_usage_amount,
+                waste_amount: formData.waste_amount,
+                qsr_expo_time: formData.qsr_expo_time,
+                window_time: formData.window_time,
+                sous_vac_days: formData.sous_vac_days,
+                ideal_cooks: formData.ideal_cooks,
+                current_cooks: formData.current_cooks,
+                ideal_prep: formData.ideal_prep,
+                current_prep: formData.current_prep,
+                ideal_dish: formData.ideal_dish,
+                current_dish: formData.current_dish,
+                ideal_other: formData.ideal_other,
+                current_other: formData.current_other,
+                hiring_notes: formData.hiring_notes,
+                tm_mots_of_note: formData.tm_mots_of_note,
+                development_path_updates: formData.development_path_updates,
+                rm_issues: formData.rm_issues,
+                cleaning_focus: formData.cleaning_focus,
+                feature_items: formData.feature_items,
+                features_notes: formData.features_notes,
+                last_audit_score_pct: formData.last_audit_score_pct,
+                audit_score_comment: formData.audit_score_comment,
+                ai_summary: formData.ai_summary,
+              }}
+              onFieldsChange={handleGuideFieldsChange}
+              onClose={() => setShowGuide(false)}
+              locationId={locationId}
+              locationName={locationName}
+              fiscalYear={formData.fiscal_year}
+              periodNumber={formData.period_number}
+              weekNumber={formData.week_number}
+            />
+          </div>
+        )}
+
         {message && (
           <div className={`mb-6 p-4 rounded-lg ${
             message.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'
@@ -843,12 +1072,12 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
             <h3 className="text-lg font-semibold text-slate-900 mb-4">Sales Data</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Food Sales Silverware</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Food Sales (Push)</label>
                 <input
                   type="number"
                   step="0.01"
-                  value={formData.food_sales_silverware || ''}
-                  onChange={(e) => handleInputChange('food_sales_silverware', parseFloat(e.target.value) || 0)}
+                  value={formData.food_sales_labour_push || ''}
+                  onChange={(e) => handleInputChange('food_sales_labour_push', parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
@@ -885,9 +1114,9 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">+/- Budget <span className="text-xs text-slate-400">(calculated)</span></label>
-                <div className={`w-full px-3 py-2 border rounded-lg font-medium ${weekVarianceAmount >= 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
-                  {weekVarianceAmount >= 0 ? '+' : ''}${weekVarianceAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <label className="block text-sm font-medium text-slate-700 mb-2">Sales Variance <span className="text-xs text-slate-400">(calculated)</span></label>
+                <div className={`w-full px-3 py-2 border rounded-lg font-medium ${salesVarianceAmount >= 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                  {salesVarianceAmount >= 0 ? '+' : ''}${salesVarianceAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </div>
               <div>
@@ -923,24 +1152,16 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
             <h3 className="text-lg font-semibold text-slate-900 mb-4">Food Cost Performance</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Usage Amount</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.usage_amount || ''}
-                  onChange={(e) => handleInputChange('usage_amount', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
+                <label className="block text-sm font-medium text-slate-700 mb-2">Usage Amount <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  ${(formData.usage_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Ideal Usage</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.ideal_usage_amount || ''}
-                  onChange={(e) => handleInputChange('ideal_usage_amount', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
+                <label className="block text-sm font-medium text-slate-700 mb-2">Ideal Usage <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  ${(formData.ideal_usage_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Petty Cash</label>
@@ -987,14 +1208,16 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">On Hand Amount</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.on_hand_amount || ''}
-                  onChange={(e) => handleInputChange('on_hand_amount', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
+                <label className="block text-sm font-medium text-slate-700 mb-2">Ending Inventory Total <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  ${(formData.on_hand_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Final Food Cost Comments <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 min-h-[3rem] whitespace-pre-wrap">
+                  {formData.final_food_cost_comments || '—'}
+                </div>
               </div>
             </div>
           </div>
@@ -1023,13 +1246,10 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Sous Vac Days</label>
-                <input
-                  type="number"
-                  value={formData.sous_vac_days || ''}
-                  onChange={(e) => handleInputChange('sous_vac_days', parseInt(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
+                <label className="block text-sm font-medium text-slate-700 mb-2">Sous Vac Days <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  {formData.sous_vac_days || 0}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Labour Budget %</label>
@@ -1053,6 +1273,51 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   {lcVariance > 0 ? '+' : ''}{lcVariance.toFixed(2)}%
                 </div>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Transfer to Vacation <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  ${(formData.labour_transfer_vacation || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Transfer to Management Labour <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  ${(formData.labour_transfer_management || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Transfer to Other <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  ${(formData.labour_transfer_other || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Labour Transfer Notes</label>
+                <textarea
+                  value={formData.labour_transfer_notes}
+                  onChange={(e) => handleInputChange('labour_transfer_notes', e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                />
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Overtime Explanation <span className="text-xs text-slate-400">(from guide)</span></label>
+                <textarea
+                  value={formData.overtime_notes}
+                  onChange={(e) => handleInputChange('overtime_notes', e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                />
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Labour Review Action Plan <span className="text-xs text-slate-400">(from guide)</span></label>
+                <textarea
+                  value={formData.labour_review_action_plan}
+                  onChange={(e) => handleInputChange('labour_review_action_plan', e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                />
+              </div>
             </div>
           </div>
 
@@ -1060,22 +1325,16 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
             <h3 className="text-lg font-semibold text-slate-900 mb-4">Other Metrics</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">QSR Weekend Lunch Time</label>
-                <input
-                  type="text"
-                  value={formData.qsr_weekend_lunch_time}
-                  onChange={(e) => handleInputChange('qsr_weekend_lunch_time', e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                />
+                <label className="block text-sm font-medium text-slate-700 mb-2">Window Time <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  {formData.window_time || '—'}
+                </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">QSR Expo Time</label>
-                <input
-                  type="text"
-                  value={formData.qsr_expo_time}
-                  onChange={(e) => handleInputChange('qsr_expo_time', e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                />
+                <label className="block text-sm font-medium text-slate-700 mb-2">Dine In Expo Time <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  {formData.qsr_expo_time || '—'}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Teamshare</label>
@@ -1088,17 +1347,13 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Waste</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.waste_amount || ''}
-                  onChange={(e) => handleInputChange('waste_amount', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
+                <label className="block text-sm font-medium text-slate-700 mb-2">Waste <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  ${(formData.waste_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Last Audit Score %</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Last Audit Score % <span className="text-xs text-slate-400">(from guide)</span></label>
                 <input
                   type="number"
                   step="0.01"
@@ -1139,11 +1394,38 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   />
                 </div>
               </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Discount Review Comments <span className="text-xs text-slate-400">(from guide)</span></label>
+                <textarea
+                  value={formData.discount_review_notes}
+                  onChange={(e) => handleInputChange('discount_review_notes', e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                />
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Speed of Service Comments <span className="text-xs text-slate-400">(from guide)</span></label>
+                <textarea
+                  value={formData.speed_of_service_notes}
+                  onChange={(e) => handleInputChange('speed_of_service_notes', e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                />
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Sales Action Plan <span className="text-xs text-slate-400">(from guide)</span></label>
+                <textarea
+                  value={formData.sales_action_plan}
+                  onChange={(e) => handleInputChange('sales_action_plan', e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                />
+              </div>
             </div>
           </div>
 
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Team Staffing</h3>
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Team Staffing <span className="text-xs text-slate-400 font-normal">(from guide)</span></h3>
             <div className="space-y-3">
               <div className="grid grid-cols-4 gap-4 font-medium text-slate-700 text-sm pb-1 border-b border-slate-100">
                 <div>Position</div>
@@ -1185,7 +1467,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
           </div>
 
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Feature Items</h3>
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Feature Items <span className="text-xs text-slate-400 font-normal">(from guide)</span></h3>
             <div className="space-y-4">
               {formData.feature_items.map((item, index) => (
                 <div key={index} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
@@ -1233,6 +1515,15 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 <Plus className="w-5 h-5" />
                 Add Feature Item
               </button>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Feature Notes <span className="text-xs text-slate-400">(from guide)</span></label>
+                <textarea
+                  value={formData.features_notes}
+                  onChange={(e) => handleInputChange('features_notes', e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                />
+              </div>
             </div>
           </div>
 
@@ -1241,90 +1532,39 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
             <div className="space-y-4">
 
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm font-semibold text-slate-700">Need to Save — from P&L</p>
-                  <button
-                    type="button"
-                    onClick={handleCalculateNeedToSave}
-                    disabled={calculatingNTS}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-slate-800 text-white rounded-lg hover:bg-slate-700 disabled:opacity-50 transition-colors"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${calculatingNTS ? 'animate-spin' : ''}`} />
-                    {calculatingNTS ? 'Calculating...' : 'Calculate from P&L'}
-                  </button>
-                </div>
+                <p className="text-sm font-semibold text-slate-700 mb-3">Need to Save — from P&L <span className="text-xs text-slate-400 font-normal">(from guide)</span></p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Food Cost</p>
-                    {ntsContext && ntsContext.fc_basis !== 'none' && (
-                      <div className="mb-2 px-2 py-1.5 bg-amber-50 border border-amber-100 rounded text-xs text-amber-700">
-                        Based on <span className="font-semibold">{ntsContext.fc_basis.toUpperCase()}</span> variance of{' '}
-                        <span className="font-semibold">${Math.abs(ntsContext.fc_variance_dollars).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        {' '}over <span className="font-semibold">{ntsContext.fc_weeks_remaining}</span> week{ntsContext.fc_weeks_remaining !== 1 ? 's' : ''} remaining
-                      </div>
-                    )}
-                    {ntsContext && ntsContext.fc_basis === 'none' && (
-                      <div className="mb-2 px-2 py-1.5 bg-green-50 border border-green-100 rounded text-xs text-green-700 font-medium">
-                        On track — all horizons green
-                      </div>
-                    )}
                     <div className="flex gap-2">
                       <div className="flex-1">
                         <label className="block text-xs text-slate-500 mb-1">Per Week</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={formData.fc_need_save_per_week || ''}
-                          onChange={(e) => handleInputChange('fc_need_save_per_week', parseFloat(e.target.value) || 0)}
-                          className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${formData.fc_need_save_per_week > 0 ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-slate-300 bg-white text-slate-700'}`}
-                        />
+                        <div className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold ${formData.fc_need_save_per_week > 0 ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-slate-300 bg-white text-slate-700'}`}>
+                          ${(formData.fc_need_save_per_week || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
                       </div>
                       <div className="flex-1">
                         <label className="block text-xs text-slate-500 mb-1">Per Day</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={formData.fc_need_save_per_day || ''}
-                          onChange={(e) => handleInputChange('fc_need_save_per_day', parseFloat(e.target.value) || 0)}
-                          className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${formData.fc_need_save_per_day > 0 ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-slate-300 bg-white text-slate-700'}`}
-                        />
+                        <div className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold ${formData.fc_need_save_per_day > 0 ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-slate-300 bg-white text-slate-700'}`}>
+                          ${(formData.fc_need_save_per_day || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
                       </div>
                     </div>
                   </div>
                   <div>
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Labour</p>
-                    {ntsContext && ntsContext.labour_basis !== 'none' && (
-                      <div className="mb-2 px-2 py-1.5 bg-blue-50 border border-blue-100 rounded text-xs text-blue-700">
-                        Based on <span className="font-semibold">{ntsContext.labour_basis.toUpperCase()}</span> variance of{' '}
-                        <span className="font-semibold">${Math.abs(ntsContext.labour_variance_dollars).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        {' '}over <span className="font-semibold">{ntsContext.labour_weeks_remaining}</span> week{ntsContext.labour_weeks_remaining !== 1 ? 's' : ''} remaining
-                      </div>
-                    )}
-                    {ntsContext && ntsContext.labour_basis === 'none' && (
-                      <div className="mb-2 px-2 py-1.5 bg-green-50 border border-green-100 rounded text-xs text-green-700 font-medium">
-                        On track — all horizons green
-                      </div>
-                    )}
                     <div className="flex gap-2">
                       <div className="flex-1">
                         <label className="block text-xs text-slate-500 mb-1">Per Week</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={formData.labour_need_save_per_week || ''}
-                          onChange={(e) => handleInputChange('labour_need_save_per_week', parseFloat(e.target.value) || 0)}
-                          className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${formData.labour_need_save_per_week > 0 ? 'border-blue-300 bg-blue-50 text-blue-900' : 'border-slate-300 bg-white text-slate-700'}`}
-                        />
+                        <div className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold ${formData.labour_need_save_per_week > 0 ? 'border-blue-300 bg-blue-50 text-blue-900' : 'border-slate-300 bg-white text-slate-700'}`}>
+                          ${(formData.labour_need_save_per_week || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
                       </div>
                       <div className="flex-1">
                         <label className="block text-xs text-slate-500 mb-1">Per Day</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={formData.labour_need_save_per_day || ''}
-                          onChange={(e) => handleInputChange('labour_need_save_per_day', parseFloat(e.target.value) || 0)}
-                          className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${formData.labour_need_save_per_day > 0 ? 'border-blue-300 bg-blue-50 text-blue-900' : 'border-slate-300 bg-white text-slate-700'}`}
-                        />
+                        <div className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold ${formData.labour_need_save_per_day > 0 ? 'border-blue-300 bg-blue-50 text-blue-900' : 'border-slate-300 bg-white text-slate-700'}`}>
+                          ${(formData.labour_need_save_per_day || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1332,34 +1572,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Food Cost Summary</label>
-                <textarea
-                  value={formData.food_cost_summary}
-                  onChange={(e) => handleInputChange('food_cost_summary', e.target.value)}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Labour Summary</label>
-                <textarea
-                  value={formData.labour_summary}
-                  onChange={(e) => handleInputChange('labour_summary', e.target.value)}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">BOH Promo Summary</label>
-                <textarea
-                  value={formData.boh_promo_summary}
-                  onChange={(e) => handleInputChange('boh_promo_summary', e.target.value)}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Hiring Notes</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Hiring Notes <span className="text-xs text-slate-400">(from guide)</span></label>
                 <textarea
                   value={formData.hiring_notes}
                   onChange={(e) => handleInputChange('hiring_notes', e.target.value)}
@@ -1368,7 +1581,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">TM MOTs of Note</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">TM MOTs of Note <span className="text-xs text-slate-400">(from guide)</span></label>
                 <textarea
                   value={formData.tm_mots_of_note}
                   onChange={(e) => handleInputChange('tm_mots_of_note', e.target.value)}
@@ -1377,7 +1590,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Development Path Updates</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Development Path Updates <span className="text-xs text-slate-400">(from guide)</span></label>
                 <textarea
                   value={formData.development_path_updates}
                   onChange={(e) => handleInputChange('development_path_updates', e.target.value)}
@@ -1386,20 +1599,38 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">R&M Issues / Cleaning Focus</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">R&M Issues <span className="text-xs text-slate-400">(from guide)</span></label>
                 <textarea
-                  value={formData.rm_issues_cleaning_focus}
-                  onChange={(e) => handleInputChange('rm_issues_cleaning_focus', e.target.value)}
+                  value={formData.rm_issues}
+                  onChange={(e) => handleInputChange('rm_issues', e.target.value)}
                   rows={3}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Action Plan Summary</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Cleaning Focus <span className="text-xs text-slate-400">(from guide)</span></label>
                 <textarea
-                  value={formData.action_plan_summary}
-                  onChange={(e) => handleInputChange('action_plan_summary', e.target.value)}
+                  value={formData.cleaning_focus}
+                  onChange={(e) => handleInputChange('cleaning_focus', e.target.value)}
                   rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Audit Score Comment <span className="text-xs text-slate-400">(from guide)</span></label>
+                <textarea
+                  value={formData.audit_score_comment}
+                  onChange={(e) => handleInputChange('audit_score_comment', e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">AI Summary <span className="text-xs text-slate-400">(from guide)</span></label>
+                <textarea
+                  value={formData.ai_summary}
+                  onChange={(e) => handleInputChange('ai_summary', e.target.value)}
+                  rows={5}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
                 />
               </div>
@@ -1413,6 +1644,13 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
             >
               <Download className="w-5 h-5" />
               Export to Excel
+            </button>
+            <button
+              onClick={handleExportPdf}
+              className="flex items-center gap-2 px-6 py-3 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+            >
+              <Download className="w-5 h-5" />
+              Export to PDF
             </button>
             <button
               onClick={handleSave}

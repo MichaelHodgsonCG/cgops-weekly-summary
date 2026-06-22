@@ -66,7 +66,7 @@ export function ChefSummaryImporter() {
         usage_amount: parsedData.usage_amount,
         ideal_usage_amount: parsedData.ideal_usage_amount,
         cogs_qtd: parsedData.cogs_qtd,
-        food_sales_silverware: parsedData.food_sales_silverware,
+        food_sales_labour_push: parsedData.food_sales_labour_push,
         food_sales_oc: parsedData.food_sales_oc,
         week_variance_amount: parsedData.week_variance_amount,
         budget_food_sales_period: parsedData.budget_food_sales_period,

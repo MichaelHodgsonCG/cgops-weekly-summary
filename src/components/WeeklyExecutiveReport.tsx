@@ -101,7 +101,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
     }
 
     const totalSales = ptdSummaries.reduce((sum, s) =>
-      sum + Number(s.sage_food_sales_qtd || 0) + Number(s.food_sales_silverware || 0) + Number(s.food_sales_oc || 0), 0);
+      sum + Number(s.sage_food_sales_qtd || 0) + Number(s.food_sales_labour_push || s.food_sales_silverware || 0) + Number(s.food_sales_oc || 0), 0);
     const totalFoodCost = ptdSummaries.reduce((sum, s) => sum + Number(s.usage_amount || 0), 0);
     const totalLabourCost = ptdSummaries.reduce((sum, s) => sum + Number(s.labour_spent || 0), 0);
 
@@ -397,7 +397,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
 
       // Build restaurant metrics
       const restaurants = (currentWeekData || []).map(current => {
-        const weekSales = current.food_sales_silverware || 0;
+        const weekSales = current.food_sales_labour_push || current.food_sales_silverware || 0;
         const locationPL = plData?.filter(pl => pl.location_id === current.location_id) || [];
         const foodSalesPL = locationPL.find(pl => pl.line_item_name === 'Food Sales');
         const weekBudgetPeriod = foodSalesPL?.current_budget || current.budget_food_sales_period || 0;
@@ -949,7 +949,7 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
 
     if (currentWeekData) {
       const restaurantMetrics = currentWeekData.map(current => {
-        const weekSales = current.food_sales_silverware || 0;
+        const weekSales = current.food_sales_labour_push || current.food_sales_silverware || 0;
 
         const locationPL = plData?.filter(pl => pl.location_id === current.location_id) || [];
         const foodSalesPL = locationPL.find(pl => pl.line_item_name === 'Food Sales');
