@@ -100,6 +100,7 @@ export function ChefSummariesTable({ fiscalYear, period, week }: ChefSummariesTa
 
     const transformedData = (data || []).map((item: any) => ({
       ...item,
+      food_sales_labour_push: item.food_sales_labour_push ?? item.food_sales_silverware ?? 0,
       location_name: item.locations?.name || 'Unknown'
     }));
 

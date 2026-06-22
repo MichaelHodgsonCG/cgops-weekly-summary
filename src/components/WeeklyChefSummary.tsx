@@ -282,7 +282,10 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
 
       if (error) throw error;
       if (data) {
-        setFormData(data);
+        setFormData({
+          ...data,
+          food_sales_labour_push: data.food_sales_labour_push || (data as any).food_sales_silverware || 0
+        });
         setActiveSummaryId(id);
       }
     } catch (error) {
