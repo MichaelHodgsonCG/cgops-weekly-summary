@@ -1,7 +1,19 @@
 import { useState } from 'react';
+import * as XLSX from 'xlsx';
 import { Upload, AlertCircle, CheckCircle, FileText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { parseChefSummaryCSV } from '../lib/chefSummaryParser';
+
+async function readFileAsCsvText(file: File): Promise<string> {
+  if (file.name.toLowerCase().endsWith('.csv')) {
+    return file.text();
+  }
+
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: 'array' });
+  const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+  return XLSX.utils.sheet_to_csv(firstSheet);
+}
 
 export function ChefSummaryImporter() {
   const [file, setFile] = useState<File | null>(null);
@@ -26,13 +38,13 @@ export function ChefSummaryImporter() {
     setMessage(null);
 
     try {
-      const text = await file.text();
+      const text = await readFileAsCsvText(file);
       const parsedData = parseChefSummaryCSV(text);
 
       const { data: location, error: locationError } = await supabase
         .from('locations')
         .select('id, code')
-        .eq('code', parsedData.location_code)
+        .or(`code.eq.${parsedData.location_code},name.eq.${parsedData.location_code}`)
         .maybeSingle();
 
       if (locationError || !location) {
@@ -168,7 +180,7 @@ export function ChefSummaryImporter() {
         </div>
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Import Chef Summary</h2>
-          <p className="text-sm text-slate-600">Upload a CSV file from the weekly chef summary report</p>
+          <p className="text-sm text-slate-600">Upload a CSV or Excel file from the weekly chef summary report</p>
         </div>
       </div>
 
@@ -195,7 +207,7 @@ export function ChefSummaryImporter() {
         <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:border-slate-400 transition-colors">
           <input
             type="file"
-            accept=".csv"
+            accept=".csv,.xlsx,.xls"
             onChange={handleFileChange}
             className="hidden"
             id="chef-summary-file"
@@ -207,10 +219,10 @@ export function ChefSummaryImporter() {
           >
             <FileText className="w-12 h-12 text-slate-400" />
             <span className="text-sm font-medium text-slate-700">
-              {file ? file.name : 'Click to select CSV file'}
+              {file ? file.name : 'Click to select CSV or Excel file'}
             </span>
             <span className="text-xs text-slate-500">
-              CSV files only
+              CSV or Excel (.xlsx) files
             </span>
           </label>
         </div>
@@ -237,8 +249,8 @@ export function ChefSummaryImporter() {
       <div className="mt-6 p-4 bg-slate-50 rounded-lg">
         <h3 className="text-sm font-semibold text-slate-900 mb-2">File Requirements:</h3>
         <ul className="text-xs text-slate-600 space-y-1">
-          <li>• CSV format from the weekly chef performance summary</li>
-          <li>• Must include location code, period, and week number</li>
+          <li>• CSV or Excel format from the weekly chef performance summary (new or legacy template)</li>
+          <li>• Must include location name/code, period, and week number</li>
           <li>• File will be imported or updated if it already exists</li>
         </ul>
       </div>

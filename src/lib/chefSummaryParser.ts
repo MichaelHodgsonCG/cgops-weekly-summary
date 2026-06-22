@@ -4,7 +4,11 @@ export interface ChefSummaryData {
   location_code: string;
 
   budget_food_cost_pct: number;
+  actual_food_cost_pct: number;
+  fc_variance: number;
+  theoretical_food_cost_pct: number;
   on_hand_amount: number;
+  theoretical_variance: number;
 
   sage_food_sales_qtd: number;
   sage_fcost_qtd_pct: number;
@@ -19,9 +23,12 @@ export interface ChefSummaryData {
   food_sales_oc: number;
   week_variance_amount: number;
   budget_food_sales_period: number;
+  week_budget: number;
   qtd_variance_amount: number;
 
   labour_budget_pct: number;
+  labour_cost_pct: number;
+  lc_variance: number;
   sage_labour_budget_qtd_pct: number;
   sage_lcost_qtd_pct: number;
   labour_cost_ptd_pct: number;
@@ -45,6 +52,7 @@ export interface ChefSummaryData {
   boh_promo_amount: number;
   promo_ptd: number;
   promo_qtd: number;
+  weeks_remaining_in_qtr: number;
   sous_vac_days: number;
 
   fc_need_save_per_week: number;
@@ -91,49 +99,65 @@ function parsePercentage(value: string): number {
   return isNaN(num) ? 0 : (isNegative ? -num : num);
 }
 
+// Parse CSV line handling quoted fields with commas
+function parseCsvLine(line: string): string[] {
+  const cells: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      cells.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+function sanitizeText(text: string): string {
+  return text
+    .replace(/\u2018|\u2019|\u0092/g, "'")
+    .replace(/\u201C|\u201D/g, '"')
+    .replace(/\u2013/g, '-')
+    .replace(/\u2014/g, '--')
+    .replace(/[\uFFFD\u0080-\u009F]/g, "'");
+}
+
+function getCell(line: string, index: number): string {
+  const cells = parseCsvLine(line || '');
+  return sanitizeText(cells[index] || '');
+}
+
+// The legacy chef summary template puts "CULINARY PERFORMANCE SUMMARY" on the
+// first line, whereas the current guided-workflow export puts the
+// fiscal year/period/week line first. Use that ordering to tell them apart.
+function isLegacyFormat(lines: string[]): boolean {
+  return getCell(lines[0], 0).toUpperCase().includes('CULINARY PERFORMANCE SUMMARY');
+}
+
 export function parseChefSummaryCSV(csvText: string): ChefSummaryData {
   // Handle both Unix and Windows line endings
   const lines = csvText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+
+  if (isLegacyFormat(lines)) {
+    return parseLegacyChefSummaryCSV(lines);
+  }
+
+  return parseCurrentChefSummaryCSV(lines);
+}
+
+function parseCurrentChefSummaryCSV(lines: string[]): ChefSummaryData {
   const data: Partial<ChefSummaryData> = {
     feature_items: [],
     hires: [],
     terminated: []
-  };
-
-  // Parse CSV line handling quoted fields with commas
-  const parseCsvLine = (line: string): string[] => {
-    const cells: string[] = [];
-    let current = '';
-    let inQuotes = false;
-
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        cells.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    cells.push(current.trim());
-    return cells;
-  };
-
-  const sanitizeText = (text: string): string => {
-    return text
-      .replace(/\u2018|\u2019|\u0092/g, "'")
-      .replace(/\u201C|\u201D/g, '"')
-      .replace(/\u2013/g, '-')
-      .replace(/\u2014/g, '--')
-      .replace(/[\uFFFD\u0080-\u009F]/g, "'");
-  };
-
-  const getCell = (line: string, index: number): string => {
-    const cells = parseCsvLine(line);
-    return sanitizeText(cells[index] || '');
   };
 
   // Line 1 (index 0): F26,,PERIOD : ,8,WEEK :,2
@@ -288,6 +312,140 @@ export function parseChefSummaryCSV(csvText: string): ChefSummaryData {
     const notes = getCell(line, 2);
 
     if (name && name.trim() !== '' && name.trim() !== ' ') {
+      const sold = parseInt(soldText) || 0;
+      featureItems.push({ name: name.trim(), sold, notes: notes || undefined });
+    }
+  }
+  data.feature_items = featureItems;
+
+  return data as ChefSummaryData;
+}
+
+// Legacy template layout (pre guided-workflow), e.g.:
+// 0  CULINARY PERFORMANCE SUMMARY,,,,LOCATION:,<code>
+// 1  FY2026,,PERIOD:,11,WEEK:,2
+// 4  BUDGET FOOD COST %,..,ACTUAL FOOD COST %,..,FC VARIANCE,..
+// 5  THEORETICAL FC %,..,ON HAND,..,THEORETICAL VAR,..
+// ...section header rows and blank rows separate each block.
+// The legacy template never captured weeks-remaining-in-qtr or the
+// fc/labour "need to save" figures, so those default to 0.
+function parseLegacyChefSummaryCSV(lines: string[]): ChefSummaryData {
+  const data: Partial<ChefSummaryData> = {
+    feature_items: [],
+    hires: [],
+    terminated: []
+  };
+
+  data.location_code = getCell(lines[0], 5);
+
+  data.period_number = parseInt(getCell(lines[1], 3)) || 0;
+  data.week_number = parseInt(getCell(lines[1], 5)) || 0;
+
+  data.budget_food_cost_pct = parsePercentage(getCell(lines[4], 1));
+  data.actual_food_cost_pct = parsePercentage(getCell(lines[4], 3));
+  data.fc_variance = parsePercentage(getCell(lines[4], 5));
+
+  data.theoretical_food_cost_pct = parsePercentage(getCell(lines[5], 1));
+  data.on_hand_amount = parseNumber(getCell(lines[5], 3));
+  data.theoretical_variance = parsePercentage(getCell(lines[5], 5));
+
+  data.sage_food_sales_qtd = parseNumber(getCell(lines[6], 1));
+  data.sage_fcost_qtd_pct = parsePercentage(getCell(lines[6], 3));
+  data.food_cost_ptd_pct = parsePercentage(getCell(lines[6], 5));
+
+  data.sage_sales_budget_qtd = parseNumber(getCell(lines[7], 1));
+  data.fc_qtd_pct = parsePercentage(getCell(lines[7], 3));
+  data.qtd_variance_pct = parsePercentage(getCell(lines[7], 5));
+
+  data.usage_amount = parseNumber(getCell(lines[8], 1));
+  data.ideal_usage_amount = parseNumber(getCell(lines[8], 3));
+  data.cogs_qtd = parseNumber(getCell(lines[8], 5));
+
+  data.food_sales_labour_push = parseNumber(getCell(lines[9], 1));
+  data.food_sales_oc = parseNumber(getCell(lines[9], 3));
+  data.week_variance_amount = parseNumber(getCell(lines[9], 5));
+
+  data.budget_food_sales_period = parseNumber(getCell(lines[10], 1));
+  data.week_budget = parseNumber(getCell(lines[10], 3));
+  data.qtd_variance_amount = parseNumber(getCell(lines[10], 5));
+
+  data.labour_budget_pct = parsePercentage(getCell(lines[13], 1));
+  data.labour_cost_pct = parsePercentage(getCell(lines[13], 3));
+  data.lc_variance = parsePercentage(getCell(lines[13], 5));
+
+  data.sage_labour_budget_qtd_pct = parsePercentage(getCell(lines[14], 1));
+  data.sage_lcost_qtd_pct = parsePercentage(getCell(lines[14], 3));
+  data.labour_cost_ptd_pct = parsePercentage(getCell(lines[14], 5));
+
+  data.labour_qtd_pct = parsePercentage(getCell(lines[15], 1));
+  data.lab_ptd_var_amount = parseNumber(getCell(lines[15], 3));
+  data.qtd_labour_variance_pct = parsePercentage(getCell(lines[15], 5));
+
+  data.labour_spent = parseNumber(getCell(lines[16], 1));
+  data.overtime_amount = parseNumber(getCell(lines[16], 3));
+  data.lab_qtd_var_amount = parseNumber(getCell(lines[16], 5));
+
+  data.ebidta_budget_period_pct = parsePercentage(getCell(lines[19], 1));
+  data.ebidta_ptd_pct = parsePercentage(getCell(lines[19], 3));
+  data.ebidta_variance_pct = parsePercentage(getCell(lines[19], 5));
+
+  data.qsr_weekend_lunch_time = getCell(lines[20], 1);
+  data.qsr_expo_time = getCell(lines[20], 3);
+  data.teamshare_amount = parseNumber(getCell(lines[20], 5));
+
+  data.petty_cash = parseNumber(getCell(lines[21], 1));
+  data.waste_amount = parseNumber(getCell(lines[21], 3));
+  data.last_audit_score_pct = parsePercentage(getCell(lines[21], 5));
+
+  data.boh_promo_amount = parseNumber(getCell(lines[22], 1));
+  data.promo_ptd = parseNumber(getCell(lines[22], 3));
+  data.promo_qtd = parseNumber(getCell(lines[22], 5));
+
+  data.sous_vac_days = parseInt(getCell(lines[23], 1)) || 0;
+
+  data.weeks_remaining_in_qtr = 0;
+  data.fc_need_save_per_week = 0;
+  data.fc_need_save_per_day = 0;
+  data.labour_need_save_per_week = 0;
+  data.labour_need_save_per_day = 0;
+
+  data.food_cost_summary = getCell(lines[26], 0);
+  data.labour_summary = getCell(lines[29], 0);
+  data.boh_promo_summary = getCell(lines[32], 0);
+  data.tm_mots_of_note = getCell(lines[35], 0);
+  data.development_path_updates = getCell(lines[38], 0);
+  data.rm_issues_cleaning_focus = getCell(lines[41], 0);
+  data.action_plan_summary = getCell(lines[44], 0);
+
+  data.hires = [];
+  data.terminated = [];
+  data.notes = '';
+
+  // Row 47 (index 47) header: POSITION,IDEAL #,CURRENT #,NEEDED
+  data.ideal_cooks = parseInt(getCell(lines[48], 1)) || 0;
+  data.current_cooks = parseInt(getCell(lines[48], 2)) || 0;
+
+  data.ideal_prep = parseInt(getCell(lines[49], 1)) || 0;
+  data.current_prep = parseInt(getCell(lines[49], 2)) || 0;
+
+  data.ideal_dish = parseInt(getCell(lines[50], 1)) || 0;
+  data.current_dish = parseInt(getCell(lines[50], 2)) || 0;
+
+  data.ideal_other = parseInt(getCell(lines[51], 1)) || 0;
+  data.current_other = parseInt(getCell(lines[51], 2)) || 0;
+
+  data.hiring_notes = getCell(lines[54], 0);
+
+  // Row 57 (index 57) header: FEATURE,SOLD,NOTES
+  const featureItems: Array<{ name: string; sold: number; notes?: string }> = [];
+  for (let i = 58; i < lines.length; i++) {
+    const line = lines[i];
+    if (line === undefined) break;
+    const name = getCell(line, 0);
+    const soldText = getCell(line, 1);
+    const notes = getCell(line, 2);
+
+    if (name && name.trim() !== '') {
       const sold = parseInt(soldText) || 0;
       featureItems.push({ name: name.trim(), sold, notes: notes || undefined });
     }
