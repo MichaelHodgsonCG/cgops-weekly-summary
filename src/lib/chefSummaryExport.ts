@@ -107,6 +107,10 @@ function currency(val: number) {
     : '$0.00';
 }
 
+function currencyWhole(val: number) {
+  return `$${Math.round(val || 0).toLocaleString('en-US')}`;
+}
+
 export function exportChefSummaryToExcel(
   data: WeeklySummaryData,
   locationName: string,
@@ -379,8 +383,8 @@ export function exportChefSummaryToPdf(
     startY: y,
     head: [['Sales', 'WTD', 'PTD', 'QTD']],
     body: [
-      ['Actual', currency(wtdSalesActual), currency(ptdSalesActual), currency(qtdSalesActual)],
-      ['Budget', currency(wtdSalesBudget), currency(ptdSalesBudget), currency(qtdSalesBudget)],
+      ['Actual', currencyWhole(wtdSalesActual), currencyWhole(ptdSalesActual), currencyWhole(qtdSalesActual)],
+      ['Budget', currencyWhole(wtdSalesBudget), currencyWhole(ptdSalesBudget), currencyWhole(qtdSalesBudget)],
       [
         'Variance %',
         { content: pct(wtdSalesVariancePct), styles: { textColor: varianceColor(wtdSalesVariancePct, true) } },
