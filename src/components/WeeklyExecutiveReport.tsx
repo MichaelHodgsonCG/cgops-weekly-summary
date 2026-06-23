@@ -1350,6 +1350,14 @@ function ConsolidatedSummaries({ fiscalYear, period, week }: { fiscalYear: numbe
       return;
     }
 
+    const { data: chefSummaryData } = await supabase
+      .from('weekly_chef_summary')
+      .select('*, locations!inner(*)')
+      .eq('fiscal_year', fiscalYear)
+      .eq('period_number', period)
+      .eq('week_number', week)
+      .eq('locations.exclude_from_reporting', false);
+
     const getLineItemValue = (locationId: string, lineItemName: string, field: string): number => {
       const item = plData.find(pl => pl.location_id === locationId && pl.line_item_name === lineItemName);
       return item ? (parseFloat(item[field]) || 0) : 0;
@@ -1369,9 +1377,13 @@ function ConsolidatedSummaries({ fiscalYear, period, week }: { fiscalYear: numbe
       const ytdBudget = locationIds.reduce((sum, locId) => sum + getLineItemValue(locId, 'Food Sales', 'ytd_budget'), 0);
       const ytdSalesVariance = ytdSales - ytdBudget;
 
-      // WTD (Week-to-Date) metrics - use PTD for consolidated view (should calculate from weekly values)
-      const wtdSales = ptdSales;
-      const wtdSalesVariance = ptdSalesVariance;
+      // WTD (Week-to-Date) metrics - totalled from the chef summaries for the week
+      const filteredChefSummary = (chefSummaryData || []).filter(s => locationCodes.includes(s.locations.code));
+      const wtdSales = filteredChefSummary.reduce((sum, s) =>
+        sum + Number(s.food_sales_labour_push || s.food_sales_silverware || 0), 0);
+      const wtdFoodCostAmount = filteredChefSummary.reduce((sum, s) => sum + Number(s.usage_amount || 0), 0);
+      const wtdLabourAmount = filteredChefSummary.reduce((sum, s) => sum + Number(s.labour_spent || 0), 0);
+      const wtdSalesVariance = wtdSales - (ptdBudget > 0 ? ptdBudget / 4 : 0);
 
       const ptdFoodCost = locationIds.reduce((sum, locId) => sum + getLineItemValue(locId, 'Cost of Sales (Food)', 'current_actual'), 0);
       const ptdFoodCostPct = ptdSales > 0 ? (ptdFoodCost / ptdSales) * 100 : 0;
@@ -1385,9 +1397,9 @@ function ConsolidatedSummaries({ fiscalYear, period, week }: { fiscalYear: numbe
       const ytdFoodCostBudgetPct = ytdBudget > 0 ? (ytdFoodCostBudget / ytdBudget) * 100 : 0;
       const ytdFoodCostVariance = ytdFoodCostPct - ytdFoodCostBudgetPct;
 
-      // WTD Food Cost - calculated from P&L using PTD values
-      const wtdFoodCostPct = ptdFoodCostPct;
-      const wtdFoodCostVariance = ptdFoodCostVariance;
+      // WTD Food Cost - totalled from the chef summaries for the week
+      const wtdFoodCostPct = wtdSales > 0 ? (wtdFoodCostAmount / wtdSales) * 100 : 0;
+      const wtdFoodCostVariance = wtdFoodCostPct - ptdFoodCostBudgetPct;
 
       // PTD Labour from P&L
       const ptdLabour = locationIds.reduce((sum, locId) => sum + getLineItemValue(locId, 'Kitchen Labour', 'current_actual'), 0);
@@ -1403,9 +1415,9 @@ function ConsolidatedSummaries({ fiscalYear, period, week }: { fiscalYear: numbe
       const ytdLabourBudgetPct = ytdBudget > 0 ? (ytdLabourBudget / ytdBudget) * 100 : 0;
       const ytdLabourVariance = ytdLabourPct - ytdLabourBudgetPct;
 
-      // WTD Labour - calculated from P&L using PTD values
-      const wtdLabourPct = ptdLabourPct;
-      const wtdLabourVariance = ptdLabourVariance;
+      // WTD Labour - totalled from the chef summaries for the week
+      const wtdLabourPct = wtdSales > 0 ? (wtdLabourAmount / wtdSales) * 100 : 0;
+      const wtdLabourVariance = wtdLabourPct - ptdLabourBudgetPct;
 
       return {
         wtdSales,
