@@ -78,6 +78,10 @@ interface WeeklySummaryData {
   rm_issues?: string;
   cleaning_focus?: string;
   audit_score_comment?: string;
+  discount_review_notes?: string;
+  speed_of_service_notes?: string;
+  overtime_notes?: string;
+  labour_review_action_plan?: string;
   ideal_cooks: number;
   current_cooks: number;
   ideal_prep: number;
@@ -693,6 +697,71 @@ export function exportChefSummaryToPdf(
   doc.setTextColor(120);
   doc.text(`Generated ${new Date().toLocaleDateString()}`, margin, pageHeight - 16);
   doc.setTextColor(0, 0, 0);
+
+  // ---------- PAGE 3+: FULL NOTES APPENDIX ----------
+  // Every notes field, in full, regardless of whether it was already summarized/truncated above.
+  const noteSections: { title: string; body?: string }[] = [
+    { title: 'Food Cost Summary', body: data.food_cost_summary },
+    { title: 'Theoretical / Action Plan Summary', body: data.action_plan_summary },
+    { title: 'Sales Action Plan', body: data.sales_action_plan },
+    { title: 'Promo Notes', body: data.boh_promo_summary },
+    { title: 'Labour Summary', body: data.labour_summary },
+    { title: 'Labour Review Action Plan', body: data.labour_review_action_plan },
+    { title: 'Overtime Notes', body: data.overtime_notes },
+    { title: 'Discount Review Notes', body: data.discount_review_notes },
+    { title: 'Speed of Service Notes', body: data.speed_of_service_notes },
+    { title: 'Hiring Needs', body: data.hiring_notes },
+    { title: 'Team Members of Note', body: data.tm_mots_of_note },
+    { title: 'Development Path Updates', body: data.development_path_updates },
+    { title: 'R&M Issues', body: data.rm_issues || data.rm_issues_cleaning_focus },
+    { title: 'Cleaning Focus', body: data.cleaning_focus },
+    { title: 'Audit Score Comment', body: data.audit_score_comment },
+    { title: 'General Notes', body: data.notes },
+  ].filter((s) => s.body && s.body.trim());
+
+  if (noteSections.length > 0) {
+    doc.addPage();
+    y = margin;
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Full Chef Notes', margin, y);
+    y += 8;
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(100);
+    doc.text('Complete, untruncated text for every note field on this report.', margin, y);
+    doc.setTextColor(0, 0, 0);
+    y += 18;
+
+    for (const section of noteSections) {
+      doc.setFontSize(9.5);
+      doc.setFont('helvetica', 'bold');
+      const titleHeight = 12;
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica', 'normal');
+      const lines = doc.splitTextToSize(section.body as string, contentWidth);
+      const sectionHeight = titleHeight + lines.length * 10.5 + 14;
+
+      if (y + sectionHeight > pageHeight - margin - 16) {
+        doc.addPage();
+        y = margin;
+      }
+
+      doc.setFontSize(9.5);
+      doc.setFont('helvetica', 'bold');
+      doc.text(section.title, margin, y);
+      y += titleHeight;
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica', 'normal');
+      doc.text(lines, margin, y);
+      y += lines.length * 10.5 + 14;
+    }
+
+    doc.setFontSize(8);
+    doc.setTextColor(120);
+    doc.text(`Generated ${new Date().toLocaleDateString()}`, margin, pageHeight - 16);
+    doc.setTextColor(0, 0, 0);
+  }
 
   const filename = `ChefSummary_${locationName.replace(/\s+/g, '_')}_FY${data.fiscal_year}_P${data.period_number}_W${data.week_number}.pdf`;
   doc.save(filename);
