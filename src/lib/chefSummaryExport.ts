@@ -30,10 +30,14 @@ interface WeeklySummaryData {
   sage_fcost_qtd_pct: number;
   food_cost_ptd_pct: number;
   sage_sales_budget_qtd: number;
+  sales_ptd_actual: number;
   fc_qtd_pct: number;
   qtd_variance_pct: number;
   usage_amount: number;
   ideal_usage_amount: number;
+  theoretical_fc_ptd_pct: number;
+  theoretical_fc_qtd_pct: number;
+  budget_food_cost_qtd_pct: number;
   cogs_qtd: number;
   food_sales_labour_push: number;
   food_sales_oc: number;
@@ -280,7 +284,9 @@ export function exportChefSummaryToPdf(
   const wtdFcPct = recapWtdFcPct ?? actualFoodCostPct;
   const wtdLabourPct = recapWtdLabourPct ?? labourCostPct;
 
-  const ptdSalesVariancePct = 0; // no PTD sales budget input exists yet; left for a future data source
+  const ptdSalesActual = data.sales_ptd_actual;
+  const ptdSalesBudget = data.budget_food_sales_period;
+  const ptdSalesVariancePct = ptdSalesBudget > 0 ? ((ptdSalesActual - ptdSalesBudget) / ptdSalesBudget) * 100 : 0;
   const qtdSalesActual = data.sage_food_sales_qtd;
   const qtdSalesBudget = data.sage_sales_budget_qtd;
   const qtdSalesVariancePct = qtdSalesBudget > 0 ? ((qtdSalesActual - qtdSalesBudget) / qtdSalesBudget) * 100 : 0;
@@ -369,8 +375,8 @@ export function exportChefSummaryToPdf(
     startY: y,
     head: [['Sales', 'WTD', 'PTD', 'QTD']],
     body: [
-      ['Actual', currency(wtdSalesActual), '—', currency(qtdSalesActual)],
-      ['Budget', currency(wtdSalesBudget), '—', currency(qtdSalesBudget)],
+      ['Actual', currency(wtdSalesActual), currency(ptdSalesActual), currency(qtdSalesActual)],
+      ['Budget', currency(wtdSalesBudget), currency(ptdSalesBudget), currency(qtdSalesBudget)],
       [
         'Variance %',
         { content: pct(wtdSalesVariancePct), styles: { textColor: varianceColor(wtdSalesVariancePct, true) } },
@@ -391,13 +397,13 @@ export function exportChefSummaryToPdf(
     head: [['Food Cost', 'WTD', 'PTD', 'QTD']],
     body: [
       ['Actual %', pct(wtdFcPct), pct(data.food_cost_ptd_pct), pct(data.fc_qtd_pct)],
-      ['Theoretical %', pct(theoreticalFoodCostPct), '—', '—'],
-      ['Budget %', pct(data.budget_food_cost_pct), '—', '—'],
+      ['Theoretical %', pct(theoreticalFoodCostPct), pct(data.theoretical_fc_ptd_pct), pct(data.theoretical_fc_qtd_pct)],
+      ['Budget %', pct(data.budget_food_cost_pct), pct(data.budget_food_cost_pct), pct(data.budget_food_cost_qtd_pct)],
       [
         'Gap (Act-Theo)',
         { content: pct(actualFoodCostPct - theoreticalFoodCostPct), styles: { textColor: varianceColor(actualFoodCostPct - theoreticalFoodCostPct, false) } },
-        '—',
-        '—',
+        { content: pct(data.food_cost_ptd_pct - data.theoretical_fc_ptd_pct), styles: { textColor: varianceColor(data.food_cost_ptd_pct - data.theoretical_fc_ptd_pct, false) } },
+        { content: pct(data.fc_qtd_pct - data.theoretical_fc_qtd_pct), styles: { textColor: varianceColor(data.fc_qtd_pct - data.theoretical_fc_qtd_pct, false) } },
       ],
     ],
     styles: { fontSize: 7.5, cellPadding: 3, halign: 'center' },
@@ -413,7 +419,7 @@ export function exportChefSummaryToPdf(
     head: [['Labour', 'WTD', 'PTD', 'QTD']],
     body: [
       ['Actual %', pct(wtdLabourPct), pct(data.labour_cost_ptd_pct), pct(data.labour_qtd_pct)],
-      ['Budget %', pct(data.labour_budget_pct), '—', pct(data.sage_labour_budget_qtd_pct)],
+      ['Budget %', pct(data.labour_budget_pct), pct(data.labour_budget_pct), pct(data.sage_labour_budget_qtd_pct)],
     ],
     styles: { fontSize: 7.5, cellPadding: 3, halign: 'center' },
     headStyles,
