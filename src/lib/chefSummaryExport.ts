@@ -339,14 +339,14 @@ export function exportChefSummaryToPdf(
   drawCallout(
     margin + calloutW + gap,
     'Food Cost Variance',
-    `${fcVariance >= 0 ? '+' : ''}${fcVariance.toFixed(1)}pt`,
+    `${fcVariance >= 0 ? '+' : ''}${fcVariance.toFixed(2)}pt`,
     'Actual vs Budget FC%, WTD',
     varianceColor(fcVariance, false)
   );
   drawCallout(
     margin + (calloutW + gap) * 2,
     'Labour Variance',
-    `${lcVariance >= 0 ? '+' : ''}${lcVariance.toFixed(1)}pt`,
+    `${lcVariance >= 0 ? '+' : ''}${lcVariance.toFixed(2)}pt`,
     'Actual vs Budget %, WTD',
     varianceColor(lcVariance, false)
   );
@@ -361,7 +361,7 @@ export function exportChefSummaryToPdf(
   if (narrative) {
     doc.setFontSize(9.5);
     doc.setFont('helvetica', 'italic');
-    const wrapped = truncateLines(doc, narrative, contentWidth, 3);
+    const wrapped = truncateLines(doc, narrative, contentWidth, 6);
     doc.text(wrapped, margin, y);
     y += wrapped.length * 12 + 16;
   }
@@ -420,6 +420,12 @@ export function exportChefSummaryToPdf(
     body: [
       ['Actual %', pct(wtdLabourPct), pct(data.labour_cost_ptd_pct), pct(data.labour_qtd_pct)],
       ['Budget %', pct(data.labour_budget_pct), pct(data.labour_budget_pct), pct(data.sage_labour_budget_qtd_pct)],
+      [
+        'Variance %',
+        { content: pct(lcVariance), styles: { textColor: varianceColor(lcVariance, false) } },
+        { content: pct(data.labour_cost_ptd_pct - data.labour_budget_pct), styles: { textColor: varianceColor(data.labour_cost_ptd_pct - data.labour_budget_pct, false) } },
+        { content: pct(data.labour_qtd_pct - data.sage_labour_budget_qtd_pct), styles: { textColor: varianceColor(data.labour_qtd_pct - data.sage_labour_budget_qtd_pct, false) } },
+      ],
     ],
     styles: { fontSize: 7.5, cellPadding: 3, halign: 'center' },
     headStyles,
@@ -440,9 +446,8 @@ export function exportChefSummaryToPdf(
   doc.setFont('helvetica', 'normal');
 
   const weeklyHighlights = [
-    ...splitIntoBullets(data.tm_mots_of_note, 3),
     ...splitIntoBullets(data.boh_promo_summary, 3),
-    ...splitIntoBullets(data.notes, 3),
+    ...splitIntoBullets(data.tm_mots_of_note, 3),
   ].slice(0, 3);
 
   for (let i = 0; i < 3; i++) {
@@ -550,7 +555,7 @@ export function exportChefSummaryToPdf(
     margin: { left: margin, right: margin },
     tableWidth: contentWidth,
   });
-  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 4;
+  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 14;
 
   if (data.sous_vac_days) {
     y += 8;
@@ -559,9 +564,9 @@ export function exportChefSummaryToPdf(
     doc.setTextColor(100);
     doc.text(`Sous Vac Days this period: ${data.sous_vac_days}`, margin, y);
     doc.setTextColor(0, 0, 0);
-    y += 14;
+    y += 18;
   } else {
-    y += 6;
+    y += 10;
   }
 
   const addShortSection = (title: string, body: string, maxLines = 2) => {
@@ -573,14 +578,14 @@ export function exportChefSummaryToPdf(
     doc.setFont('helvetica', 'normal');
     const lines = truncateLines(doc, body || '—', contentWidth, maxLines);
     doc.text(lines, margin, y);
-    y += lines.length * 10.5 + 8;
+    y += lines.length * 10.5 + 14;
   };
 
   addShortSection('Hiring Needs', data.hiring_notes);
   addShortSection('Development Path Updates', data.development_path_updates);
   addShortSection('Team Members of Note', data.tm_mots_of_note);
 
-  y += 4;
+  y += 8;
   doc.setFontSize(11.5);
   doc.setFont('helvetica', 'bold');
   doc.text('Service & Guest Experience', margin, y);
@@ -601,7 +606,7 @@ export function exportChefSummaryToPdf(
     margin: { left: margin, right: margin },
     tableWidth: contentWidth,
   });
-  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
+  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 16;
 
   if (data.feature_items && data.feature_items.filter((f) => f.name).length > 0) {
     autoTable(doc, {
@@ -616,9 +621,9 @@ export function exportChefSummaryToPdf(
       margin: { left: margin, right: margin },
       tableWidth: contentWidth,
     });
-    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 18;
   } else {
-    y += 4;
+    y += 10;
   }
 
   // R&M / Cleaning Focus — flags only
@@ -643,7 +648,7 @@ export function exportChefSummaryToPdf(
     }
   }
 
-  y += 6;
+  y += 16;
 
   // NEXT WEEK'S PRIORITIES — bordered box
   const priorities = [
