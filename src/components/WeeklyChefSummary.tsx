@@ -707,25 +707,34 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
 
       const ptdData = await fetchPTDFromPL();
 
-      const { error } = await supabase
-        .from('weekly_chef_summary')
-        .upsert({
-          ...formData,
-          week_budget: weekBudget,
-          week_variance_amount: salesVarianceAmount,
-          qtd_variance_amount: formData.sage_food_sales_qtd - formData.sage_sales_budget_qtd,
-          food_cost_ptd_pct: ptdData.food_cost_ptd_pct,
-          labour_cost_ptd_pct: ptdData.labour_cost_ptd_pct,
-          actual_food_cost_pct: actualFoodCostPct,
-          fc_variance: fcVariance,
-          theoretical_food_cost_pct: theoreticalFoodCostPct,
-          theoretical_variance: theoreticalVariance,
-          labour_cost_pct: labourCostPct,
-          lc_variance: lcVariance,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'location_id,fiscal_year,period_number,week_number'
-        });
+      const { id: _formDataId, ...formDataWithoutId } = formData;
+
+      const payload = {
+        ...formDataWithoutId,
+        week_budget: weekBudget,
+        week_variance_amount: salesVarianceAmount,
+        qtd_variance_amount: formData.sage_food_sales_qtd - formData.sage_sales_budget_qtd,
+        food_cost_ptd_pct: ptdData.food_cost_ptd_pct,
+        labour_cost_ptd_pct: ptdData.labour_cost_ptd_pct,
+        actual_food_cost_pct: actualFoodCostPct,
+        fc_variance: fcVariance,
+        theoretical_food_cost_pct: theoreticalFoodCostPct,
+        theoretical_variance: theoreticalVariance,
+        labour_cost_pct: labourCostPct,
+        lc_variance: lcVariance,
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = activeSummaryId
+        ? await supabase
+            .from('weekly_chef_summary')
+            .update(payload)
+            .eq('id', activeSummaryId)
+        : await supabase
+            .from('weekly_chef_summary')
+            .upsert(payload, {
+              onConflict: 'location_id,fiscal_year,period_number,week_number'
+            });
 
       if (error) throw error;
 
