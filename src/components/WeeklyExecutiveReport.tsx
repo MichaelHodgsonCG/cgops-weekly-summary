@@ -493,11 +493,27 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
         const ptdLabBudgetPct = ptdBudget > 0 ? (ptdLabBudget / ptdBudget) * 100 : 0;
         const ytdLabPct = ytdSales > 0 ? (ytdLab / ytdSales) * 100 : 0;
         const ytdLabBudgetPct = ytdBudget > 0 ? (ytdLabBudget / ytdBudget) * 100 : 0;
+
+        // WTD metrics - totalled from the chef summaries for the week
+        const filteredChefSummary = (currentWeekData || []).filter(s => codes.includes(s.locations.code));
+        const wtdSales = filteredChefSummary.reduce((s, cs) =>
+          s + Number(cs.food_sales_labour_push || cs.food_sales_silverware || 0), 0);
+        const wtdFCAmount = filteredChefSummary.reduce((s, cs) => s + Number(cs.usage_amount || 0), 0);
+        const wtdLabAmount = filteredChefSummary.reduce((s, cs) => s + Number(cs.labour_spent || 0), 0);
+        const wtdSalesVariance = wtdSales - (ptdBudget > 0 ? ptdBudget / 4 : 0);
+        const wtdFCPct = wtdSales > 0 ? (wtdFCAmount / wtdSales) * 100 : 0;
+        const wtdFCVariance = wtdFCPct - ptdFCBudgetPct;
+        const wtdLabPct = wtdSales > 0 ? (wtdLabAmount / wtdSales) * 100 : 0;
+        const wtdLabVariance = wtdLabPct - ptdLabBudgetPct;
+
         return {
+          wtdSales, wtdSalesVariance,
           ptdSales, ptdSalesVariance: ptdSales - ptdBudget,
           ytdSales, ytdSalesVariance: ytdSales - ytdBudget,
+          wtdFCPct, wtdFCVariance,
           ptdFCPct, ptdFCVariance: ptdFCPct - ptdFCBudgetPct,
           ytdFCPct, ytdFCVariance: ytdFCPct - ytdFCBudgetPct,
+          wtdLabPct, wtdLabVariance,
           ptdLabPct, ptdLabVariance: ptdLabPct - ptdLabBudgetPct,
           ytdLabPct, ytdLabVariance: ytdLabPct - ytdLabBudgetPct,
         };
@@ -517,15 +533,16 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
       const consolidatedSectionHtml = (title: string, data: ReturnType<typeof buildConsolidated>, bold = false) => {
         if (!data) return '';
         const titleStyle = bold ? 'font-weight: 700; font-size: 15px; color: #1e293b; margin: 0 0 6px 0;' : 'font-weight: 600; font-size: 14px; color: #1e293b; margin: 0 0 6px 0;';
+        const wtdSalesVar = data.wtdSales > 0 ? data.wtdSalesVariance / data.wtdSales * 100 : 0;
         const salesVar = data.ptdSales > 0 ? data.ptdSalesVariance / data.ptdSales * 100 : 0;
         const ytdSalesVar = data.ytdSales > 0 ? data.ytdSalesVariance / data.ytdSales * 100 : 0;
         return `
           <div style="margin-bottom: ${bold ? '20px' : '16px'};">
             <p style="${titleStyle}">${title}</p>
             <div style="margin-left: 16px; font-size: 13px; line-height: 1.8; color: #1e293b;">
-              <p style="margin: 0;">Food Sales — PTD: ${fmtCurrency(data.ptdSales)} <span style="color: ${salesVarianceColor(salesVar)}; font-weight: 600;">${fmtVarianceCurrency(data.ptdSalesVariance)}</span> | YTD: ${fmtCurrency(data.ytdSales)} <span style="color: ${salesVarianceColor(ytdSalesVar)}; font-weight: 600;">${fmtVarianceCurrency(data.ytdSalesVariance)}</span></p>
-              <p style="margin: 0;">COGS (Food) % — PTD: ${fmtPct(data.ptdFCPct)} <span style="color: ${costVarianceColor(data.ptdFCVariance)}; font-weight: 600;">${fmtVariancePct(data.ptdFCVariance)}</span> | YTD: ${fmtPct(data.ytdFCPct)} <span style="color: ${costVarianceColor(data.ytdFCVariance)}; font-weight: 600;">${fmtVariancePct(data.ytdFCVariance)}</span></p>
-              <p style="margin: 0;">Labour % — PTD: ${fmtPct(data.ptdLabPct)} <span style="color: ${costVarianceColor(data.ptdLabVariance)}; font-weight: 600;">${fmtVariancePct(data.ptdLabVariance)}</span> | YTD: ${fmtPct(data.ytdLabPct)} <span style="color: ${costVarianceColor(data.ytdLabVariance)}; font-weight: 600;">${fmtVariancePct(data.ytdLabVariance)}</span></p>
+              <p style="margin: 0;">Food Sales — WTD: ${fmtCurrency(data.wtdSales)} <span style="color: ${salesVarianceColor(wtdSalesVar)}; font-weight: 600;">${fmtVarianceCurrency(data.wtdSalesVariance)}</span> | PTD: ${fmtCurrency(data.ptdSales)} <span style="color: ${salesVarianceColor(salesVar)}; font-weight: 600;">${fmtVarianceCurrency(data.ptdSalesVariance)}</span> | YTD: ${fmtCurrency(data.ytdSales)} <span style="color: ${salesVarianceColor(ytdSalesVar)}; font-weight: 600;">${fmtVarianceCurrency(data.ytdSalesVariance)}</span></p>
+              <p style="margin: 0;">COGS (Food) % — WTD: ${fmtPct(data.wtdFCPct)} <span style="color: ${costVarianceColor(data.wtdFCVariance)}; font-weight: 600;">${fmtVariancePct(data.wtdFCVariance)}</span> | PTD: ${fmtPct(data.ptdFCPct)} <span style="color: ${costVarianceColor(data.ptdFCVariance)}; font-weight: 600;">${fmtVariancePct(data.ptdFCVariance)}</span> | YTD: ${fmtPct(data.ytdFCPct)} <span style="color: ${costVarianceColor(data.ytdFCVariance)}; font-weight: 600;">${fmtVariancePct(data.ytdFCVariance)}</span></p>
+              <p style="margin: 0;">Labour % — WTD: ${fmtPct(data.wtdLabPct)} <span style="color: ${costVarianceColor(data.wtdLabVariance)}; font-weight: 600;">${fmtVariancePct(data.wtdLabVariance)}</span> | PTD: ${fmtPct(data.ptdLabPct)} <span style="color: ${costVarianceColor(data.ptdLabVariance)}; font-weight: 600;">${fmtVariancePct(data.ptdLabVariance)}</span> | YTD: ${fmtPct(data.ytdLabPct)} <span style="color: ${costVarianceColor(data.ytdLabVariance)}; font-weight: 600;">${fmtVariancePct(data.ytdLabVariance)}</span></p>
             </div>
           </div>`;
       };
