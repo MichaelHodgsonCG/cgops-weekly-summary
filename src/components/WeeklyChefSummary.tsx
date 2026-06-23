@@ -979,10 +979,10 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
       lcVariance,
       user?.name,
       weekEndingDate,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
+      formData.food_sales_labour_push,
+      weekBudget,
+      actualFoodCostPct,
+      labourCostPct,
       foodCostCategories
     );
   };

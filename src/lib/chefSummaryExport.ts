@@ -260,7 +260,7 @@ export function exportChefSummaryToPdf(
   actualFoodCostPct: number,
   fcVariance: number,
   theoreticalFoodCostPct: number,
-  theoreticalVariance: number,
+  _theoreticalVariance: number,
   labourCostPct: number,
   lcVariance: number,
   chefName?: string,
@@ -332,26 +332,26 @@ export function exportChefSummaryToPdf(
   drawCallout(
     margin,
     'Sales Variance',
-    `${qtdSalesVariancePct >= 0 ? '+' : ''}${qtdSalesVariancePct.toFixed(1)}%`,
-    'vs Budget, QTD',
-    varianceColor(qtdSalesVariancePct, true)
+    `${wtdSalesVariancePct >= 0 ? '+' : ''}${wtdSalesVariancePct.toFixed(1)}%`,
+    'vs Budget, WTD',
+    varianceColor(wtdSalesVariancePct, true)
   );
   drawCallout(
     margin + calloutW + gap,
     'Food Cost Variance',
     `${fcVariance >= 0 ? '+' : ''}${fcVariance.toFixed(1)}pt`,
-    'Actual vs Theoretical FC%',
-    varianceColor(theoreticalVariance, false)
+    'Actual vs Budget FC%, WTD',
+    varianceColor(fcVariance, false)
   );
   drawCallout(
     margin + (calloutW + gap) * 2,
     'Labour Variance',
     `${lcVariance >= 0 ? '+' : ''}${lcVariance.toFixed(1)}pt`,
-    'Actual vs Budget %',
+    'Actual vs Budget %, WTD',
     varianceColor(lcVariance, false)
   );
 
-  let y = calloutY + calloutH + 14;
+  let y = calloutY + calloutH + 18;
 
   // "Why" narrative
   const narrative = firstNonEmpty(
@@ -363,7 +363,7 @@ export function exportChefSummaryToPdf(
     doc.setFont('helvetica', 'italic');
     const wrapped = truncateLines(doc, narrative, contentWidth, 3);
     doc.text(wrapped, margin, y);
-    y += wrapped.length * 12 + 10;
+    y += wrapped.length * 12 + 16;
   }
 
   doc.setFont('helvetica', 'normal');
@@ -429,7 +429,7 @@ export function exportChefSummaryToPdf(
   });
   const lcTableY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
 
-  y = Math.max(salesTableY, fcTableY, lcTableY) + 10;
+  y = Math.max(salesTableY, fcTableY, lcTableY) + 22;
 
   // Top 3 things that happened this week
   doc.setFontSize(10);
@@ -455,7 +455,7 @@ export function exportChefSummaryToPdf(
 
   // COGS / category breakdown
   if (foodCostCategories && foodCostCategories.length > 0) {
-    y += 6;
+    y += 16;
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.text('COGS by Category', margin, y);
