@@ -30,10 +30,14 @@ interface WeeklySummaryData {
   sage_fcost_qtd_pct: number;
   food_cost_ptd_pct: number;
   sage_sales_budget_qtd: number;
+  sales_ptd_actual: number;
   fc_qtd_pct: number;
   qtd_variance_pct: number;
   usage_amount: number;
   ideal_usage_amount: number;
+  theoretical_fc_ptd_pct: number;
+  theoretical_fc_qtd_pct: number;
+  budget_food_cost_qtd_pct: number;
   cogs_qtd: number;
   food_sales_labour_push: number;
   food_sales_oc: number;
@@ -74,6 +78,10 @@ interface WeeklySummaryData {
   rm_issues?: string;
   cleaning_focus?: string;
   audit_score_comment?: string;
+  discount_review_notes?: string;
+  speed_of_service_notes?: string;
+  overtime_notes?: string;
+  labour_review_action_plan?: string;
   ideal_cooks: number;
   current_cooks: number;
   ideal_prep: number;
@@ -97,6 +105,10 @@ function currency(val: number) {
   return val
     ? `$${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     : '$0.00';
+}
+
+function currencyWhole(val: number) {
+  return `$${Math.round(val || 0).toLocaleString('en-US')}`;
 }
 
 export function exportChefSummaryToExcel(
@@ -256,7 +268,7 @@ export function exportChefSummaryToPdf(
   actualFoodCostPct: number,
   fcVariance: number,
   theoreticalFoodCostPct: number,
-  theoreticalVariance: number,
+  _theoreticalVariance: number,
   labourCostPct: number,
   lcVariance: number,
   chefName?: string,
@@ -280,7 +292,9 @@ export function exportChefSummaryToPdf(
   const wtdFcPct = recapWtdFcPct ?? actualFoodCostPct;
   const wtdLabourPct = recapWtdLabourPct ?? labourCostPct;
 
-  const ptdSalesVariancePct = 0; // no PTD sales budget input exists yet; left for a future data source
+  const ptdSalesActual = data.sales_ptd_actual;
+  const ptdSalesBudget = data.budget_food_sales_period;
+  const ptdSalesVariancePct = ptdSalesBudget > 0 ? ((ptdSalesActual - ptdSalesBudget) / ptdSalesBudget) * 100 : 0;
   const qtdSalesActual = data.sage_food_sales_qtd;
   const qtdSalesBudget = data.sage_sales_budget_qtd;
   const qtdSalesVariancePct = qtdSalesBudget > 0 ? ((qtdSalesActual - qtdSalesBudget) / qtdSalesBudget) * 100 : 0;
@@ -326,26 +340,26 @@ export function exportChefSummaryToPdf(
   drawCallout(
     margin,
     'Sales Variance',
-    `${qtdSalesVariancePct >= 0 ? '+' : ''}${qtdSalesVariancePct.toFixed(1)}%`,
-    'vs Budget, QTD',
-    varianceColor(qtdSalesVariancePct, true)
+    `${wtdSalesVariancePct >= 0 ? '+' : ''}${wtdSalesVariancePct.toFixed(1)}%`,
+    'vs Budget, WTD',
+    varianceColor(wtdSalesVariancePct, true)
   );
   drawCallout(
     margin + calloutW + gap,
     'Food Cost Variance',
-    `${fcVariance >= 0 ? '+' : ''}${fcVariance.toFixed(1)}pt`,
-    'Actual vs Theoretical FC%',
-    varianceColor(theoreticalVariance, false)
+    `${fcVariance >= 0 ? '+' : ''}${fcVariance.toFixed(2)}pt`,
+    'Actual vs Budget FC%, WTD',
+    varianceColor(fcVariance, false)
   );
   drawCallout(
     margin + (calloutW + gap) * 2,
     'Labour Variance',
-    `${lcVariance >= 0 ? '+' : ''}${lcVariance.toFixed(1)}pt`,
-    'Actual vs Budget %',
+    `${lcVariance >= 0 ? '+' : ''}${lcVariance.toFixed(2)}pt`,
+    'Actual vs Budget %, WTD',
     varianceColor(lcVariance, false)
   );
 
-  let y = calloutY + calloutH + 14;
+  let y = calloutY + calloutH + 18;
 
   // "Why" narrative
   const narrative = firstNonEmpty(
@@ -355,9 +369,9 @@ export function exportChefSummaryToPdf(
   if (narrative) {
     doc.setFontSize(9.5);
     doc.setFont('helvetica', 'italic');
-    const wrapped = truncateLines(doc, narrative, contentWidth, 3);
+    const wrapped = truncateLines(doc, narrative, contentWidth, 6);
     doc.text(wrapped, margin, y);
-    y += wrapped.length * 12 + 10;
+    y += wrapped.length * 12 + 16;
   }
 
   doc.setFont('helvetica', 'normal');
@@ -369,8 +383,8 @@ export function exportChefSummaryToPdf(
     startY: y,
     head: [['Sales', 'WTD', 'PTD', 'QTD']],
     body: [
-      ['Actual', currency(wtdSalesActual), '—', currency(qtdSalesActual)],
-      ['Budget', currency(wtdSalesBudget), '—', currency(qtdSalesBudget)],
+      ['Actual', currencyWhole(wtdSalesActual), currencyWhole(ptdSalesActual), currencyWhole(qtdSalesActual)],
+      ['Budget', currencyWhole(wtdSalesBudget), currencyWhole(ptdSalesBudget), currencyWhole(qtdSalesBudget)],
       [
         'Variance %',
         { content: pct(wtdSalesVariancePct), styles: { textColor: varianceColor(wtdSalesVariancePct, true) } },
@@ -391,13 +405,13 @@ export function exportChefSummaryToPdf(
     head: [['Food Cost', 'WTD', 'PTD', 'QTD']],
     body: [
       ['Actual %', pct(wtdFcPct), pct(data.food_cost_ptd_pct), pct(data.fc_qtd_pct)],
-      ['Theoretical %', pct(theoreticalFoodCostPct), '—', '—'],
-      ['Budget %', pct(data.budget_food_cost_pct), '—', '—'],
+      ['Theoretical %', pct(theoreticalFoodCostPct), pct(data.theoretical_fc_ptd_pct), pct(data.theoretical_fc_qtd_pct)],
+      ['Budget %', pct(data.budget_food_cost_pct), pct(data.budget_food_cost_pct), pct(data.budget_food_cost_qtd_pct)],
       [
         'Gap (Act-Theo)',
         { content: pct(actualFoodCostPct - theoreticalFoodCostPct), styles: { textColor: varianceColor(actualFoodCostPct - theoreticalFoodCostPct, false) } },
-        '—',
-        '—',
+        { content: pct(data.food_cost_ptd_pct - data.theoretical_fc_ptd_pct), styles: { textColor: varianceColor(data.food_cost_ptd_pct - data.theoretical_fc_ptd_pct, false) } },
+        { content: pct(data.fc_qtd_pct - data.theoretical_fc_qtd_pct), styles: { textColor: varianceColor(data.fc_qtd_pct - data.theoretical_fc_qtd_pct, false) } },
       ],
     ],
     styles: { fontSize: 7.5, cellPadding: 3, halign: 'center' },
@@ -413,7 +427,13 @@ export function exportChefSummaryToPdf(
     head: [['Labour', 'WTD', 'PTD', 'QTD']],
     body: [
       ['Actual %', pct(wtdLabourPct), pct(data.labour_cost_ptd_pct), pct(data.labour_qtd_pct)],
-      ['Budget %', pct(data.labour_budget_pct), '—', pct(data.sage_labour_budget_qtd_pct)],
+      ['Budget %', pct(data.labour_budget_pct), pct(data.labour_budget_pct), pct(data.sage_labour_budget_qtd_pct)],
+      [
+        'Variance %',
+        { content: pct(lcVariance), styles: { textColor: varianceColor(lcVariance, false) } },
+        { content: pct(data.labour_cost_ptd_pct - data.labour_budget_pct), styles: { textColor: varianceColor(data.labour_cost_ptd_pct - data.labour_budget_pct, false) } },
+        { content: pct(data.labour_qtd_pct - data.sage_labour_budget_qtd_pct), styles: { textColor: varianceColor(data.labour_qtd_pct - data.sage_labour_budget_qtd_pct, false) } },
+      ],
     ],
     styles: { fontSize: 7.5, cellPadding: 3, halign: 'center' },
     headStyles,
@@ -423,7 +443,7 @@ export function exportChefSummaryToPdf(
   });
   const lcTableY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
 
-  y = Math.max(salesTableY, fcTableY, lcTableY) + 10;
+  y = Math.max(salesTableY, fcTableY, lcTableY) + 22;
 
   // Top 3 things that happened this week
   doc.setFontSize(10);
@@ -434,9 +454,8 @@ export function exportChefSummaryToPdf(
   doc.setFont('helvetica', 'normal');
 
   const weeklyHighlights = [
-    ...splitIntoBullets(data.tm_mots_of_note, 3),
     ...splitIntoBullets(data.boh_promo_summary, 3),
-    ...splitIntoBullets(data.notes, 3),
+    ...splitIntoBullets(data.tm_mots_of_note, 3),
   ].slice(0, 3);
 
   for (let i = 0; i < 3; i++) {
@@ -449,7 +468,7 @@ export function exportChefSummaryToPdf(
 
   // COGS / category breakdown
   if (foodCostCategories && foodCostCategories.length > 0) {
-    y += 6;
+    y += 16;
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.text('COGS by Category', margin, y);
@@ -544,7 +563,7 @@ export function exportChefSummaryToPdf(
     margin: { left: margin, right: margin },
     tableWidth: contentWidth,
   });
-  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 4;
+  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 14;
 
   if (data.sous_vac_days) {
     y += 8;
@@ -553,9 +572,9 @@ export function exportChefSummaryToPdf(
     doc.setTextColor(100);
     doc.text(`Sous Vac Days this period: ${data.sous_vac_days}`, margin, y);
     doc.setTextColor(0, 0, 0);
-    y += 14;
+    y += 18;
   } else {
-    y += 6;
+    y += 10;
   }
 
   const addShortSection = (title: string, body: string, maxLines = 2) => {
@@ -567,14 +586,14 @@ export function exportChefSummaryToPdf(
     doc.setFont('helvetica', 'normal');
     const lines = truncateLines(doc, body || '—', contentWidth, maxLines);
     doc.text(lines, margin, y);
-    y += lines.length * 10.5 + 8;
+    y += lines.length * 10.5 + 14;
   };
 
   addShortSection('Hiring Needs', data.hiring_notes);
   addShortSection('Development Path Updates', data.development_path_updates);
   addShortSection('Team Members of Note', data.tm_mots_of_note);
 
-  y += 4;
+  y += 8;
   doc.setFontSize(11.5);
   doc.setFont('helvetica', 'bold');
   doc.text('Service & Guest Experience', margin, y);
@@ -595,7 +614,7 @@ export function exportChefSummaryToPdf(
     margin: { left: margin, right: margin },
     tableWidth: contentWidth,
   });
-  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
+  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 16;
 
   if (data.feature_items && data.feature_items.filter((f) => f.name).length > 0) {
     autoTable(doc, {
@@ -610,9 +629,9 @@ export function exportChefSummaryToPdf(
       margin: { left: margin, right: margin },
       tableWidth: contentWidth,
     });
-    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 18;
   } else {
-    y += 4;
+    y += 10;
   }
 
   // R&M / Cleaning Focus — flags only
@@ -637,7 +656,7 @@ export function exportChefSummaryToPdf(
     }
   }
 
-  y += 6;
+  y += 16;
 
   // NEXT WEEK'S PRIORITIES — bordered box
   const priorities = [
@@ -682,6 +701,71 @@ export function exportChefSummaryToPdf(
   doc.setTextColor(120);
   doc.text(`Generated ${new Date().toLocaleDateString()}`, margin, pageHeight - 16);
   doc.setTextColor(0, 0, 0);
+
+  // ---------- PAGE 3+: FULL NOTES APPENDIX ----------
+  // Every notes field, in full, regardless of whether it was already summarized/truncated above.
+  const noteSections: { title: string; body?: string }[] = [
+    { title: 'Food Cost Summary', body: data.food_cost_summary },
+    { title: 'Theoretical / Action Plan Summary', body: data.action_plan_summary },
+    { title: 'Sales Action Plan', body: data.sales_action_plan },
+    { title: 'Promo Notes', body: data.boh_promo_summary },
+    { title: 'Labour Summary', body: data.labour_summary },
+    { title: 'Labour Review Action Plan', body: data.labour_review_action_plan },
+    { title: 'Overtime Notes', body: data.overtime_notes },
+    { title: 'Discount Review Notes', body: data.discount_review_notes },
+    { title: 'Speed of Service Notes', body: data.speed_of_service_notes },
+    { title: 'Hiring Needs', body: data.hiring_notes },
+    { title: 'Team Members of Note', body: data.tm_mots_of_note },
+    { title: 'Development Path Updates', body: data.development_path_updates },
+    { title: 'R&M Issues', body: data.rm_issues || data.rm_issues_cleaning_focus },
+    { title: 'Cleaning Focus', body: data.cleaning_focus },
+    { title: 'Audit Score Comment', body: data.audit_score_comment },
+    { title: 'General Notes', body: data.notes },
+  ].filter((s) => s.body && s.body.trim());
+
+  if (noteSections.length > 0) {
+    doc.addPage();
+    y = margin;
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Full Chef Notes', margin, y);
+    y += 8;
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(100);
+    doc.text('Complete, untruncated text for every note field on this report.', margin, y);
+    doc.setTextColor(0, 0, 0);
+    y += 18;
+
+    for (const section of noteSections) {
+      doc.setFontSize(9.5);
+      doc.setFont('helvetica', 'bold');
+      const titleHeight = 12;
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica', 'normal');
+      const lines = doc.splitTextToSize(section.body as string, contentWidth);
+      const sectionHeight = titleHeight + lines.length * 10.5 + 14;
+
+      if (y + sectionHeight > pageHeight - margin - 16) {
+        doc.addPage();
+        y = margin;
+      }
+
+      doc.setFontSize(9.5);
+      doc.setFont('helvetica', 'bold');
+      doc.text(section.title, margin, y);
+      y += titleHeight;
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica', 'normal');
+      doc.text(lines, margin, y);
+      y += lines.length * 10.5 + 14;
+    }
+
+    doc.setFontSize(8);
+    doc.setTextColor(120);
+    doc.text(`Generated ${new Date().toLocaleDateString()}`, margin, pageHeight - 16);
+    doc.setTextColor(0, 0, 0);
+  }
 
   const filename = `ChefSummary_${locationName.replace(/\s+/g, '_')}_FY${data.fiscal_year}_P${data.period_number}_W${data.week_number}.pdf`;
   doc.save(filename);

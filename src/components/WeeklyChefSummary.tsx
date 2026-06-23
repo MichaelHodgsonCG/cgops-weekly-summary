@@ -23,10 +23,14 @@ interface WeeklySummaryData {
   sage_fcost_qtd_pct: number;
   food_cost_ptd_pct: number;
   sage_sales_budget_qtd: number;
+  sales_ptd_actual: number;
   fc_qtd_pct: number;
   qtd_variance_pct: number;
   usage_amount: number;
   ideal_usage_amount: number;
+  theoretical_fc_ptd_pct: number;
+  theoretical_fc_qtd_pct: number;
+  budget_food_cost_qtd_pct: number;
   cogs_qtd: number;
   food_sales_labour_push: number;
   food_sales_oc: number;
@@ -134,10 +138,14 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     sage_fcost_qtd_pct: 0,
     food_cost_ptd_pct: 0,
     sage_sales_budget_qtd: 0,
+    sales_ptd_actual: 0,
     fc_qtd_pct: 0,
     qtd_variance_pct: 0,
     usage_amount: 0,
     ideal_usage_amount: 0,
+    theoretical_fc_ptd_pct: 0,
+    theoretical_fc_qtd_pct: 0,
+    budget_food_cost_qtd_pct: 0,
     cogs_qtd: 0,
     food_sales_labour_push: 0,
     food_sales_oc: 0,
@@ -534,10 +542,14 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     sage_fcost_qtd_pct: 0,
     food_cost_ptd_pct: 0,
     sage_sales_budget_qtd: 0,
+    sales_ptd_actual: 0,
     fc_qtd_pct: 0,
     qtd_variance_pct: 0,
     usage_amount: 0,
     ideal_usage_amount: 0,
+    theoretical_fc_ptd_pct: 0,
+    theoretical_fc_qtd_pct: 0,
+    budget_food_cost_qtd_pct: 0,
     cogs_qtd: 0,
     food_sales_labour_push: 0,
     food_sales_oc: 0,
@@ -661,7 +673,20 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     }));
   };
 
-  const fetchPTDFromPL = async (): Promise<{ food_cost_ptd_pct: number; labour_cost_ptd_pct: number }> => {
+  const fetchPTDFromPL = async (): Promise<{
+    food_cost_ptd_pct: number;
+    labour_cost_ptd_pct: number;
+    sales_ptd_actual: number;
+    budget_food_cost_qtd_pct: number;
+    sage_labour_budget_qtd_pct: number;
+  }> => {
+    const empty = {
+      food_cost_ptd_pct: 0,
+      labour_cost_ptd_pct: 0,
+      sales_ptd_actual: 0,
+      budget_food_cost_qtd_pct: 0,
+      sage_labour_budget_qtd_pct: 0,
+    };
     try {
       const { data: calWeek } = await supabase
         .from('fiscal_calendar')
@@ -671,7 +696,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
         .eq('week', formData.week_number)
         .maybeSingle();
 
-      if (!calWeek) return { food_cost_ptd_pct: 0, labour_cost_ptd_pct: 0 };
+      if (!calWeek) return empty;
 
       const { data: upload } = await supabase
         .from('pl_uploads')
@@ -680,23 +705,134 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
         .eq('week_ending_date', calWeek.end_date)
         .maybeSingle();
 
-      if (!upload) return { food_cost_ptd_pct: 0, labour_cost_ptd_pct: 0 };
+      if (!upload) return empty;
 
       const { data: items } = await supabase
         .from('pl_line_items')
-        .select('line_item_name, current_actual_pct')
+        .select('line_item_name, current_actual, current_budget, current_actual_pct')
         .eq('upload_id', upload.id)
-        .in('line_item_name', ['Cost of Sales (Food)', 'Kitchen Labour']);
+        .in('line_item_name', ['Food Sales', 'Cost of Sales (Food)', 'Kitchen Labour']);
 
+      const foodSales = items?.find(i => i.line_item_name === 'Food Sales');
       const foodCost = items?.find(i => i.line_item_name === 'Cost of Sales (Food)');
       const labour = items?.find(i => i.line_item_name === 'Kitchen Labour');
 
-      return {
+      const result = {
         food_cost_ptd_pct: foodCost?.current_actual_pct || 0,
         labour_cost_ptd_pct: labour?.current_actual_pct || 0,
+        sales_ptd_actual: foodSales?.current_actual || 0,
+        budget_food_cost_qtd_pct: 0,
+        sage_labour_budget_qtd_pct: 0,
+      };
+
+      const quarterPeriods = getQuarterPeriods(formData.period_number);
+      const { data: calWeeks } = await supabase
+        .from('fiscal_calendar')
+        .select('end_date, period')
+        .eq('fiscal_year', formData.fiscal_year)
+        .in('period', quarterPeriods)
+        .order('period', { ascending: true })
+        .order('week', { ascending: true });
+
+      if (!calWeeks || calWeeks.length === 0) return result;
+
+      const quarterEndDates = calWeeks.map(w => w.end_date);
+      const { data: uploads } = await supabase
+        .from('pl_uploads')
+        .select('id, week_ending_date')
+        .eq('location_id', locationId)
+        .in('week_ending_date', quarterEndDates)
+        .order('week_ending_date', { ascending: true });
+
+      if (!uploads || uploads.length === 0) return result;
+
+      const uploadIds = uploads.map(u => u.id);
+      const { data: lineItems } = await supabase
+        .from('pl_line_items')
+        .select('upload_id, line_item_name, current_budget')
+        .in('upload_id', uploadIds)
+        .in('line_item_name', ['Food Sales', 'Cost of Sales (Food)', 'Kitchen Labour']);
+
+      if (!lineItems || lineItems.length === 0) return result;
+
+      const periodsInQtr = [...new Set(uploads.map(u => {
+        const cal = calWeeks.find(c => c.end_date === u.week_ending_date);
+        return cal?.period;
+      }).filter(Boolean))] as number[];
+
+      let foodSalesBudgetQtd = 0;
+      let foodCostBudgetQtd = 0;
+      let labourBudgetQtd = 0;
+
+      for (const p of periodsInQtr) {
+        const periodUploads = uploads.filter(u => {
+          const cal = calWeeks.find(c => c.end_date === u.week_ending_date);
+          return cal && cal.period === p;
+        });
+        if (periodUploads.length > 0) {
+          const latestUpload = periodUploads[periodUploads.length - 1];
+          const foodSalesItem = lineItems.find(
+            i => i.upload_id === latestUpload.id && i.line_item_name === 'Food Sales'
+          );
+          const foodCostItem = lineItems.find(
+            i => i.upload_id === latestUpload.id && i.line_item_name === 'Cost of Sales (Food)'
+          );
+          const labourItem = lineItems.find(
+            i => i.upload_id === latestUpload.id && i.line_item_name === 'Kitchen Labour'
+          );
+          foodSalesBudgetQtd += foodSalesItem?.current_budget || 0;
+          foodCostBudgetQtd += foodCostItem?.current_budget || 0;
+          labourBudgetQtd += labourItem?.current_budget || 0;
+        }
+      }
+
+      result.budget_food_cost_qtd_pct = foodSalesBudgetQtd > 0 ? (foodCostBudgetQtd / foodSalesBudgetQtd) * 100 : 0;
+      result.sage_labour_budget_qtd_pct = foodSalesBudgetQtd > 0 ? (labourBudgetQtd / foodSalesBudgetQtd) * 100 : 0;
+
+      return result;
+    } catch {
+      return empty;
+    }
+  };
+
+  const fetchTheoreticalFcPtdQtd = async (): Promise<{ theoretical_fc_ptd_pct: number; theoretical_fc_qtd_pct: number }> => {
+    try {
+      const quarterPeriods = getQuarterPeriods(formData.period_number);
+
+      const { data: periodWeeks } = await supabase
+        .from('weekly_chef_summary')
+        .select('id, ideal_usage_amount, food_sales_labour_push')
+        .eq('location_id', locationId)
+        .eq('fiscal_year', formData.fiscal_year)
+        .eq('period_number', formData.period_number);
+
+      const { data: quarterWeeks } = await supabase
+        .from('weekly_chef_summary')
+        .select('id, ideal_usage_amount, food_sales_labour_push')
+        .eq('location_id', locationId)
+        .eq('fiscal_year', formData.fiscal_year)
+        .in('period_number', quarterPeriods);
+
+      const sumExcludingCurrent = (rows: { id: string; ideal_usage_amount: number; food_sales_labour_push: number }[] | null) => {
+        let ideal = formData.ideal_usage_amount || 0;
+        let sales = formData.food_sales_labour_push || 0;
+        for (const row of rows || []) {
+          if (row.id === activeSummaryId) continue;
+          ideal += row.ideal_usage_amount || 0;
+          sales += row.food_sales_labour_push || 0;
+        }
+        return { ideal, sales };
+      };
+
+      const ptd = sumExcludingCurrent(periodWeeks);
+      const qtd = sumExcludingCurrent(quarterWeeks);
+
+      return {
+        theoretical_fc_ptd_pct: ptd.sales > 0 ? (ptd.ideal / ptd.sales) * 100 : 0,
+        theoretical_fc_qtd_pct: qtd.sales > 0 ? (qtd.ideal / qtd.sales) * 100 : 0,
       };
     } catch {
-      return { food_cost_ptd_pct: 0, labour_cost_ptd_pct: 0 };
+      return { theoretical_fc_ptd_pct: 0, theoretical_fc_qtd_pct: 0 };
     }
   };
 
@@ -706,6 +842,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
       setMessage(null);
 
       const ptdData = await fetchPTDFromPL();
+      const theoreticalPtdQtd = await fetchTheoreticalFcPtdQtd();
 
       const { id: _formDataId, ...formDataWithoutId } = formData;
 
@@ -716,6 +853,11 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
         qtd_variance_amount: formData.sage_food_sales_qtd - formData.sage_sales_budget_qtd,
         food_cost_ptd_pct: ptdData.food_cost_ptd_pct,
         labour_cost_ptd_pct: ptdData.labour_cost_ptd_pct,
+        sales_ptd_actual: ptdData.sales_ptd_actual,
+        budget_food_cost_qtd_pct: ptdData.budget_food_cost_qtd_pct,
+        sage_labour_budget_qtd_pct: ptdData.sage_labour_budget_qtd_pct,
+        theoretical_fc_ptd_pct: theoreticalPtdQtd.theoretical_fc_ptd_pct,
+        theoretical_fc_qtd_pct: theoreticalPtdQtd.theoretical_fc_qtd_pct,
         actual_food_cost_pct: actualFoodCostPct,
         fc_variance: fcVariance,
         theoretical_food_cost_pct: theoreticalFoodCostPct,
@@ -837,10 +979,10 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
       lcVariance,
       user?.name,
       weekEndingDate,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
+      formData.food_sales_labour_push,
+      weekBudget,
+      actualFoodCostPct,
+      labourCostPct,
       foodCostCategories
     );
   };

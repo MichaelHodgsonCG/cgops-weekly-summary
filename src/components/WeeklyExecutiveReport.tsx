@@ -409,6 +409,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
         const qtdSalesVariance = qtdSales - qtdBudget;
         const foodCostPL = locationPL.find(pl => pl.line_item_name === 'Cost of Sales (Food)');
         const labourPL = locationPL.find(pl => pl.line_item_name === 'Kitchen Labour' || pl.line_item_name === 'Labour');
+        const ptdSales = foodSalesPL?.current_actual || 0;
         const weekFoodCost = current.actual_food_cost_pct || 0;
         const weekBudgetFoodCost = current.budget_food_cost_pct || 0;
         const weekFoodCostVariance = weekFoodCost - weekBudgetFoodCost;
@@ -416,7 +417,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
         const ptdFoodCost = foodCostPL?.current_actual_pct || current.food_cost_ptd_pct || 0;
         const ptdBudgetFoodCost = foodCostPL?.current_budget_pct || current.budget_food_cost_pct || 0;
         const ptdFoodCostVariance = ptdFoodCost - ptdBudgetFoodCost;
-        const ptdFoodCostVarianceDollar = (qtdSales * ptdFoodCostVariance) / 100;
+        const ptdFoodCostVarianceDollar = (ptdSales * ptdFoodCostVariance) / 100;
         const weekLabour = current.labour_cost_pct || 0;
         const weekBudgetLabour = current.labour_budget_pct || 0;
         const weekLabourVariance = weekLabour - weekBudgetLabour;
@@ -424,7 +425,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
         const ptdLabour = labourPL?.current_actual_pct || current.labour_cost_ptd_pct || 0;
         const ptdBudgetLabour = labourPL?.current_budget_pct || current.labour_budget_pct || 0;
         const ptdLabourVariance = ptdLabour - ptdBudgetLabour;
-        const ptdLabourVarianceDollar = (qtdSales * ptdLabourVariance) / 100;
+        const ptdLabourVarianceDollar = (ptdSales * ptdLabourVariance) / 100;
         const weekTheoreticalFoodCost = current.theoretical_food_cost_pct || 0;
         const weekTheoreticalVariance = weekFoodCost - weekTheoreticalFoodCost;
         const ptdTheoreticalVariance = ptdFoodCost - weekTheoreticalFoodCost;
@@ -982,6 +983,7 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
 
         const foodCostPL = locationPL.find(pl => pl.line_item_name === 'Cost of Sales (Food)');
         const labourPL = locationPL.find(pl => pl.line_item_name === 'Kitchen Labour' || pl.line_item_name === 'Labour');
+        const ptdSales = foodSalesPL?.current_actual || 0;
 
         const weekFoodCost = current.actual_food_cost_pct || 0;
         const weekBudgetFoodCost = current.budget_food_cost_pct || 0;
@@ -991,7 +993,7 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
         const ptdFoodCost = foodCostPL?.current_actual_pct || current.food_cost_ptd_pct || 0;
         const ptdBudgetFoodCost = foodCostPL?.current_budget_pct || current.budget_food_cost_pct || 0;
         const ptdFoodCostVariance = ptdFoodCost - ptdBudgetFoodCost;
-        const ptdFoodCostVarianceDollar = (qtdSales * ptdFoodCostVariance) / 100;
+        const ptdFoodCostVarianceDollar = (ptdSales * ptdFoodCostVariance) / 100;
 
         const weekLabour = current.labour_cost_pct || 0;
         const weekBudgetLabour = current.labour_budget_pct || 0;
@@ -1001,7 +1003,7 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
         const ptdLabour = labourPL?.current_actual_pct || current.labour_cost_ptd_pct || 0;
         const ptdBudgetLabour = labourPL?.current_budget_pct || current.labour_budget_pct || 0;
         const ptdLabourVariance = ptdLabour - ptdBudgetLabour;
-        const ptdLabourVarianceDollar = (qtdSales * ptdLabourVariance) / 100;
+        const ptdLabourVarianceDollar = (ptdSales * ptdLabourVariance) / 100;
 
         const weekTheoreticalFoodCost = current.theoretical_food_cost_pct || 0;
         const weekTheoreticalVariance = weekFoodCost - weekTheoreticalFoodCost;
