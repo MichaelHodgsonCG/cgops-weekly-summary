@@ -663,60 +663,87 @@ export function exportChefSummaryToPdf(
     }
   }
 
-  y += 16;
+  y += 18;
 
-  // ACTIONS FOR THE WEEK AHEAD — bordered box.
-  // Prefer the chef's explicit, committed actions; fall back to deriving from the
-  // action-plan free text only when no structured actions were entered.
+  // ACTIONS FOR THE WEEK AHEAD
+  // Prefer the chef's explicit, committed actions rendered as a table; fall back to
+  // deriving bullets from the action-plan free text only when no structured actions exist.
   const explicitActions = (weekAheadActions ?? [])
     .filter((a) => a.action_text && a.action_text.trim())
-    .slice(0, 6);
-  const priorities = explicitActions.length > 0
-    ? []
-    : [
-        ...splitIntoBullets(data.sales_action_plan || data.action_plan_summary, 1),
-        ...splitIntoBullets(data.labour_summary, 1),
-        ...splitIntoBullets(data.food_cost_summary, 1),
-      ].slice(0, 3);
+    .slice(0, 8);
 
-  const boxTop = y;
-  const titleLines = ['ACTIONS FOR THE WEEK AHEAD'];
-  const titleRowHeight = 22; // room for the 10.5pt bold title baseline + padding before content starts
-  let boxContentY = boxTop + titleRowHeight;
-  doc.setFontSize(8.5);
-  doc.setFont('helvetica', 'normal');
-  const priorityLines = explicitActions.length > 0
-    ? explicitActions.map((a) => {
-        const meta = [a.owner && a.owner.trim(), a.due_by && a.due_by.trim()]
-          .filter(Boolean)
-          .join(', ');
-        return `• ${a.action_text.trim()}${meta ? `  (${meta})` : ''}`;
-      })
-    : priorities.length > 0
-    ? priorities.map((p) => `• ${p}`)
-    : ['• ____________________________________________________'];
-  const wrappedPriorityLines = priorityLines.flatMap((l) => doc.splitTextToSize(l, contentWidth - 16));
-  const noteLine = '(Full detail in Food Cost Action Plan / Labour Action Plan)';
-  const boxHeight = titleRowHeight + wrappedPriorityLines.length * 10.5 + 16;
+  // Give the section room — start a fresh page if we're near the bottom.
+  if (y > pageHeight - 180) {
+    doc.setFontSize(8);
+    doc.setTextColor(120);
+    doc.text(`Generated ${new Date().toLocaleDateString()}`, margin, pageHeight - 16);
+    doc.setTextColor(0, 0, 0);
+    doc.addPage();
+    y = margin;
+  }
 
-  doc.setDrawColor(30, 41, 59);
-  doc.setLineWidth(1);
-  doc.rect(margin, boxTop, contentWidth, boxHeight);
-
-  doc.setFontSize(10.5);
+  doc.setFontSize(13);
   doc.setFont('helvetica', 'bold');
-  doc.text(titleLines[0], margin + 8, boxTop + 14);
-
-  doc.setFontSize(8.5);
-  doc.setFont('helvetica', 'normal');
-  doc.text(wrappedPriorityLines, margin + 8, boxContentY);
-  boxContentY += wrappedPriorityLines.length * 10.5 + 2;
-
-  doc.setFontSize(7.5);
+  doc.text('Actions for the Week Ahead', margin, y);
+  y += 14;
+  doc.setFontSize(8);
   doc.setFont('helvetica', 'italic');
   doc.setTextColor(100);
-  doc.text(noteLine, margin + 8, boxContentY);
+  doc.text('Concrete actions committed for next week.', margin, y);
   doc.setTextColor(0, 0, 0);
+  y += 10;
+
+  if (explicitActions.length > 0) {
+    autoTable(doc, {
+      startY: y,
+      head: [['#', 'Action', 'Owner', 'By When']],
+      body: explicitActions.map((a, i) => [
+        String(i + 1),
+        a.action_text.trim(),
+        (a.owner || '').trim() || '—',
+        (a.due_by || '').trim() || '—',
+      ]),
+      styles: { fontSize: 9.5, cellPadding: 7, valign: 'top' },
+      headStyles,
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 26, fontStyle: 'bold' },
+        1: { cellWidth: 'auto' },
+        2: { halign: 'center', cellWidth: 95 },
+        3: { halign: 'center', cellWidth: 75 },
+      },
+      margin: { left: margin, right: margin },
+      tableWidth: contentWidth,
+    });
+    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(100);
+    doc.text('Full detail in Food Cost Action Plan / Labour Action Plan.', margin, y);
+    doc.setTextColor(0, 0, 0);
+  } else {
+    // Fallback for reports created before structured actions were captured.
+    const priorities = [
+      ...splitIntoBullets(data.sales_action_plan || data.action_plan_summary, 1),
+      ...splitIntoBullets(data.labour_summary, 1),
+      ...splitIntoBullets(data.food_cost_summary, 1),
+    ].slice(0, 3);
+    const boxTop = y;
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'normal');
+    const priorityLines = priorities.length > 0
+      ? priorities.map((p) => `• ${p}`)
+      : [
+          '• ____________________________________________________',
+          '• ____________________________________________________',
+          '• ____________________________________________________',
+        ];
+    const wrappedPriorityLines = priorityLines.flatMap((l) => doc.splitTextToSize(l, contentWidth - 16));
+    const boxHeight = wrappedPriorityLines.length * 13 + 16;
+    doc.setDrawColor(30, 41, 59);
+    doc.setLineWidth(1);
+    doc.rect(margin, boxTop, contentWidth, boxHeight);
+    doc.text(wrappedPriorityLines, margin + 8, boxTop + 14);
+  }
 
   doc.setFontSize(8);
   doc.setTextColor(120);
@@ -725,10 +752,15 @@ export function exportChefSummaryToPdf(
 
   // ---------- PAGE 3+: FULL NOTES APPENDIX ----------
   // Every notes field, in full, regardless of whether it was already summarized/truncated above.
+  // The guided flow stores the sales action plan in several legacy columns
+  // (sales_action_plan / action_plan_summary / boh_promo_summary), so the same text
+  // can appear under multiple headings. Order the most meaningful label first and
+  // drop any later section whose body is an exact duplicate of one already shown.
+  const seenBodies = new Set<string>();
   const noteSections: { title: string; body?: string }[] = [
     { title: 'Food Cost Summary', body: data.food_cost_summary },
-    { title: 'Theoretical / Action Plan Summary', body: data.action_plan_summary },
     { title: 'Sales Action Plan', body: data.sales_action_plan },
+    { title: 'Theoretical / Action Plan Summary', body: data.action_plan_summary },
     { title: 'Promo Notes', body: data.boh_promo_summary },
     { title: 'Labour Summary', body: data.labour_summary },
     { title: 'Labour Review Action Plan', body: data.labour_review_action_plan },
@@ -742,7 +774,13 @@ export function exportChefSummaryToPdf(
     { title: 'Cleaning Focus', body: data.cleaning_focus },
     { title: 'Audit Score Comment', body: data.audit_score_comment },
     { title: 'General Notes', body: data.notes },
-  ].filter((s) => s.body && s.body.trim());
+  ].filter((s) => {
+    const body = s.body && s.body.trim();
+    if (!body) return false;
+    if (seenBodies.has(body)) return false;
+    seenBodies.add(body);
+    return true;
+  });
 
   if (noteSections.length > 0) {
     doc.addPage();
