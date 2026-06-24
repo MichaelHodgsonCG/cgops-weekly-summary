@@ -8,6 +8,12 @@ interface FeatureItem {
   notes: string;
 }
 
+export interface WeekAheadAction {
+  action_text: string;
+  owner?: string;
+  due_by?: string;
+}
+
 export interface FoodCostCategoryRow {
   category: string;
   opening: number;
@@ -277,7 +283,8 @@ export function exportChefSummaryToPdf(
   recapWtdSalesBudget?: number,
   recapWtdFcPct?: number,
   recapWtdLabourPct?: number,
-  foodCostCategories?: FoodCostCategoryRow[]
+  foodCostCategories?: FoodCostCategoryRow[],
+  weekAheadActions?: WeekAheadAction[]
 ) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -658,20 +665,34 @@ export function exportChefSummaryToPdf(
 
   y += 16;
 
-  // NEXT WEEK'S PRIORITIES — bordered box
-  const priorities = [
-    ...splitIntoBullets(data.sales_action_plan || data.action_plan_summary, 1),
-    ...splitIntoBullets(data.labour_summary, 1),
-    ...splitIntoBullets(data.food_cost_summary, 1),
-  ].slice(0, 3);
+  // ACTIONS FOR THE WEEK AHEAD — bordered box.
+  // Prefer the chef's explicit, committed actions; fall back to deriving from the
+  // action-plan free text only when no structured actions were entered.
+  const explicitActions = (weekAheadActions ?? [])
+    .filter((a) => a.action_text && a.action_text.trim())
+    .slice(0, 6);
+  const priorities = explicitActions.length > 0
+    ? []
+    : [
+        ...splitIntoBullets(data.sales_action_plan || data.action_plan_summary, 1),
+        ...splitIntoBullets(data.labour_summary, 1),
+        ...splitIntoBullets(data.food_cost_summary, 1),
+      ].slice(0, 3);
 
   const boxTop = y;
-  const titleLines = ["NEXT WEEK'S PRIORITIES"];
+  const titleLines = ['ACTIONS FOR THE WEEK AHEAD'];
   const titleRowHeight = 22; // room for the 10.5pt bold title baseline + padding before content starts
   let boxContentY = boxTop + titleRowHeight;
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
-  const priorityLines = priorities.length > 0
+  const priorityLines = explicitActions.length > 0
+    ? explicitActions.map((a) => {
+        const meta = [a.owner && a.owner.trim(), a.due_by && a.due_by.trim()]
+          .filter(Boolean)
+          .join(', ');
+        return `• ${a.action_text.trim()}${meta ? `  (${meta})` : ''}`;
+      })
+    : priorities.length > 0
     ? priorities.map((p) => `• ${p}`)
     : ['• ____________________________________________________'];
   const wrappedPriorityLines = priorityLines.flatMap((l) => doc.splitTextToSize(l, contentWidth - 16));
