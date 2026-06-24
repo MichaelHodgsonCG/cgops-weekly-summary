@@ -5,7 +5,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { supabase } from '../lib/supabase';
 import { fetchLabourPlBaseline, fetchSalesPlBaseline, fetchFoodCostPlBaseline, getWeeksRemainingInYear, LabourPlBaseline, SalesPlBaseline, FoodCostPlBaseline } from '../lib/needToSave';
-import { exportChefSummaryToPdf } from '../lib/chefSummaryExport';
+import { exportChefSummaryToPdf, FcapRow } from '../lib/chefSummaryExport';
 
 type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs' | 'purchases' | 'usageReview' | 'finalFoodCost' | 'finalFoodCostRecap' | 'team' | 'facilities' | 'features' | 'audit' | 'recap';
 
@@ -4986,6 +4986,9 @@ function GuidedRecapStep({
   const [savingActions, setSavingActions] = useState(false);
   const [actionsSavedAt, setActionsSavedAt] = useState<string | null>(null);
 
+  // Food Cost Action Plan items, loaded so they can be folded into the PDF export.
+  const [fcapItems, setFcapItems] = useState<FcapRow[]>([]);
+
   // Load any actions already committed for this week (so the step is resumable).
   useEffect(() => {
     if (!locationId || !fiscalYear || !periodNumber || !weekNumber) return;
@@ -5027,6 +5030,28 @@ function GuidedRecapStep({
       cancelled = true;
     };
   }, [locationId, fiscalYear, periodNumber, weekNumber]);
+
+  // Load the shared Food Cost Action Plan (per location/period) for the PDF export.
+  useEffect(() => {
+    if (!locationId || !fiscalYear || !periodNumber) return;
+
+    let cancelled = false;
+    supabase
+      .from('food_cost_action_plans')
+      .select('items')
+      .eq('location_id', locationId)
+      .eq('fiscal_year', fiscalYear)
+      .eq('period_number', periodNumber)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        setFcapItems(Array.isArray(data.items) ? (data.items as FcapRow[]) : []);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [locationId, fiscalYear, periodNumber]);
 
   const handleAddAction = () => {
     setWeekAheadActions((prev) => [...prev, createBlankAction()]);
@@ -5354,7 +5379,8 @@ function GuidedRecapStep({
         foodCostCategories,
         weekAheadActions
           .filter((a) => a.action_text.trim())
-          .map((a) => ({ action_text: a.action_text, owner: a.owner, due_by: a.due_by }))
+          .map((a) => ({ action_text: a.action_text, owner: a.owner, due_by: a.due_by })),
+        fcapItems
       );
     } catch (err) {
       setPdfError(err instanceof Error ? err.message : 'Failed to export PDF.');

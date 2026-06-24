@@ -14,6 +14,20 @@ export interface WeekAheadAction {
   due_by?: string;
 }
 
+export interface FcapRow {
+  item: string;
+  cost: number;
+  variancePerDay: number;
+  reason: string;
+  action: string;
+  manager: string;
+  teamMembers: string;
+  wk1: number;
+  wk2: number;
+  wk3: number;
+  wk4: number;
+}
+
 export interface FoodCostCategoryRow {
   category: string;
   opening: number;
@@ -284,7 +298,8 @@ export function exportChefSummaryToPdf(
   recapWtdFcPct?: number,
   recapWtdLabourPct?: number,
   foodCostCategories?: FoodCostCategoryRow[],
-  weekAheadActions?: WeekAheadAction[]
+  weekAheadActions?: WeekAheadAction[],
+  fcapItems?: FcapRow[]
 ) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -452,26 +467,21 @@ export function exportChefSummaryToPdf(
 
   y = Math.max(salesTableY, fcTableY, lcTableY) + 22;
 
-  // Top 3 things that happened this week
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Top 3 Things That Happened This Week', margin, y);
-  y += 12;
-  doc.setFontSize(8.5);
-  doc.setFont('helvetica', 'normal');
+  // Sales Action Plan + Labour Summary (moved up from the former notes appendix).
+  const renderNoteBlock = (title: string, body: string) => {
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text(title, margin, y);
+    y += 13;
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'normal');
+    const lines = doc.splitTextToSize(body && body.trim() ? body.trim() : '—', contentWidth);
+    doc.text(lines, margin, y);
+    y += lines.length * 11 + 14;
+  };
 
-  const weeklyHighlights = [
-    ...splitIntoBullets(data.boh_promo_summary, 3),
-    ...splitIntoBullets(data.tm_mots_of_note, 3),
-  ].slice(0, 3);
-
-  for (let i = 0; i < 3; i++) {
-    const bullet = weeklyHighlights[i];
-    const line = bullet ? `• ${bullet}` : '• ____________________________________________________';
-    const wrapped = doc.splitTextToSize(line, contentWidth);
-    doc.text(wrapped.slice(0, 1), margin, y);
-    y += 11;
-  }
+  renderNoteBlock('Sales Action Plan', data.sales_action_plan || data.action_plan_summary || '');
+  renderNoteBlock('Labour Summary', data.labour_summary || '');
 
   // COGS / category breakdown
   if (foodCostCategories && foodCostCategories.length > 0) {
@@ -750,79 +760,98 @@ export function exportChefSummaryToPdf(
   doc.text(`Generated ${new Date().toLocaleDateString()}`, margin, pageHeight - 16);
   doc.setTextColor(0, 0, 0);
 
-  // ---------- PAGE 3+: FULL NOTES APPENDIX ----------
-  // Every notes field, in full, regardless of whether it was already summarized/truncated above.
-  // The guided flow stores the sales action plan in several legacy columns
-  // (sales_action_plan / action_plan_summary / boh_promo_summary), so the same text
-  // can appear under multiple headings. Order the most meaningful label first and
-  // drop any later section whose body is an exact duplicate of one already shown.
-  const seenBodies = new Set<string>();
-  const noteSections: { title: string; body?: string }[] = [
-    { title: 'Food Cost Summary', body: data.food_cost_summary },
-    { title: 'Sales Action Plan', body: data.sales_action_plan },
-    { title: 'Theoretical / Action Plan Summary', body: data.action_plan_summary },
-    { title: 'Promo Notes', body: data.boh_promo_summary },
-    { title: 'Labour Summary', body: data.labour_summary },
-    { title: 'Labour Review Action Plan', body: data.labour_review_action_plan },
-    { title: 'Overtime Notes', body: data.overtime_notes },
-    { title: 'Discount Review Notes', body: data.discount_review_notes },
-    { title: 'Speed of Service Notes', body: data.speed_of_service_notes },
-    { title: 'Hiring Needs', body: data.hiring_notes },
-    { title: 'Team Members of Note', body: data.tm_mots_of_note },
-    { title: 'Development Path Updates', body: data.development_path_updates },
-    { title: 'R&M Issues', body: data.rm_issues || data.rm_issues_cleaning_focus },
-    { title: 'Cleaning Focus', body: data.cleaning_focus },
-    { title: 'Audit Score Comment', body: data.audit_score_comment },
-    { title: 'General Notes', body: data.notes },
-  ].filter((s) => {
-    const body = s.body && s.body.trim();
-    if (!body) return false;
-    if (seenBodies.has(body)) return false;
-    seenBodies.add(body);
-    return true;
-  });
+  // ---------- FOOD COST ACTION PLAN (landscape) ----------
+  // Folded in from the standalone FCAP export so the whole package is one file.
+  // The 13-column variance table needs the width, so this page is landscape.
+  const fcap = (fcapItems ?? []).filter((it) => it.item && it.item.trim());
+  if (fcap.length > 0) {
+    doc.addPage('letter', 'landscape');
+    const lw = doc.internal.pageSize.getWidth();
+    const fmtMoney = (v: number) =>
+      `${v < 0 ? '-' : ''}$${Math.abs(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  if (noteSections.length > 0) {
-    doc.addPage();
-    y = margin;
-    doc.setFontSize(13);
+    doc.setFontSize(15);
     doc.setFont('helvetica', 'bold');
-    doc.text('Full Chef Notes', margin, y);
-    y += 8;
-    doc.setFontSize(8.5);
-    doc.setFont('helvetica', 'italic');
-    doc.setTextColor(100);
-    doc.text('Complete, untruncated text for every note field on this report.', margin, y);
-    doc.setTextColor(0, 0, 0);
-    y += 18;
+    doc.text('Food Cost Action Plan', lw / 2, 36, { align: 'center' });
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    const sub = [locationName, `FY${data.fiscal_year}`, `Period ${data.period_number}`, `Week ${data.week_number}`]
+      .filter(Boolean)
+      .join('   •   ');
+    doc.text(sub, lw / 2, 52, { align: 'center' });
 
-    for (const section of noteSections) {
-      doc.setFontSize(9.5);
-      doc.setFont('helvetica', 'bold');
-      const titleHeight = 12;
-      doc.setFontSize(8.5);
-      doc.setFont('helvetica', 'normal');
-      const lines = doc.splitTextToSize(section.body as string, contentWidth);
-      const sectionHeight = titleHeight + lines.length * 10.5 + 14;
+    const fcapRows = fcap.map((it) => {
+      const total = it.wk1 + it.wk2 + it.wk3 + it.wk4;
+      return [
+        it.item,
+        fmtMoney(it.cost),
+        fmtMoney(it.variancePerDay),
+        it.reason,
+        it.action,
+        it.manager,
+        it.teamMembers,
+        fmtMoney(it.wk1),
+        fmtMoney(it.wk2),
+        fmtMoney(it.wk3),
+        fmtMoney(it.wk4),
+        fmtMoney(total),
+        fmtMoney(total - it.cost),
+      ];
+    });
 
-      if (y + sectionHeight > pageHeight - margin - 16) {
-        doc.addPage();
-        y = margin;
-      }
+    const totals = fcap.reduce(
+      (acc, it) => {
+        const total = it.wk1 + it.wk2 + it.wk3 + it.wk4;
+        return {
+          cost: acc.cost + it.cost,
+          vpd: acc.vpd + it.variancePerDay,
+          wk1: acc.wk1 + it.wk1,
+          wk2: acc.wk2 + it.wk2,
+          wk3: acc.wk3 + it.wk3,
+          wk4: acc.wk4 + it.wk4,
+          total: acc.total + total,
+          ptd: acc.ptd + (total - it.cost),
+        };
+      },
+      { cost: 0, vpd: 0, wk1: 0, wk2: 0, wk3: 0, wk4: 0, total: 0, ptd: 0 }
+    );
+    const footRow = [
+      'TOTALS',
+      fmtMoney(totals.cost),
+      fmtMoney(totals.vpd),
+      '',
+      '',
+      '',
+      '',
+      fmtMoney(totals.wk1),
+      fmtMoney(totals.wk2),
+      fmtMoney(totals.wk3),
+      fmtMoney(totals.wk4),
+      fmtMoney(totals.total),
+      fmtMoney(totals.ptd),
+    ];
 
-      doc.setFontSize(9.5);
-      doc.setFont('helvetica', 'bold');
-      doc.text(section.title, margin, y);
-      y += titleHeight;
-      doc.setFontSize(8.5);
-      doc.setFont('helvetica', 'normal');
-      doc.text(lines, margin, y);
-      y += lines.length * 10.5 + 14;
-    }
+    autoTable(doc, {
+      startY: 68,
+      head: [['Item', 'Cost', 'Var/Day', 'Reason', 'Action', 'Manager', 'Team Members', 'WK1', 'WK2', 'WK3', 'WK4', 'Total', 'PTD Diff']],
+      body: fcapRows,
+      foot: [footRow],
+      styles: { fontSize: 8, cellPadding: 5, valign: 'middle' },
+      headStyles: { fillColor: COLOR_SLATE_HEADER, textColor: 255, fontStyle: 'bold' },
+      footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 90 },
+        3: { cellWidth: 100 },
+        4: { cellWidth: 110 },
+      },
+      margin: { left: 30, right: 30 },
+    });
 
+    const fcapFinalY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
     doc.setFontSize(8);
     doc.setTextColor(120);
-    doc.text(`Generated ${new Date().toLocaleDateString()}`, margin, pageHeight - 16);
+    doc.text(`Generated ${new Date().toLocaleDateString()}`, 30, fcapFinalY + 18);
     doc.setTextColor(0, 0, 0);
   }
 
