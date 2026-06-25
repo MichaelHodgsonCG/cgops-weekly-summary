@@ -5,7 +5,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { supabase } from '../lib/supabase';
 import { fetchLabourPlBaseline, fetchSalesPlBaseline, fetchFoodCostPlBaseline, getWeeksRemainingInYear, LabourPlBaseline, SalesPlBaseline, FoodCostPlBaseline } from '../lib/needToSave';
-import { exportChefSummaryToPdf } from '../lib/chefSummaryExport';
+import { exportChefSummaryToPdf, FcapRow } from '../lib/chefSummaryExport';
 
 type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs' | 'purchases' | 'usageReview' | 'finalFoodCost' | 'finalFoodCostRecap' | 'team' | 'facilities' | 'features' | 'audit' | 'recap';
 
@@ -810,6 +810,26 @@ export type FeatureItem = {
   notes: string;
 };
 
+// One editable "Actions for the Week Ahead" row. `id` is a client-side key only;
+// rows are persisted to the weekly_actions table (delete-and-reinsert per week).
+export type EditableAction = {
+  id: string;
+  action_text: string;
+  owner: string;
+  due_by: string;
+  source_section: string;
+};
+
+function createBlankAction(source = 'manual'): EditableAction {
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    action_text: '',
+    owner: '',
+    due_by: '',
+    source_section: source,
+  };
+}
+
 interface GuidedWeeklyPackageProps {
   initialValues?: GuidedFieldUpdates;
   onFieldsChange?: (updates: GuidedFieldUpdates) => void;
@@ -1605,6 +1625,7 @@ export function GuidedWeeklyPackage({
     content = (
       <GuidedRecapStep
         locationName={locationName}
+        locationId={locationId}
         fiscalYear={fiscalYear}
         periodNumber={periodNumber}
         weekNumber={weekNumber}
@@ -1635,6 +1656,10 @@ export function GuidedWeeklyPackage({
     content = (
       <GuidedPackageStart
         locationName={locationName}
+        locationId={locationId}
+        fiscalYear={fiscalYear}
+        periodNumber={periodNumber}
+        weekNumber={weekNumber}
         onStart={() => setStep('sales')}
       />
     );
@@ -1680,13 +1705,89 @@ function StepProgressHeader({ meta }: { meta: StepMeta }) {
   );
 }
 
+type PriorAction = {
+  id: string;
+  action_text: string;
+  owner: string;
+  due_by: string;
+  status: string;
+  fiscal_year: number;
+  period_number: number;
+  week_number: number;
+};
+
 function GuidedPackageStart({
   locationName,
+  locationId,
+  fiscalYear,
+  periodNumber,
+  weekNumber,
   onStart,
 }: {
   locationName: string;
+  locationId?: string;
+  fiscalYear?: number;
+  periodNumber?: number;
+  weekNumber?: number;
   onStart: () => void;
 }) {
+  const [priorActions, setPriorActions] = useState<PriorAction[]>([]);
+  const [priorLabel, setPriorLabel] = useState('');
+  const [loadingPrior, setLoadingPrior] = useState(false);
+
+  // Load the most recent prior week's open/carried actions so the chef can close
+  // the loop ("did you do them?") before starting the new week.
+  useEffect(() => {
+    if (!locationId || !fiscalYear || !periodNumber || !weekNumber) return;
+
+    let cancelled = false;
+    setLoadingPrior(true);
+
+    const isBeforeCurrent = (r: { fiscal_year: number; period_number: number; week_number: number }) =>
+      r.fiscal_year < fiscalYear ||
+      (r.fiscal_year === fiscalYear && r.period_number < periodNumber) ||
+      (r.fiscal_year === fiscalYear && r.period_number === periodNumber && r.week_number < weekNumber);
+
+    supabase
+      .from('weekly_actions')
+      .select('id, action_text, owner, due_by, status, fiscal_year, period_number, week_number, sort_order')
+      .eq('location_id', locationId)
+      .in('status', ['open', 'carried'])
+      .order('fiscal_year', { ascending: false })
+      .order('period_number', { ascending: false })
+      .order('week_number', { ascending: false })
+      .order('sort_order', { ascending: true })
+      .then(({ data }) => {
+        if (cancelled || !data || data.length === 0) return;
+        const prior = data.filter(isBeforeCurrent);
+        if (prior.length === 0) return;
+        const head = prior[0];
+        const sameWeek = prior.filter(
+          (r) =>
+            r.fiscal_year === head.fiscal_year &&
+            r.period_number === head.period_number &&
+            r.week_number === head.week_number
+        );
+        setPriorActions(sameWeek as PriorAction[]);
+        setPriorLabel(`P${head.period_number} W${head.week_number}`);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPrior(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [locationId, fiscalYear, periodNumber, weekNumber]);
+
+  const updatePriorStatus = async (id: string, status: 'done' | 'carried' | 'dropped') => {
+    setPriorActions((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)));
+    await supabase
+      .from('weekly_actions')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', id);
+  };
+
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
       <div className="flex items-center gap-3 mb-2">
@@ -1728,6 +1829,62 @@ function GuidedPackageStart({
         Welcome, Chef. This guided workflow will walk you through each report required for your
         weekly culinary package.
       </p>
+
+      {!loadingPrior && priorActions.length > 0 && (
+        <div className="mt-6 border border-slate-200 rounded-lg p-4 bg-slate-50">
+          <h3 className="text-sm font-semibold text-slate-800">
+            Last week’s actions{priorLabel ? ` (${priorLabel})` : ''}
+          </h3>
+          <p className="text-xs text-slate-500 mt-0.5 mb-3">
+            Before you start, close the loop on what you committed to. Carried-over actions stay
+            on the list — add them to this week’s plan in the final step.
+          </p>
+          <div className="space-y-2">
+            {priorActions.map((action) => (
+              <div
+                key={action.id}
+                className="bg-white border border-slate-200 rounded-lg p-3 flex items-start justify-between gap-3"
+              >
+                <div className="flex-1">
+                  <p className="text-sm text-slate-700">{action.action_text}</p>
+                  {(action.owner || action.due_by) && (
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {[action.owner, action.due_by].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {(['done', 'carried', 'dropped'] as const).map((s) => {
+                    const active = action.status === s;
+                    const labels: Record<typeof s, string> = {
+                      done: 'Done',
+                      carried: 'Carry',
+                      dropped: 'Drop',
+                    };
+                    const activeColor =
+                      s === 'done'
+                        ? 'bg-green-600 text-white border-green-600'
+                        : s === 'carried'
+                        ? 'bg-amber-500 text-white border-amber-500'
+                        : 'bg-slate-500 text-white border-slate-500';
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => updatePriorStatus(action.id, s)}
+                        className={`px-2 py-1 text-xs rounded-md border font-medium transition-colors ${
+                          active ? activeColor : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                        }`}
+                      >
+                        {labels[s]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <button
         onClick={onStart}
@@ -4765,6 +4922,7 @@ function GuidedAuditStep({
 
 function GuidedRecapStep({
   locationName,
+  locationId,
   fiscalYear,
   periodNumber,
   weekNumber,
@@ -4791,6 +4949,7 @@ function GuidedRecapStep({
   onFinish,
 }: {
   locationName?: string;
+  locationId?: string;
   fiscalYear?: number;
   periodNumber?: number;
   weekNumber?: number;
@@ -4818,6 +4977,228 @@ function GuidedRecapStep({
 }) {
   const [exportingPdf, setExportingPdf] = useState(false);
   const [pdfError, setPdfError] = useState('');
+
+  // Actions for the Week Ahead — committed forward actions, persisted to weekly_actions.
+  const [weekAheadActions, setWeekAheadActions] = useState<EditableAction[]>([]);
+  const [actionsLoading, setActionsLoading] = useState(false);
+  const [draftingActions, setDraftingActions] = useState(false);
+  const [actionsError, setActionsError] = useState('');
+  const [savingActions, setSavingActions] = useState(false);
+  const [actionsSavedAt, setActionsSavedAt] = useState<string | null>(null);
+
+  // Food Cost Action Plan items, loaded so they can be folded into the PDF export.
+  const [fcapItems, setFcapItems] = useState<FcapRow[]>([]);
+
+  // Load any actions already committed for this week (so the step is resumable).
+  useEffect(() => {
+    if (!locationId || !fiscalYear || !periodNumber || !weekNumber) return;
+
+    let cancelled = false;
+    setActionsLoading(true);
+
+    supabase
+      .from('weekly_actions')
+      .select('id, action_text, owner, due_by, source_section, sort_order, updated_at')
+      .eq('location_id', locationId)
+      .eq('fiscal_year', fiscalYear)
+      .eq('period_number', periodNumber)
+      .eq('week_number', weekNumber)
+      .order('sort_order', { ascending: true })
+      .then(({ data }) => {
+        if (cancelled || !data || data.length === 0) return;
+        setWeekAheadActions(
+          data.map((row) => ({
+            id: row.id,
+            action_text: row.action_text ?? '',
+            owner: row.owner ?? '',
+            due_by: row.due_by ?? '',
+            source_section: row.source_section ?? 'manual',
+          }))
+        );
+        const latest = data
+          .map((r) => r.updated_at)
+          .filter(Boolean)
+          .sort()
+          .pop();
+        setActionsSavedAt(latest ?? null);
+      })
+      .finally(() => {
+        if (!cancelled) setActionsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [locationId, fiscalYear, periodNumber, weekNumber]);
+
+  // Load the shared Food Cost Action Plan (per location/period) for the PDF export.
+  useEffect(() => {
+    if (!locationId || !fiscalYear || !periodNumber) return;
+
+    let cancelled = false;
+    supabase
+      .from('food_cost_action_plans')
+      .select('items')
+      .eq('location_id', locationId)
+      .eq('fiscal_year', fiscalYear)
+      .eq('period_number', periodNumber)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        setFcapItems(Array.isArray(data.items) ? (data.items as FcapRow[]) : []);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [locationId, fiscalYear, periodNumber]);
+
+  const handleAddAction = () => {
+    setWeekAheadActions((prev) => [...prev, createBlankAction()]);
+  };
+
+  const handleRemoveAction = (id: string) => {
+    setWeekAheadActions((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  const handleActionFieldChange = (id: string, field: keyof EditableAction, value: string) => {
+    setWeekAheadActions((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, [field]: value } : a))
+    );
+  };
+
+  const handleDraftActions = async () => {
+    setDraftingActions(true);
+    setActionsError('');
+    try {
+      const chefNotes = [
+        formatRecapMetricsForPrompt(recapMetrics),
+        foodCostComments && `Food Cost Action Plan: ${foodCostComments}`,
+        labourReviewActionPlan && `Labour Action Plan: ${labourReviewActionPlan}`,
+        salesActionPlan && `Sales Action Plan: ${salesActionPlan}`,
+        hiringNotes && `Hiring: ${hiringNotes}`,
+        tmMotsOfNote && `Team Members of Note: ${tmMotsOfNote}`,
+        developmentPathUpdates && `Development Path: ${developmentPathUpdates}`,
+        rmIssues && `R&M Issues: ${rmIssues}`,
+        cleaningFocus && `Cleaning Focus: ${cleaningFocus}`,
+        featuresNotes && `Features: ${featuresNotes}`,
+        auditScoreComment && `Audit: ${auditScoreComment}`,
+      ].filter(Boolean).join('\n');
+
+      if (!chefNotes.trim()) {
+        setActionsError('Add some notes in the earlier steps first, then draft actions.');
+        return;
+      }
+
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-chef-summary`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          voice: 'actions',
+          summaries: [
+            {
+              id: 'current',
+              location_name: locationName ?? '',
+              food_cost_summary: foodCostComments,
+              labour_summary: labourReviewActionPlan,
+              boh_promo_summary: salesActionPlan,
+              notes: chefNotes,
+              action_plan_summary: salesActionPlan,
+              hiring_notes: hiringNotes,
+              tm_mots_of_note: tmMotsOfNote,
+              development_path_updates: developmentPathUpdates,
+              rm_issues: rmIssues,
+              cleaning_focus: cleaningFocus,
+              features_notes: featuresNotes,
+              audit_score_comment: auditScoreComment,
+            },
+          ],
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to draft actions');
+
+      const { results } = await response.json();
+      const raw = (results?.[0]?.ai_summary ?? '') as string;
+      const drafted = raw
+        .split('\n')
+        .map((line) => line.replace(/^\s*[-*•\d.)]+\s*/, '').trim())
+        .filter(Boolean)
+        .map((text) => ({ ...createBlankAction('ai'), action_text: text }));
+
+      if (drafted.length === 0) {
+        setActionsError('No actions could be drafted from this week’s notes.');
+        return;
+      }
+
+      // Append drafted actions to whatever the chef has already entered.
+      setWeekAheadActions((prev) => [...prev.filter((a) => a.action_text.trim()), ...drafted]);
+    } catch (err) {
+      setActionsError(err instanceof Error ? err.message : 'Failed to draft actions.');
+    } finally {
+      setDraftingActions(false);
+    }
+  };
+
+  // Persist the current actions for this week: clear existing rows then insert.
+  const saveWeekAheadActions = async (): Promise<boolean> => {
+    if (!locationId || !fiscalYear || !periodNumber || !weekNumber) return false;
+    const rows = weekAheadActions
+      .filter((a) => a.action_text.trim())
+      .map((a, index) => ({
+        location_id: locationId,
+        fiscal_year: fiscalYear,
+        period_number: periodNumber,
+        week_number: weekNumber,
+        action_text: a.action_text.trim(),
+        owner: a.owner.trim(),
+        due_by: a.due_by.trim(),
+        source_section: a.source_section || 'manual',
+        status: 'open',
+        sort_order: index,
+        updated_at: new Date().toISOString(),
+      }));
+
+    const { error: deleteError } = await supabase
+      .from('weekly_actions')
+      .delete()
+      .eq('location_id', locationId)
+      .eq('fiscal_year', fiscalYear)
+      .eq('period_number', periodNumber)
+      .eq('week_number', weekNumber);
+    if (deleteError) return false;
+
+    if (rows.length > 0) {
+      const { error: insertError } = await supabase.from('weekly_actions').insert(rows);
+      if (insertError) return false;
+    }
+    return true;
+  };
+
+  const handleSaveActions = async () => {
+    setSavingActions(true);
+    setActionsError('');
+    try {
+      const ok = await saveWeekAheadActions();
+      if (ok) {
+        setActionsSavedAt(new Date().toISOString());
+      } else {
+        setActionsError('Failed to save actions.');
+      }
+    } finally {
+      setSavingActions(false);
+    }
+  };
+
+  const handleFinish = async () => {
+    // Make sure committed actions are saved before leaving the guide.
+    await saveWeekAheadActions();
+    onFinish();
+  };
 
   const handleExportFullSummaryPdf = async () => {
     setExportingPdf(true);
@@ -4995,7 +5376,11 @@ function GuidedRecapStep({
         m.recap_sales_wtd_budget,
         m.recap_fc_wtd_pct,
         m.recap_labour_wtd_pct,
-        foodCostCategories
+        foodCostCategories,
+        weekAheadActions
+          .filter((a) => a.action_text.trim())
+          .map((a) => ({ action_text: a.action_text, owner: a.owner, due_by: a.due_by })),
+        fcapItems
       );
     } catch (err) {
       setPdfError(err instanceof Error ? err.message : 'Failed to export PDF.');
@@ -5031,6 +5416,95 @@ function GuidedRecapStep({
             <p className="text-sm text-slate-700 whitespace-pre-wrap">{s.value}</p>
           </div>
         ))}
+      </div>
+
+      <div className="mt-8">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-base font-semibold text-slate-800">Actions for the Week Ahead</h3>
+          <button
+            onClick={handleDraftActions}
+            disabled={draftingActions}
+            className="px-3 py-1.5 text-sm bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors disabled:opacity-50"
+          >
+            {draftingActions ? 'Drafting...' : 'Draft from this week’s notes'}
+          </button>
+        </div>
+        <p className="text-xs text-slate-500 mb-3">
+          The concrete actions you’re committing to next week. Draft a starting list from
+          this week’s notes, then edit, add an owner and a target, and save. These carry
+          forward — you’ll review them at the start of next week’s package.
+        </p>
+        {actionsError && <p className="text-sm text-red-600 mb-2">{actionsError}</p>}
+        {actionsLoading && <p className="text-sm text-slate-500 mb-2">Loading saved actions…</p>}
+
+        <div className="space-y-2">
+          {weekAheadActions.length === 0 && !actionsLoading && (
+            <p className="text-sm text-slate-500">
+              No actions yet. Draft from your notes above, or add one manually.
+            </p>
+          )}
+          {weekAheadActions.map((action, index) => (
+            <div key={action.id} className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+              <div className="flex items-start gap-2">
+                <span className="text-sm font-semibold text-slate-400 pt-2">{index + 1}.</span>
+                <div className="flex-1 space-y-2">
+                  <textarea
+                    value={action.action_text}
+                    onChange={(e) => handleActionFieldChange(action.id, 'action_text', e.target.value)}
+                    rows={2}
+                    placeholder="What will you do next week? (e.g. Retrain line on portioning for high-variance items)"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      value={action.owner}
+                      onChange={(e) => handleActionFieldChange(action.id, 'owner', e.target.value)}
+                      placeholder="Owner (e.g. Sous, Chef)"
+                      className="flex-1 px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                    />
+                    <input
+                      value={action.due_by}
+                      onChange={(e) => handleActionFieldChange(action.id, 'due_by', e.target.value)}
+                      placeholder="By when (e.g. Fri)"
+                      className="flex-1 px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleRemoveAction(action.id)}
+                  className="p-1.5 text-slate-400 hover:text-red-600 transition-colors"
+                  title="Remove action"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between mt-3">
+          <button
+            onClick={handleAddAction}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-700 border border-slate-300 rounded-lg font-medium hover:bg-slate-50 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add action
+          </button>
+          <div className="flex items-center gap-3">
+            {actionsSavedAt && (
+              <span className="text-xs text-slate-400">
+                Saved {new Date(actionsSavedAt).toLocaleString()}
+              </span>
+            )}
+            <button
+              onClick={handleSaveActions}
+              disabled={savingActions}
+              className="px-3 py-1.5 text-sm bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors disabled:opacity-50"
+            >
+              {savingActions ? 'Saving...' : 'Save Actions'}
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="mt-6">
@@ -5072,7 +5546,7 @@ function GuidedRecapStep({
           Back
         </button>
         <button
-          onClick={onFinish}
+          onClick={handleFinish}
           className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
         >
           Finish

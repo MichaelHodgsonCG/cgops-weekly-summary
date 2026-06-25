@@ -30,6 +30,9 @@ const ANALYST_PROMPT =
 const CHEF_VOICE_PROMPT =
   "You are a restaurant chef writing a short first-person summary of your own week for a printed report. The notes may include a 'Key Numbers' block with actual sales, food cost, and labour figures versus budget - reference those numbers where relevant so the summary reflects the real results, not just whichever action plan has the most text. This is a weekly report, so when citing food cost or labour percentages, always reference the WTD (week-to-date) figure, not YTD or PTD. Cover sales, food cost, and labour performance roughly evenly. Rewrite the notes below into 3-5 polished, professional sentences in first person (\"I\", \"we\", \"our\"), correcting grammar and tightening language, but keeping the chef's voice and meaning. Do not summarize in third person, do not refer to \"the chef\", and never start with phrases like \"Chef says\" or \"The chef reports\". Do not use bullet points.";
 
+const ACTIONS_PROMPT =
+  "You are a restaurant operations coach helping a chef plan the week ahead. The notes below are this week's review notes and action plans across sales, food cost, labour, team, facilities, and audit. Extract the most important CONCRETE, FORWARD-LOOKING actions the chef should take NEXT week to improve results or close gaps. Output 3 to 6 actions, one per line, each starting with '- ' and an imperative verb (e.g. 'Retrain line on portioning for high-variance items'). Keep each action to a single specific sentence. Prioritise actions that address the largest variances or risks first. Do not include headers, numbering, commentary, or any text other than the action lines. If the notes describe something already completed rather than a future action, rephrase it as the next concrete step it implies.";
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -38,10 +41,15 @@ Deno.serve(async (req: Request) => {
   try {
     const { summaries, voice } = (await req.json()) as {
       summaries: ChefSummaryInput[];
-      voice?: "analyst" | "chef";
+      voice?: "analyst" | "chef" | "actions";
     };
 
-    const systemPrompt = voice === "chef" ? CHEF_VOICE_PROMPT : ANALYST_PROMPT;
+    const systemPrompt =
+      voice === "chef"
+        ? CHEF_VOICE_PROMPT
+        : voice === "actions"
+        ? ACTIONS_PROMPT
+        : ANALYST_PROMPT;
 
     if (!summaries || !Array.isArray(summaries) || summaries.length === 0) {
       return new Response(
