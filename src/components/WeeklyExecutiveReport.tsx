@@ -395,6 +395,22 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
         }
       }
 
+      // Period-to-date promos: accumulate the weekly BOH promo across this period's weeks.
+      const { data: periodPromoRows } = await supabase
+        .from('weekly_chef_summary')
+        .select('location_id, boh_promo_amount, locations!inner(exclude_from_reporting)')
+        .eq('fiscal_year', fiscalYear)
+        .eq('period_number', period)
+        .lte('week_number', week)
+        .eq('locations.exclude_from_reporting', false);
+      const promoPtdByLocation = new Map<string, number>();
+      for (const row of periodPromoRows || []) {
+        promoPtdByLocation.set(
+          row.location_id,
+          (promoPtdByLocation.get(row.location_id) || 0) + (row.boh_promo_amount || 0)
+        );
+      }
+
       // Build restaurant metrics
       const restaurants = (currentWeekData || []).map(current => {
         const weekSales = current.food_sales_labour_push || current.food_sales_silverware || 0;
@@ -409,7 +425,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
         const qtdSalesVariance = qtdSales - qtdBudget;
         const foodCostPL = locationPL.find(pl => pl.line_item_name === 'Cost of Sales (Food)');
         const labourPL = locationPL.find(pl => pl.line_item_name === 'Kitchen Labour' || pl.line_item_name === 'Labour');
-        const ptdSales = foodSalesPL?.current_actual || 0;
+        const ptdSales = foodSalesPL?.current_actual || current.sales_ptd_actual || 0;
         const weekFoodCost = current.actual_food_cost_pct || 0;
         const weekBudgetFoodCost = current.budget_food_cost_pct || 0;
         const weekFoodCostVariance = weekFoodCost - weekBudgetFoodCost;
@@ -428,9 +444,10 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
         const ptdLabourVarianceDollar = (ptdSales * ptdLabourVariance) / 100;
         const weekTheoreticalFoodCost = current.theoretical_food_cost_pct || 0;
         const weekTheoreticalVariance = weekFoodCost - weekTheoreticalFoodCost;
-        const ptdTheoreticalVariance = ptdFoodCost - weekTheoreticalFoodCost;
+        const ptdTheoreticalFoodCost = current.theoretical_fc_ptd_pct || current.theoretical_food_cost_pct || 0;
+        const ptdTheoreticalVariance = ptdFoodCost - ptdTheoreticalFoodCost;
         const weekPromo = current.boh_promo_amount || 0;
-        const ptdPromo = current.promo_ptd || 0;
+        const ptdPromo = promoPtdByLocation.get(current.location_id) ?? (current.promo_ptd || 0);
         const expoTime = current.qsr_expo_time || '';
         const brunchTime = current.qsr_weekend_lunch_time || '';
         const ytdSales = foodSalesPL?.ytd_actual || 0;
@@ -965,6 +982,22 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
       }
     }
 
+    // Period-to-date promos: accumulate the weekly BOH promo across this period's weeks.
+    const { data: periodPromoRows } = await supabase
+      .from('weekly_chef_summary')
+      .select('location_id, boh_promo_amount, locations!inner(exclude_from_reporting)')
+      .eq('fiscal_year', fiscalYear)
+      .eq('period_number', period)
+      .lte('week_number', week)
+      .eq('locations.exclude_from_reporting', false);
+    const promoPtdByLocation = new Map<string, number>();
+    for (const row of periodPromoRows || []) {
+      promoPtdByLocation.set(
+        row.location_id,
+        (promoPtdByLocation.get(row.location_id) || 0) + (row.boh_promo_amount || 0)
+      );
+    }
+
     if (currentWeekData) {
       const restaurantMetrics = currentWeekData.map(current => {
         const weekSales = current.food_sales_labour_push || current.food_sales_silverware || 0;
@@ -983,7 +1016,7 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
 
         const foodCostPL = locationPL.find(pl => pl.line_item_name === 'Cost of Sales (Food)');
         const labourPL = locationPL.find(pl => pl.line_item_name === 'Kitchen Labour' || pl.line_item_name === 'Labour');
-        const ptdSales = foodSalesPL?.current_actual || 0;
+        const ptdSales = foodSalesPL?.current_actual || current.sales_ptd_actual || 0;
 
         const weekFoodCost = current.actual_food_cost_pct || 0;
         const weekBudgetFoodCost = current.budget_food_cost_pct || 0;
@@ -1008,11 +1041,11 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
         const weekTheoreticalFoodCost = current.theoretical_food_cost_pct || 0;
         const weekTheoreticalVariance = weekFoodCost - weekTheoreticalFoodCost;
 
-        const ptdTheoreticalFoodCost = current.theoretical_food_cost_pct || 0;
+        const ptdTheoreticalFoodCost = current.theoretical_fc_ptd_pct || current.theoretical_food_cost_pct || 0;
         const ptdTheoreticalVariance = ptdFoodCost - ptdTheoreticalFoodCost;
 
         const weekPromo = current.boh_promo_amount || 0;
-        const ptdPromo = current.promo_ptd || 0;
+        const ptdPromo = promoPtdByLocation.get(current.location_id) ?? (current.promo_ptd || 0);
 
         const expoTime = current.qsr_expo_time || '';
         const brunchTime = current.qsr_weekend_lunch_time || '';
