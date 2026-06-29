@@ -5431,8 +5431,26 @@ function GuidedRecapStep({
       const labourSpent = m.labour_spent ?? 0;
       const usageAmount = m.usage_amount ?? 0;
       const idealUsageAmount = m.ideal_usage_amount ?? 0;
-      const budgetFoodCostPct = 0;
-      const labourBudgetPct = m.labour_budget_pct ?? 0;
+      // Source the food-cost and labour budget %s from the P&L baseline — the same
+      // place the guided final-food-cost step reads them. Without this the export
+      // would show a 0% budget and a meaningless +0.00pt variance.
+      let budgetFoodCostPct = 0;
+      let labourBudgetPct = m.labour_budget_pct ?? 0;
+      let baselineWeekEndingDate: string | undefined;
+      if (locationId && fiscalYear && periodNumber && weekNumber) {
+        try {
+          const [fcBaseline, labourBaseline] = await Promise.all([
+            fetchFoodCostPlBaseline(locationId, fiscalYear, periodNumber, weekNumber),
+            fetchLabourPlBaseline(locationId, fiscalYear, periodNumber, weekNumber),
+          ]);
+          budgetFoodCostPct = fcBaseline?.periodBudgetPct ?? 0;
+          baselineWeekEndingDate = fcBaseline?.weekEndingDate;
+          // Fall back to the labour baseline only when the chef left the field blank.
+          if (!labourBudgetPct) labourBudgetPct = labourBaseline?.periodBudgetPct ?? 0;
+        } catch {
+          // Keep the chef-entered / zero defaults if the baseline can't be loaded.
+        }
+      }
       const budgetFoodSalesPeriod = m.budget_food_sales_period ?? 0;
       const weekBudget = budgetFoodSalesPeriod > 0 ? budgetFoodSalesPeriod / 4 : 0;
       const actualFoodCostPct = foodSalesPush > 0 ? (usageAmount / foodSalesPush) * 100 : 0;
@@ -5448,7 +5466,7 @@ function GuidedRecapStep({
         period_number: periodNumber ?? 0,
         fiscal_year: fiscalYear ?? 0,
         budget_food_cost_pct: budgetFoodCostPct,
-        on_hand_amount: 0,
+        on_hand_amount: m.on_hand_amount ?? 0,
         sage_food_sales_qtd: m.recap_sales_ytd_actual ?? 0,
         sage_fcost_qtd_pct: m.recap_fc_ytd_pct ?? 0,
         food_cost_ptd_pct: m.recap_fc_ptd_pct ?? 0,
@@ -5475,21 +5493,22 @@ function GuidedRecapStep({
         lab_ptd_var_amount: 0,
         qtd_labour_variance_pct: 0,
         labour_spent: labourSpent,
-        overtime_amount: 0,
+        overtime_amount: m.overtime_amount ?? 0,
         lab_qtd_var_amount: m.recap_labour_ytd_variance_amount ?? 0,
         ebidta_budget_period_pct: 0,
         ebidta_ptd_pct: 0,
         ebidta_variance_pct: 0,
         qsr_weekend_lunch_time: '',
-        qsr_expo_time: '',
+        qsr_expo_time: m.qsr_expo_time ?? '',
+        window_time: m.window_time,
         teamshare_amount: 0,
-        petty_cash: 0,
-        waste_amount: 0,
+        petty_cash: m.cogs_petty_cash_amount ?? 0,
+        waste_amount: m.waste_amount ?? 0,
         last_audit_score_pct: auditScore ? parseFloat(auditScore) || 0 : 0,
-        boh_promo_amount: 0,
+        boh_promo_amount: m.boh_promo_amount ?? 0,
         promo_ptd: 0,
         promo_qtd: 0,
-        sous_vac_days: 0,
+        sous_vac_days: m.sous_vac_days ?? 0,
         food_cost_summary: foodCostComments,
         labour_summary: labourReviewActionPlan,
         boh_promo_summary: salesActionPlan,
@@ -5500,14 +5519,14 @@ function GuidedRecapStep({
         rm_issues: rmIssues,
         cleaning_focus: cleaningFocus,
         audit_score_comment: auditScoreComment,
-        ideal_cooks: 0,
-        current_cooks: 0,
-        ideal_prep: 0,
-        current_prep: 0,
-        ideal_dish: 0,
-        current_dish: 0,
-        ideal_other: 0,
-        current_other: 0,
+        ideal_cooks: m.ideal_cooks ?? 0,
+        current_cooks: m.current_cooks ?? 0,
+        ideal_prep: m.ideal_prep ?? 0,
+        current_prep: m.current_prep ?? 0,
+        ideal_dish: m.ideal_dish ?? 0,
+        current_dish: m.current_dish ?? 0,
+        ideal_other: m.ideal_other ?? 0,
+        current_other: m.current_other ?? 0,
         hiring_notes: hiringNotes,
         tm_mots_of_note: tmMotsOfNote,
         development_path_updates: developmentPathUpdates,
@@ -5537,7 +5556,7 @@ function GuidedRecapStep({
         labourCostPct,
         lcVariance,
         undefined,
-        undefined,
+        baselineWeekEndingDate,
         m.recap_sales_wtd_actual,
         m.recap_sales_wtd_budget,
         m.recap_fc_wtd_pct,
