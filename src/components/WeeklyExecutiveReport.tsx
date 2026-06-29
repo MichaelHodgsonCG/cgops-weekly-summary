@@ -3,6 +3,7 @@ import { FileText, Loader2, Download, Sparkles, Calendar, ChevronRight, Check } 
 import { supabase } from '../lib/supabase';
 import { useCurrentFiscalPeriod, useFiscalCalendar } from '../lib/useFiscalCalendar';
 import { ChefSummariesTable } from './ChefSummariesTable';
+import { exportChefSummaryToPdf, FoodCostCategoryRow, FcapRow, WeekAheadAction } from '../lib/chefSummaryExport';
 
 type WeeklyReport = {
   id: string;
@@ -886,10 +887,114 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
 function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: number; period: number; week: number }) {
   const [restaurants, setRestaurants] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reportUrl, setReportUrl] = useState<string | null>(null);
+  const [reportTitle, setReportTitle] = useState('');
+  const [reportLoadingId, setReportLoadingId] = useState<string | null>(null);
+  const [reportError, setReportError] = useState('');
 
   useEffect(() => {
     loadRestaurantData();
   }, [fiscalYear, period, week]);
+
+  // Build a location's full chef-summary PDF and show it in-app (blob URL),
+  // reusing the same generator that produces the emailed report.
+  const openReport = async (locationId: string, name: string) => {
+    setReportLoadingId(locationId);
+    setReportError('');
+    try {
+      const { data: row } = await supabase
+        .from('weekly_chef_summary')
+        .select('*')
+        .eq('location_id', locationId)
+        .eq('fiscal_year', fiscalYear)
+        .eq('period_number', period)
+        .eq('week_number', week)
+        .maybeSingle();
+      if (!row) {
+        setReportError(`No saved summary for ${name} (FY${fiscalYear} P${period} W${week}).`);
+        return;
+      }
+
+      const { data: cal } = await supabase
+        .from('fiscal_calendar')
+        .select('end_date')
+        .eq('fiscal_year', fiscalYear)
+        .eq('period', period)
+        .eq('week', week)
+        .maybeSingle();
+      const weekEndingDate = cal?.end_date as string | undefined;
+
+      const sales = row.food_sales_labour_push || 0;
+      const actualFoodCostPct = sales > 0 ? (row.usage_amount / sales) * 100 : 0;
+      const fcVariance = actualFoodCostPct - (row.budget_food_cost_pct || 0);
+      const theoreticalFoodCostPct = sales > 0 ? (row.ideal_usage_amount / sales) * 100 : 0;
+      const theoreticalVariance = actualFoodCostPct - theoreticalFoodCostPct;
+      const labourCostPct = sales > 0 ? (row.labour_spent / sales) * 100 : 0;
+      const lcVariance = labourCostPct - (row.labour_budget_pct || 0);
+      const weekBudget = row.budget_food_sales_period > 0 ? row.budget_food_sales_period / 4 : (row.week_budget || 0);
+
+      let foodCostCategories: FoodCostCategoryRow[] | undefined;
+      try {
+        const parsed = JSON.parse(row.final_food_cost_items || '[]');
+        const categories = Array.isArray(parsed) ? parsed : parsed?.categories;
+        if (Array.isArray(categories) && categories.length > 0) {
+          foodCostCategories = categories.map((c: Record<string, unknown>) => ({
+            category: String(c.category ?? ''),
+            opening: Number(c.opening) || 0,
+            glPurchases: Number(c.glPurchases) || 0,
+            closing: Number(c.closing) || 0,
+            waste: Number(c.waste) || 0,
+            actualUsage: Number(c.actualUsage) || 0,
+            idealUsage: Number(c.idealUsage) || 0,
+            variance: Number(c.variance) || 0,
+          }));
+        }
+      } catch {
+        foodCostCategories = undefined;
+      }
+
+      const { data: actionRows } = await supabase
+        .from('weekly_actions')
+        .select('action_text, owner, due_by, sort_order')
+        .eq('location_id', locationId)
+        .eq('fiscal_year', fiscalYear)
+        .eq('period_number', period)
+        .eq('week_number', week)
+        .order('sort_order', { ascending: true });
+      const weekAheadActions: WeekAheadAction[] = (actionRows || [])
+        .filter(a => a.action_text && a.action_text.trim())
+        .map(a => ({ action_text: a.action_text, owner: a.owner ?? '', due_by: a.due_by ?? '' }));
+
+      const { data: fcapRow } = await supabase
+        .from('food_cost_action_plans')
+        .select('items')
+        .eq('location_id', locationId)
+        .eq('fiscal_year', fiscalYear)
+        .eq('period_number', period)
+        .maybeSingle();
+      const fcapItems: FcapRow[] = Array.isArray(fcapRow?.items) ? (fcapRow!.items as FcapRow[]) : [];
+
+      const url = exportChefSummaryToPdf(
+        row, name, weekBudget, actualFoodCostPct, fcVariance, theoreticalFoodCostPct,
+        theoreticalVariance, labourCostPct, lcVariance, undefined, weekEndingDate,
+        sales, weekBudget, actualFoodCostPct, labourCostPct,
+        foodCostCategories, weekAheadActions, fcapItems, 'bloburl'
+      ) as string;
+
+      setReportTitle(name);
+      setReportUrl(url);
+    } catch (e) {
+      setReportError(e instanceof Error ? e.message : 'Failed to build report.');
+    } finally {
+      setReportLoadingId(null);
+    }
+  };
+
+  const closeReport = () => {
+    if (reportUrl) URL.revokeObjectURL(reportUrl);
+    setReportUrl(null);
+    setReportTitle('');
+  };
 
   const getQuarterPeriods = (p: number): number[] => {
     if (p <= 3) return [1, 2, 3];
@@ -1065,6 +1170,7 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
         return {
           name: current.locations.name,
           code: current.locations.code,
+          locationId: current.location_id,
           weekSales,
           weekSalesVariance,
           qtdSales,
@@ -1324,7 +1430,19 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
         <div className="space-y-6">
           {restaurants.map((restaurant, index) => (
             <div key={index} className="border-b border-slate-200 pb-6 last:border-b-0">
-              <h3 className="font-semibold text-slate-800 mb-3">{restaurant.name}</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-slate-800">{restaurant.name}</h3>
+                <button
+                  onClick={() => openReport(restaurant.locationId, restaurant.name)}
+                  disabled={reportLoadingId === restaurant.locationId}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+                >
+                  {reportLoadingId === restaurant.locationId
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <FileText className="w-4 h-4" />}
+                  View Report
+                </button>
+              </div>
               <div className="space-y-2 text-sm mb-4">
                 <div>
                   <span className="text-slate-700">Food Sales: </span>
@@ -1357,6 +1475,45 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
           ))}
         </div>
       </div>
+
+      {reportError && (
+        <div className="fixed bottom-4 right-4 z-50 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2 rounded-lg shadow">
+          {reportError}
+        </div>
+      )}
+
+      {reportUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={closeReport}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl w-full max-w-5xl h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+              <h3 className="font-semibold text-slate-800">{reportTitle} — Chef Summary</h3>
+              <div className="flex items-center gap-2">
+                <a
+                  href={reportUrl}
+                  download={`ChefSummary_${reportTitle.replace(/\s+/g, '_')}.pdf`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Download
+                </a>
+                <button
+                  onClick={closeReport}
+                  className="px-3 py-1.5 text-sm font-medium text-white bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <iframe title={`${reportTitle} Chef Summary`} src={reportUrl} className="flex-1 w-full rounded-b-lg" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
