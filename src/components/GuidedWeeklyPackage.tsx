@@ -558,15 +558,76 @@ function parseSpeedOfServiceReport(csvText: string): SpeedOfServiceParseResult {
     };
   }
 
-  const findSeconds = (viewType: string, views: string | string[], mealPeriod: MealPeriod, column: number) => {
-    const candidates = Array.isArray(views) ? views : [views];
-    for (const view of candidates) {
-      const row = rows.find(
-        (r) => r[viewTypeIdx] === viewType && r[viewIdx] === view && mealPeriodMatches(r[mealPeriodIdx], mealPeriod)
-      );
-      if (row) return parseTimeToSeconds(row[column]);
+  const totalCountIdx = hasHeader ? header.indexOf('Total Count') : 12;
+
+  // Distinct View names present for a View Type, mapped to their Total Count.
+  const viewsOf = (viewType: string) => {
+    const seen = new Map<string, number>();
+    for (const r of rows) {
+      if (r[viewTypeIdx] !== viewType) continue;
+      const name = (r[viewIdx] ?? '').trim();
+      if (!name || seen.has(name)) continue;
+      const count = parseInt(String(r[totalCountIdx] ?? '0').replace(/[^0-9]/g, ''), 10) || 0;
+      seen.set(name, count);
     }
-    return null;
+    return seen;
+  };
+
+  // Resolve a role to an actual View name: first try the known names
+  // (case-insensitively, in priority order), then fall back to a heuristic over
+  // whatever views the site actually exports — so new naming conventions resolve
+  // on their own instead of erroring.
+  const resolveView = (
+    viewType: string,
+    candidates: string[],
+    heuristic: (views: Map<string, number>) => string | null
+  ): string | null => {
+    const views = viewsOf(viewType);
+    const names = [...views.keys()];
+    for (const cand of candidates) {
+      const match = names.find((n) => n.toLowerCase() === cand.toLowerCase());
+      if (match) return match;
+    }
+    return heuristic(views);
+  };
+
+  const highestCount = (entries: [string, number][]) =>
+    entries.length ? entries.slice().sort((a, b) => b[1] - a[1])[0][0] : null;
+
+  // The main expo and dine-in stations carry essentially every order, so among
+  // the expediter views (excluding bar / take-out / dessert / app / prep lines)
+  // they're the highest-volume ones; the dine-in one is the *-named variant.
+  const isSideStation = (name: string) => /(bar|take|\(to\)|\bto\b|dessert|\bapp\b|prep)/i.test(name);
+  const isDineIn = (name: string) => /dine|\(di\)/i.test(name);
+
+  const pivotView = resolveView('Assembler', SPEED_PIVOT_VIEWS, (views) => {
+    const entries = [...views.entries()];
+    const main = entries.filter(([n]) => /pivot/i.test(n) && !isSideStation(n));
+    return highestCount(main.length ? main : entries);
+  });
+  const expoView = resolveView('Expediter', SPEED_EXPO_VIEWS, (views) => {
+    const entries = [...views.entries()].filter(([n]) => !isSideStation(n));
+    const nonDine = entries.filter(([n]) => !isDineIn(n));
+    return highestCount(nonDine.length ? nonDine : entries);
+  });
+  const dineInView = resolveView('Expediter', SPEED_DINE_IN_VIEWS, (views) => {
+    const entries = [...views.entries()].filter(([n]) => !isSideStation(n));
+    const dine = entries.filter(([n]) => isDineIn(n));
+    return highestCount(dine.length ? dine : entries);
+  });
+
+  if (!dineInView) {
+    throw new Error('Could not find an Expediter dine-in view in this report.');
+  }
+  if (!expoView || !pivotView) {
+    throw new Error('Could not find an Expediter expo or Assembler pivot view in this report.');
+  }
+
+  const findSeconds = (viewType: string, view: string, mealPeriod: MealPeriod, column: number) => {
+    const row = rows.find(
+      (r) => r[viewTypeIdx] === viewType && r[viewIdx] === view && mealPeriodMatches(r[mealPeriodIdx], mealPeriod)
+    );
+    return row ? parseTimeToSeconds(row[column]) : null;
   };
 
   const expediter = {} as Record<MealPeriod, number> & { average: number };
@@ -574,9 +635,9 @@ function parseSpeedOfServiceReport(csvText: string): SpeedOfServiceParseResult {
   const expo = {} as Record<MealPeriod, number> & { average: number };
 
   MEAL_PERIODS.forEach((period) => {
-    const dineInSeconds = findSeconds('Expediter', SPEED_DINE_IN_VIEWS, period, avgBumpIdx);
-    const expoSeconds = findSeconds('Expediter', SPEED_EXPO_VIEWS, period, avgBumpIdx);
-    const pivotSeconds = findSeconds('Assembler', SPEED_PIVOT_VIEWS, period, avgBumpIdx);
+    const dineInSeconds = findSeconds('Expediter', dineInView, period, avgBumpIdx);
+    const expoSeconds = findSeconds('Expediter', expoView, period, avgBumpIdx);
+    const pivotSeconds = findSeconds('Assembler', pivotView, period, avgBumpIdx);
 
     if (dineInSeconds === null) {
       throw new Error(`Could not find Expediter / Dine In data for ${period}.`);
@@ -590,9 +651,9 @@ function parseSpeedOfServiceReport(csvText: string): SpeedOfServiceParseResult {
     expo[period] = expoSeconds;
   });
 
-  const dineInAverage = findSeconds('Expediter', SPEED_DINE_IN_VIEWS, 'Lunch', totalAvgBumpIdx);
-  const expoAverage = findSeconds('Expediter', SPEED_EXPO_VIEWS, 'Lunch', totalAvgBumpIdx);
-  const pivotAverage = findSeconds('Assembler', SPEED_PIVOT_VIEWS, 'Lunch', totalAvgBumpIdx);
+  const dineInAverage = findSeconds('Expediter', dineInView, 'Lunch', totalAvgBumpIdx);
+  const expoAverage = findSeconds('Expediter', expoView, 'Lunch', totalAvgBumpIdx);
+  const pivotAverage = findSeconds('Assembler', pivotView, 'Lunch', totalAvgBumpIdx);
 
   if (dineInAverage === null || expoAverage === null || pivotAverage === null) {
     throw new Error('Could not find the total average bump times in this report.');
