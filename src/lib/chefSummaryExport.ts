@@ -299,8 +299,11 @@ export function exportChefSummaryToPdf(
   recapWtdLabourPct?: number,
   foodCostCategories?: FoodCostCategoryRow[],
   weekAheadActions?: WeekAheadAction[],
-  fcapItems?: FcapRow[]
-) {
+  fcapItems?: FcapRow[],
+  // 'save' downloads the file (default); 'bloburl' returns an object URL for
+  // in-app viewing (e.g. embedding in an iframe) without forcing a download.
+  outputMode: 'save' | 'bloburl' = 'save'
+): string | void {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -856,5 +859,8 @@ export function exportChefSummaryToPdf(
   }
 
   const filename = `ChefSummary_${locationName.replace(/\s+/g, '_')}_FY${data.fiscal_year}_P${data.period_number}_W${data.week_number}.pdf`;
+  if (outputMode === 'bloburl') {
+    return doc.output('bloburl') as unknown as string;
+  }
   doc.save(filename);
 }
