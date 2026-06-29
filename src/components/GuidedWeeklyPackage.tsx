@@ -435,8 +435,8 @@ type MealPeriod = typeof MEAL_PERIODS[number];
 // / "Expo Main Dine-in"), so each role is matched against a list of accepted View
 // names, in priority order (exact match, so e.g. "Expo Main" won't catch
 // "Expo Main (TO)").
-const SPEED_DINE_IN_VIEWS = ['Dine In', 'Expo Main Dine-in'];
-const SPEED_EXPO_VIEWS = ['Expo', 'Expo 1', 'Expo Main'];
+const SPEED_DINE_IN_VIEWS = ['Dine In', 'Expo Main Dine-in', 'Expo (DI)'];
+const SPEED_EXPO_VIEWS = ['Expo', 'Expo 1', 'Expo Main', 'Main Expo - Main Expo'];
 const SPEED_PIVOT_VIEWS = ['Pivot'];
 
 type SpeedOfServiceParseResult = {
