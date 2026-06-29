@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { exportChefSummaryToExcel, exportChefSummaryToPdf, FoodCostCategoryRow } from '../lib/chefSummaryExport';
 import { GuidedWeeklyPackage, GuidedFieldUpdates } from './GuidedWeeklyPackage';
+import { computePlDrivenSummaryFields } from '../lib/summaryPlFields';
 
 // Supabase/PostgREST errors are plain objects, not Error instances, so the usual
 // `error instanceof Error` check drops their message. Surface the real message
@@ -327,7 +328,8 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
   const fetchPLDataForPeriod = async (
     locId: string,
     fiscalYear: number,
-    periodNumber: number
+    periodNumber: number,
+    weekNumber: number
   ): Promise<{
     budget_food_sales_period: number;
     sage_food_sales_qtd: number;
@@ -339,135 +341,19 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     labour_qtd_pct: number;
     labour_cost_ptd_pct: number;
   } | null> => {
-    try {
-      const quarterPeriods = getQuarterPeriods(periodNumber);
-
-      const { data: calWeeks } = await supabase
-        .from('fiscal_calendar')
-        .select('end_date, period, week')
-        .eq('fiscal_year', fiscalYear)
-        .in('period', quarterPeriods)
-        .order('period', { ascending: true })
-        .order('week', { ascending: true });
-
-      if (!calWeeks || calWeeks.length === 0) return null;
-
-      const quarterEndDates = calWeeks.map(w => w.end_date);
-
-      const { data: uploads } = await supabase
-        .from('pl_uploads')
-        .select('id, week_ending_date')
-        .eq('location_id', locId)
-        .in('week_ending_date', quarterEndDates)
-        .order('week_ending_date', { ascending: true });
-
-      if (!uploads || uploads.length === 0) return null;
-
-      const uploadIds = uploads.map(u => u.id);
-
-      const { data: lineItems } = await supabase
-        .from('pl_line_items')
-        .select('upload_id, line_item_name, current_actual, current_budget, current_actual_pct, current_budget_pct')
-        .in('upload_id', uploadIds)
-        .in('line_item_name', ['Food Sales', 'Cost of Sales (Food)', 'Kitchen Labour']);
-
-      if (!lineItems || lineItems.length === 0) return null;
-
-      const currentPeriodUploads = uploads.filter(u => {
-        const matchingCal = calWeeks.find(c => c.end_date === u.week_ending_date);
-        return matchingCal && matchingCal.period === periodNumber;
-      });
-
-      let budget_food_sales_period = 0;
-      let budget_food_cost_pct = 0;
-      let labour_budget_pct = 0;
-
-      if (currentPeriodUploads.length > 0) {
-        const latestUploadId = currentPeriodUploads[currentPeriodUploads.length - 1].id;
-        const latestFoodSales = lineItems.find(
-          i => i.upload_id === latestUploadId && i.line_item_name === 'Food Sales'
-        );
-        const latestFoodCost = lineItems.find(
-          i => i.upload_id === latestUploadId && i.line_item_name === 'Cost of Sales (Food)'
-        );
-        const latestLabour = lineItems.find(
-          i => i.upload_id === latestUploadId && i.line_item_name === 'Kitchen Labour'
-        );
-
-        if (latestFoodSales) {
-          budget_food_sales_period = latestFoodSales.current_budget || 0;
-        }
-        if (latestFoodCost) {
-          budget_food_cost_pct = latestFoodCost.current_budget_pct || 0;
-        }
-        if (latestLabour) {
-          labour_budget_pct = latestLabour.current_budget_pct || 0;
-        }
-      }
-
-      let sage_food_sales_qtd = 0;
-      let sage_sales_budget_qtd = 0;
-      let food_cost_qtd_actual = 0;
-      let labour_qtd_actual = 0;
-
-      const periodsInQtr = [...new Set(uploads.map(u => {
-        const cal = calWeeks.find(c => c.end_date === u.week_ending_date);
-        return cal?.period;
-      }).filter(Boolean))] as number[];
-
-      let food_cost_ptd_pct = 0;
-      let labour_cost_ptd_pct = 0;
-
-      for (const p of periodsInQtr) {
-        const periodUploads = uploads.filter(u => {
-          const cal = calWeeks.find(c => c.end_date === u.week_ending_date);
-          return cal && cal.period === p;
-        });
-        if (periodUploads.length > 0) {
-          const latestUpload = periodUploads[periodUploads.length - 1];
-          const foodSalesItem = lineItems.find(
-            i => i.upload_id === latestUpload.id && i.line_item_name === 'Food Sales'
-          );
-          const foodCostItem = lineItems.find(
-            i => i.upload_id === latestUpload.id && i.line_item_name === 'Cost of Sales (Food)'
-          );
-          const labourItem = lineItems.find(
-            i => i.upload_id === latestUpload.id && i.line_item_name === 'Kitchen Labour'
-          );
-          if (foodSalesItem) {
-            sage_food_sales_qtd += foodSalesItem.current_actual || 0;
-            sage_sales_budget_qtd += foodSalesItem.current_budget || 0;
-          }
-          if (foodCostItem) {
-            food_cost_qtd_actual += foodCostItem.current_actual || 0;
-          }
-          if (labourItem) {
-            labour_qtd_actual += labourItem.current_actual || 0;
-          }
-          if (p === periodNumber) {
-            food_cost_ptd_pct = foodCostItem?.current_actual_pct || 0;
-            labour_cost_ptd_pct = labourItem?.current_actual_pct || 0;
-          }
-        }
-      }
-
-      const fc_qtd_pct = sage_food_sales_qtd > 0 ? (food_cost_qtd_actual / sage_food_sales_qtd) * 100 : 0;
-      const labour_qtd_pct = sage_food_sales_qtd > 0 ? (labour_qtd_actual / sage_food_sales_qtd) * 100 : 0;
-
-      return {
-        budget_food_sales_period,
-        sage_food_sales_qtd,
-        sage_sales_budget_qtd,
-        budget_food_cost_pct,
-        labour_budget_pct,
-        fc_qtd_pct,
-        food_cost_ptd_pct,
-        labour_qtd_pct,
-        labour_cost_ptd_pct,
-      };
-    } catch {
-      return null;
-    }
+    const fields = await computePlDrivenSummaryFields(locId, fiscalYear, periodNumber, weekNumber);
+    if (!fields) return null;
+    return {
+      budget_food_sales_period: fields.budget_food_sales_period,
+      sage_food_sales_qtd: fields.sage_food_sales_qtd,
+      sage_sales_budget_qtd: fields.sage_sales_budget_qtd,
+      budget_food_cost_pct: fields.budget_food_cost_pct,
+      labour_budget_pct: fields.labour_budget_pct,
+      fc_qtd_pct: fields.fc_qtd_pct,
+      food_cost_ptd_pct: fields.food_cost_ptd_pct,
+      labour_qtd_pct: fields.labour_qtd_pct,
+      labour_cost_ptd_pct: fields.labour_cost_ptd_pct,
+    };
   };
 
   const buildAutofillData = async (): Promise<Partial<WeeklySummaryData>> => {
@@ -507,7 +393,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
         nextFiscalYear = prev.fiscal_year;
       }
 
-      const plData = await fetchPLDataForPeriod(locationId, nextFiscalYear, nextPeriod);
+      const plData = await fetchPLDataForPeriod(locationId, nextFiscalYear, nextPeriod, nextWeek);
 
       const result: Partial<WeeklySummaryData> = {
         fiscal_year: nextFiscalYear,
@@ -693,119 +579,19 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     budget_food_cost_qtd_pct: number;
     sage_labour_budget_qtd_pct: number;
   }> => {
-    const empty = {
-      food_cost_ptd_pct: 0,
-      labour_cost_ptd_pct: 0,
-      sales_ptd_actual: 0,
-      budget_food_cost_qtd_pct: 0,
-      sage_labour_budget_qtd_pct: 0,
+    const f = await computePlDrivenSummaryFields(
+      locationId,
+      formData.fiscal_year,
+      formData.period_number,
+      formData.week_number
+    );
+    return {
+      food_cost_ptd_pct: f?.food_cost_ptd_pct ?? 0,
+      labour_cost_ptd_pct: f?.labour_cost_ptd_pct ?? 0,
+      sales_ptd_actual: f?.sales_ptd_actual ?? 0,
+      budget_food_cost_qtd_pct: f?.budget_food_cost_qtd_pct ?? 0,
+      sage_labour_budget_qtd_pct: f?.sage_labour_budget_qtd_pct ?? 0,
     };
-    try {
-      const { data: calWeek } = await supabase
-        .from('fiscal_calendar')
-        .select('end_date')
-        .eq('fiscal_year', formData.fiscal_year)
-        .eq('period', formData.period_number)
-        .eq('week', formData.week_number)
-        .maybeSingle();
-
-      if (!calWeek) return empty;
-
-      const { data: upload } = await supabase
-        .from('pl_uploads')
-        .select('id')
-        .eq('location_id', locationId)
-        .eq('week_ending_date', calWeek.end_date)
-        .maybeSingle();
-
-      if (!upload) return empty;
-
-      const { data: items } = await supabase
-        .from('pl_line_items')
-        .select('line_item_name, current_actual, current_budget, current_actual_pct')
-        .eq('upload_id', upload.id)
-        .in('line_item_name', ['Food Sales', 'Cost of Sales (Food)', 'Kitchen Labour']);
-
-      const foodSales = items?.find(i => i.line_item_name === 'Food Sales');
-      const foodCost = items?.find(i => i.line_item_name === 'Cost of Sales (Food)');
-      const labour = items?.find(i => i.line_item_name === 'Kitchen Labour');
-
-      const result = {
-        food_cost_ptd_pct: foodCost?.current_actual_pct || 0,
-        labour_cost_ptd_pct: labour?.current_actual_pct || 0,
-        sales_ptd_actual: foodSales?.current_actual || 0,
-        budget_food_cost_qtd_pct: 0,
-        sage_labour_budget_qtd_pct: 0,
-      };
-
-      const quarterPeriods = getQuarterPeriods(formData.period_number);
-      const { data: calWeeks } = await supabase
-        .from('fiscal_calendar')
-        .select('end_date, period')
-        .eq('fiscal_year', formData.fiscal_year)
-        .in('period', quarterPeriods)
-        .order('period', { ascending: true })
-        .order('week', { ascending: true });
-
-      if (!calWeeks || calWeeks.length === 0) return result;
-
-      const quarterEndDates = calWeeks.map(w => w.end_date);
-      const { data: uploads } = await supabase
-        .from('pl_uploads')
-        .select('id, week_ending_date')
-        .eq('location_id', locationId)
-        .in('week_ending_date', quarterEndDates)
-        .order('week_ending_date', { ascending: true });
-
-      if (!uploads || uploads.length === 0) return result;
-
-      const uploadIds = uploads.map(u => u.id);
-      const { data: lineItems } = await supabase
-        .from('pl_line_items')
-        .select('upload_id, line_item_name, current_budget')
-        .in('upload_id', uploadIds)
-        .in('line_item_name', ['Food Sales', 'Cost of Sales (Food)', 'Kitchen Labour']);
-
-      if (!lineItems || lineItems.length === 0) return result;
-
-      const periodsInQtr = [...new Set(uploads.map(u => {
-        const cal = calWeeks.find(c => c.end_date === u.week_ending_date);
-        return cal?.period;
-      }).filter(Boolean))] as number[];
-
-      let foodSalesBudgetQtd = 0;
-      let foodCostBudgetQtd = 0;
-      let labourBudgetQtd = 0;
-
-      for (const p of periodsInQtr) {
-        const periodUploads = uploads.filter(u => {
-          const cal = calWeeks.find(c => c.end_date === u.week_ending_date);
-          return cal && cal.period === p;
-        });
-        if (periodUploads.length > 0) {
-          const latestUpload = periodUploads[periodUploads.length - 1];
-          const foodSalesItem = lineItems.find(
-            i => i.upload_id === latestUpload.id && i.line_item_name === 'Food Sales'
-          );
-          const foodCostItem = lineItems.find(
-            i => i.upload_id === latestUpload.id && i.line_item_name === 'Cost of Sales (Food)'
-          );
-          const labourItem = lineItems.find(
-            i => i.upload_id === latestUpload.id && i.line_item_name === 'Kitchen Labour'
-          );
-          foodSalesBudgetQtd += foodSalesItem?.current_budget || 0;
-          foodCostBudgetQtd += foodCostItem?.current_budget || 0;
-          labourBudgetQtd += labourItem?.current_budget || 0;
-        }
-      }
-
-      result.budget_food_cost_qtd_pct = foodSalesBudgetQtd > 0 ? (foodCostBudgetQtd / foodSalesBudgetQtd) * 100 : 0;
-      result.sage_labour_budget_qtd_pct = foodSalesBudgetQtd > 0 ? (labourBudgetQtd / foodSalesBudgetQtd) * 100 : 0;
-
-      return result;
-    } catch {
-      return empty;
-    }
   };
 
   const fetchTheoreticalFcPtdQtd = async (): Promise<{ theoretical_fc_ptd_pct: number; theoretical_fc_qtd_pct: number }> => {
