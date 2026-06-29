@@ -446,7 +446,10 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
         const weekTheoreticalFoodCost = current.theoretical_food_cost_pct || 0;
         const weekTheoreticalVariance = weekFoodCost - weekTheoreticalFoodCost;
         const ptdTheoreticalFoodCost = current.theoretical_fc_ptd_pct || current.theoretical_food_cost_pct || 0;
-        const ptdTheoreticalVariance = ptdFoodCost - ptdTheoreticalFoodCost;
+        // Only meaningful once the period actual food cost exists (i.e. the P&L is
+        // in). Without it the "actual" reads 0 and the variance would show as a
+        // large favourable number (e.g. -23.69%); show a dash instead.
+        const ptdTheoreticalVariance = ptdFoodCost > 0 ? ptdFoodCost - ptdTheoreticalFoodCost : NaN;
         const weekPromo = current.boh_promo_amount || 0;
         const ptdPromo = promoPtdByLocation.get(current.location_id) ?? (current.promo_ptd || 0);
         const expoTime = current.qsr_expo_time || '';
@@ -1147,7 +1150,10 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
         const weekTheoreticalVariance = weekFoodCost - weekTheoreticalFoodCost;
 
         const ptdTheoreticalFoodCost = current.theoretical_fc_ptd_pct || current.theoretical_food_cost_pct || 0;
-        const ptdTheoreticalVariance = ptdFoodCost - ptdTheoreticalFoodCost;
+        // Only meaningful once the period actual food cost exists (i.e. the P&L is
+        // in). Without it the "actual" reads 0 and the variance would show as a
+        // large favourable number (e.g. -23.69%); show a dash instead.
+        const ptdTheoreticalVariance = ptdFoodCost > 0 ? ptdFoodCost - ptdTheoreticalFoodCost : NaN;
 
         const weekPromo = current.boh_promo_amount || 0;
         const ptdPromo = promoPtdByLocation.get(current.location_id) ?? (current.promo_ptd || 0);
@@ -1281,6 +1287,7 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
   };
 
   const formatVariancePercentValue = (value: number) => {
+    if (!Number.isFinite(value)) return '—';
     const sign = value >= 0 ? '+' : '';
     return `${sign}${value.toFixed(2)}%`;
   };
@@ -1292,6 +1299,7 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
   };
 
   const getTheoreticalVarianceCellColor = (variance: number) => {
+    if (!Number.isFinite(variance)) return 'text-slate-400';
     const absVariance = Math.abs(variance);
     if (absVariance <= 0.5) return 'text-green-600 font-semibold';
     return 'text-red-600 font-semibold';
@@ -1426,7 +1434,11 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
       </div>
 
       <div className="bg-white rounded-lg border border-slate-200 p-6">
-        <h2 className="text-lg font-semibold text-slate-800 mb-6">Restaurant Performance using P&L data</h2>
+        <h2 className="text-lg font-semibold text-slate-800 mb-2">Restaurant Performance using P&L data</h2>
+        <p className="text-xs text-slate-500 mb-6">
+          Reports reflect each location’s last saved summary — if a chef’s latest changes aren’t showing,
+          they likely haven’t saved the package yet.
+        </p>
         <div className="space-y-6">
           {restaurants.map((restaurant, index) => (
             <div key={index} className="border-b border-slate-200 pb-6 last:border-b-0">

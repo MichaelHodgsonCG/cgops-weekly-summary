@@ -427,6 +427,23 @@ function buildDiscountsSummary(result: DiscountsParseResult): string {
   return sentences.join(' ');
 }
 
+// A chef can ignore individual discount items (e.g. beverage issues that don't
+// belong in the BOH food promo total). Items are keyed by category + description.
+function discountItemKey(categoryLabel: string, itemDesc: string): string {
+  return `${categoryLabel}|${itemDesc}`;
+}
+
+function effectiveDiscountsTotal(result: DiscountsParseResult | null, ignored: Set<string>): number {
+  if (!result) return 0;
+  return result.categories.reduce((sum, c) => {
+    const ignoredAmount = c.items.reduce(
+      (s, it) => s + (ignored.has(discountItemKey(c.label, it.itemDesc)) ? it.amount : 0),
+      0
+    );
+    return sum + c.totalAmount - ignoredAmount;
+  }, 0);
+}
+
 const MEAL_PERIODS = ['Lunch', 'Dinner', 'Night'] as const;
 type MealPeriod = typeof MEAL_PERIODS[number];
 
@@ -558,15 +575,76 @@ function parseSpeedOfServiceReport(csvText: string): SpeedOfServiceParseResult {
     };
   }
 
-  const findSeconds = (viewType: string, views: string | string[], mealPeriod: MealPeriod, column: number) => {
-    const candidates = Array.isArray(views) ? views : [views];
-    for (const view of candidates) {
-      const row = rows.find(
-        (r) => r[viewTypeIdx] === viewType && r[viewIdx] === view && mealPeriodMatches(r[mealPeriodIdx], mealPeriod)
-      );
-      if (row) return parseTimeToSeconds(row[column]);
+  const totalCountIdx = hasHeader ? header.indexOf('Total Count') : 12;
+
+  // Distinct View names present for a View Type, mapped to their Total Count.
+  const viewsOf = (viewType: string) => {
+    const seen = new Map<string, number>();
+    for (const r of rows) {
+      if (r[viewTypeIdx] !== viewType) continue;
+      const name = (r[viewIdx] ?? '').trim();
+      if (!name || seen.has(name)) continue;
+      const count = parseInt(String(r[totalCountIdx] ?? '0').replace(/[^0-9]/g, ''), 10) || 0;
+      seen.set(name, count);
     }
-    return null;
+    return seen;
+  };
+
+  // Resolve a role to an actual View name: first try the known names
+  // (case-insensitively, in priority order), then fall back to a heuristic over
+  // whatever views the site actually exports — so new naming conventions resolve
+  // on their own instead of erroring.
+  const resolveView = (
+    viewType: string,
+    candidates: string[],
+    heuristic: (views: Map<string, number>) => string | null
+  ): string | null => {
+    const views = viewsOf(viewType);
+    const names = [...views.keys()];
+    for (const cand of candidates) {
+      const match = names.find((n) => n.toLowerCase() === cand.toLowerCase());
+      if (match) return match;
+    }
+    return heuristic(views);
+  };
+
+  const highestCount = (entries: [string, number][]) =>
+    entries.length ? entries.slice().sort((a, b) => b[1] - a[1])[0][0] : null;
+
+  // The main expo and dine-in stations carry essentially every order, so among
+  // the expediter views (excluding bar / take-out / dessert / app / prep lines)
+  // they're the highest-volume ones; the dine-in one is the *-named variant.
+  const isSideStation = (name: string) => /(bar|take|\(to\)|\bto\b|dessert|\bapp\b|prep)/i.test(name);
+  const isDineIn = (name: string) => /dine|\(di\)/i.test(name);
+
+  const pivotView = resolveView('Assembler', SPEED_PIVOT_VIEWS, (views) => {
+    const entries = [...views.entries()];
+    const main = entries.filter(([n]) => /pivot/i.test(n) && !isSideStation(n));
+    return highestCount(main.length ? main : entries);
+  });
+  const expoView = resolveView('Expediter', SPEED_EXPO_VIEWS, (views) => {
+    const entries = [...views.entries()].filter(([n]) => !isSideStation(n));
+    const nonDine = entries.filter(([n]) => !isDineIn(n));
+    return highestCount(nonDine.length ? nonDine : entries);
+  });
+  const dineInView = resolveView('Expediter', SPEED_DINE_IN_VIEWS, (views) => {
+    const entries = [...views.entries()].filter(([n]) => !isSideStation(n));
+    const dine = entries.filter(([n]) => isDineIn(n));
+    return highestCount(dine.length ? dine : entries);
+  });
+
+  if (!dineInView) {
+    throw new Error('Could not find an Expediter dine-in view in this report.');
+  }
+  if (!expoView || !pivotView) {
+    throw new Error('Could not find an Expediter expo or Assembler pivot view in this report.');
+  }
+
+  const findSeconds = (viewType: string, view: string, mealPeriod: MealPeriod, column: number) => {
+    const row = rows.find(
+      (r) => r[viewTypeIdx] === viewType && r[viewIdx] === view && mealPeriodMatches(r[mealPeriodIdx], mealPeriod)
+    );
+    return row ? parseTimeToSeconds(row[column]) : null;
   };
 
   const expediter = {} as Record<MealPeriod, number> & { average: number };
@@ -574,9 +652,9 @@ function parseSpeedOfServiceReport(csvText: string): SpeedOfServiceParseResult {
   const expo = {} as Record<MealPeriod, number> & { average: number };
 
   MEAL_PERIODS.forEach((period) => {
-    const dineInSeconds = findSeconds('Expediter', SPEED_DINE_IN_VIEWS, period, avgBumpIdx);
-    const expoSeconds = findSeconds('Expediter', SPEED_EXPO_VIEWS, period, avgBumpIdx);
-    const pivotSeconds = findSeconds('Assembler', SPEED_PIVOT_VIEWS, period, avgBumpIdx);
+    const dineInSeconds = findSeconds('Expediter', dineInView, period, avgBumpIdx);
+    const expoSeconds = findSeconds('Expediter', expoView, period, avgBumpIdx);
+    const pivotSeconds = findSeconds('Assembler', pivotView, period, avgBumpIdx);
 
     if (dineInSeconds === null) {
       throw new Error(`Could not find Expediter / Dine In data for ${period}.`);
@@ -590,9 +668,9 @@ function parseSpeedOfServiceReport(csvText: string): SpeedOfServiceParseResult {
     expo[period] = expoSeconds;
   });
 
-  const dineInAverage = findSeconds('Expediter', SPEED_DINE_IN_VIEWS, 'Lunch', totalAvgBumpIdx);
-  const expoAverage = findSeconds('Expediter', SPEED_EXPO_VIEWS, 'Lunch', totalAvgBumpIdx);
-  const pivotAverage = findSeconds('Assembler', SPEED_PIVOT_VIEWS, 'Lunch', totalAvgBumpIdx);
+  const dineInAverage = findSeconds('Expediter', dineInView, 'Lunch', totalAvgBumpIdx);
+  const expoAverage = findSeconds('Expediter', expoView, 'Lunch', totalAvgBumpIdx);
+  const pivotAverage = findSeconds('Assembler', pivotView, 'Lunch', totalAvgBumpIdx);
 
   if (dineInAverage === null || expoAverage === null || pivotAverage === null) {
     throw new Error('Could not find the total average bump times in this report.');
@@ -1012,6 +1090,7 @@ export function GuidedWeeklyPackage({
   );
   const [discountsFile, setDiscountsFile] = useState<File | null>(null);
   const [discountsResult, setDiscountsResult] = useState<DiscountsParseResult | null>(null);
+  const [ignoredDiscountItems, setIgnoredDiscountItems] = useState<Set<string>>(new Set());
   const [discountsError, setDiscountsError] = useState('');
   const [discountReviewNotes, setDiscountReviewNotes] = useState(initialValues?.discount_review_notes ?? '');
   const [speedFile, setSpeedFile] = useState<File | null>(null);
@@ -1208,11 +1287,20 @@ export function GuidedWeeklyPackage({
       const text = await file.text();
       const result = parseDiscountsReport(text);
       setDiscountsResult(result);
-      const totalAmount = result.categories.reduce((sum, c) => sum + c.totalAmount, 0);
-      onFieldsChange?.({ boh_promo_amount: totalAmount });
+      setIgnoredDiscountItems(new Set());
+      onFieldsChange?.({ boh_promo_amount: effectiveDiscountsTotal(result, new Set()) });
     } catch (err) {
       setDiscountsError(err instanceof Error ? err.message : 'Failed to parse this report.');
     }
+  };
+
+  const handleToggleIgnoreDiscount = (categoryLabel: string, itemDesc: string) => {
+    const key = discountItemKey(categoryLabel, itemDesc);
+    const next = new Set(ignoredDiscountItems);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setIgnoredDiscountItems(next);
+    onFieldsChange?.({ boh_promo_amount: effectiveDiscountsTotal(discountsResult, next) });
   };
 
   const handleDiscountReviewNotesChange = (value: string) => {
@@ -1531,9 +1619,7 @@ export function GuidedWeeklyPackage({
   };
 
   const transferTotals = summarizeTransfers(transferEntries);
-  const discountsTotal = discountsResult
-    ? discountsResult.categories.reduce((sum, c) => sum + c.totalAmount, 0)
-    : 0;
+  const discountsTotal = effectiveDiscountsTotal(discountsResult, ignoredDiscountItems);
 
   let content;
 
@@ -1603,6 +1689,8 @@ export function GuidedWeeklyPackage({
         onFileSelect={handleDiscountsFileSelect}
         notes={discountReviewNotes}
         onNotesChange={handleDiscountReviewNotesChange}
+        ignoredItems={ignoredDiscountItems}
+        onToggleIgnore={handleToggleIgnoreDiscount}
         onBack={() => setStep('review')}
         onNext={() => setStep('speedOfService')}
       />
@@ -2812,6 +2900,8 @@ function GuidedDiscountsStep({
   onFileSelect,
   notes,
   onNotesChange,
+  ignoredItems,
+  onToggleIgnore,
   onBack,
   onNext,
 }: {
@@ -2821,6 +2911,8 @@ function GuidedDiscountsStep({
   onFileSelect: (file: File) => void;
   notes: string;
   onNotesChange: (value: string) => void;
+  ignoredItems: Set<string>;
+  onToggleIgnore: (categoryLabel: string, itemDesc: string) => void;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -2831,6 +2923,10 @@ function GuidedDiscountsStep({
       onFileSelect(files[0]);
     }
   };
+
+  const grossDiscountsTotal = result ? result.categories.reduce((s, c) => s + c.totalAmount, 0) : 0;
+  const adjustedDiscountsTotal = effectiveDiscountsTotal(result, ignoredItems);
+  const ignoredDiscountsTotal = grossDiscountsTotal - adjustedDiscountsTotal;
 
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
@@ -2934,26 +3030,50 @@ function GuidedDiscountsStep({
 
         {result && result.categories.some((c) => c.items.length > 0) && (
           <div className="mt-4 space-y-3">
+            <p className="text-xs text-slate-500">
+              Use <span className="font-medium">Ignore</span> on any item that shouldn’t count toward the
+              BOH promo total (e.g. beverage issues). Ignored items are excluded from the total.
+            </p>
             {result.categories
               .filter((c) => c.items.length > 0)
               .map((category) => (
                 <div key={category.label} className="border border-slate-200 rounded-lg p-4">
                   <p className="text-sm font-semibold text-slate-800">{category.label}</p>
                   <ul className="mt-2 space-y-1">
-                    {category.items.map((item) => (
-                      <li
-                        key={item.itemDesc}
-                        className="flex justify-between text-sm text-slate-600"
-                      >
-                        <span>{item.itemDesc}</span>
-                        <span>
-                          {item.count}x · ${item.amount.toFixed(2)}
-                        </span>
-                      </li>
-                    ))}
+                    {category.items.map((item) => {
+                      const ignored = ignoredItems.has(discountItemKey(category.label, item.itemDesc));
+                      return (
+                        <li
+                          key={item.itemDesc}
+                          className={`flex items-center justify-between gap-3 text-sm ${
+                            ignored ? 'text-slate-400' : 'text-slate-600'
+                          }`}
+                        >
+                          <span className={ignored ? 'line-through' : ''}>{item.itemDesc}</span>
+                          <span className="flex items-center gap-3 whitespace-nowrap">
+                            <span className={ignored ? 'line-through' : ''}>
+                              {item.count}x · ${item.amount.toFixed(2)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => onToggleIgnore(category.label, item.itemDesc)}
+                              className="text-xs font-medium text-slate-500 hover:text-slate-800 transition-colors"
+                            >
+                              {ignored ? 'Restore' : 'Ignore'}
+                            </button>
+                          </span>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               ))}
+            {ignoredDiscountsTotal > 0 && (
+              <div className="flex justify-between text-sm border-t border-slate-200 pt-2">
+                <span className="text-slate-500">Ignored ${ignoredDiscountsTotal.toFixed(2)} — adjusted BOH promo total</span>
+                <span className="font-semibold text-slate-800">${adjustedDiscountsTotal.toFixed(2)}</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -5745,6 +5865,10 @@ function GuidedRecapStep({
       </div>
 
       <div className="mt-6">
+        <p className="text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-3">
+          Save the summary before exporting or running reports — exports and dashboards reflect your last
+          saved data, not unsaved changes.
+        </p>
         {pdfError && <p className="text-sm text-red-600 mb-2">{pdfError}</p>}
         <button
           onClick={handleExportFullSummaryPdf}
