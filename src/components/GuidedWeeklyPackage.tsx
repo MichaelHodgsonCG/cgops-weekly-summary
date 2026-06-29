@@ -281,6 +281,24 @@ function parseProfitCenterReport(buffer: ArrayBuffer): ProfitCenterParseResult {
   };
 }
 
+// Discount exports vary by locale: dates come through as ISO (2026-06-22) or
+// US (6/22/2026). Parse either to a local-midnight Date, dropping any time part.
+function parseDiscountDate(value: string): Date | null {
+  if (!value) return null;
+  const token = value.trim().split(' ')[0];
+  const iso = token.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (iso) {
+    const d = new Date(`${iso[1]}-${iso[2].padStart(2, '0')}-${iso[3].padStart(2, '0')}T00:00:00`);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const us = token.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (us) {
+    const d = new Date(`${us[3]}-${us[1].padStart(2, '0')}-${us[2].padStart(2, '0')}T00:00:00`);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
 function parseDiscountsReport(csvText: string): DiscountsParseResult {
   const lines = csvText.split(/\r?\n/);
 
@@ -307,11 +325,12 @@ function parseDiscountsReport(csvText: string): DiscountsParseResult {
   } else {
     // Newer "DiscountsDataBit" export: Date Range line + title-case columns.
     const dateRangeLine = lines.find((line) => line.trim().startsWith('Date Range,'));
-    const dateRangeMatch = dateRangeLine?.match(/(\d{4}-\d{2}-\d{2})/);
-    if (!dateRangeMatch) {
+    const startDateToken = dateRangeLine?.match(/(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}\/\d{1,2}\/\d{4})/)?.[1];
+    const parsedFromDate = startDateToken ? parseDiscountDate(startDateToken) : null;
+    if (!parsedFromDate) {
       throw new Error('Could not find the date range in this report.');
     }
-    fromDate = new Date(`${dateRangeMatch[1]}T00:00:00`);
+    fromDate = parsedFromDate;
 
     headerIndex = lines.findIndex((line) => {
       const fields = parseCsvLine(line);
@@ -351,8 +370,8 @@ function parseDiscountsReport(csvText: string): DiscountsParseResult {
 
     const categoryIndex = DISCOUNT_REASON_CATEGORIES.findIndex((c) => c.match === reason);
 
-    if (categoryIndex !== -1 && rowDateStr && !isNaN(amount)) {
-      const rowDate = new Date(rowDateStr.split(' ')[0] + 'T00:00:00');
+    const rowDate = parseDiscountDate(rowDateStr ?? '');
+    if (categoryIndex !== -1 && rowDate && !isNaN(amount)) {
       const dayNumber = Math.round((rowDate.getTime() - fromDate.getTime()) / 86400000) + 1;
       const dayPos = days.indexOf(dayNumber);
 
@@ -411,11 +430,13 @@ function buildDiscountsSummary(result: DiscountsParseResult): string {
 const MEAL_PERIODS = ['Lunch', 'Dinner', 'Night'] as const;
 type MealPeriod = typeof MEAL_PERIODS[number];
 
-// Locations name the expedite stations slightly differently in their Speed of
-// Service report (e.g. Beertown's "Expo" vs The Bauer Kitchen's "Expo 1"), so
-// each role is matched against a list of accepted View names, in priority order.
-const SPEED_DINE_IN_VIEWS = ['Dine In'];
-const SPEED_EXPO_VIEWS = ['Expo', 'Expo 1'];
+// Locations name the expedite stations differently in their Speed of Service
+// report (Beertown's "Expo"/"Dine In", Bauer's "Expo 1", Wildcraft's "Expo Main"
+// / "Expo Main Dine-in"), so each role is matched against a list of accepted View
+// names, in priority order (exact match, so e.g. "Expo Main" won't catch
+// "Expo Main (TO)").
+const SPEED_DINE_IN_VIEWS = ['Dine In', 'Expo Main Dine-in'];
+const SPEED_EXPO_VIEWS = ['Expo', 'Expo 1', 'Expo Main'];
 const SPEED_PIVOT_VIEWS = ['Pivot'];
 
 type SpeedOfServiceParseResult = {
