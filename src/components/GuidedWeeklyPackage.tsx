@@ -430,28 +430,109 @@ function formatSecondsAsTime(totalSeconds: number): string {
   return `${sign}${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
+// Quote-aware CSV parser that keeps fields containing embedded newlines together.
+// The newer QSR export wraps the report title in a multi-line quoted field, so a
+// simple line-by-line split would break each record apart.
+function parseCsvRecords(csvText: string): string[][] {
+  const records: string[][] = [];
+  let field = '';
+  let record: string[] = [];
+  let inQuotes = false;
+
+  for (let i = 0; i < csvText.length; i++) {
+    const char = csvText[i];
+
+    if (inQuotes) {
+      if (char === '"') {
+        if (csvText[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += char;
+      }
+    } else if (char === '"') {
+      inQuotes = true;
+    } else if (char === ',') {
+      record.push(field);
+      field = '';
+    } else if (char === '\n' || char === '\r') {
+      if (char === '\r' && csvText[i + 1] === '\n') i++;
+      record.push(field);
+      field = '';
+      if (record.length > 1 || record[0] !== '') records.push(record);
+      record = [];
+    } else {
+      field += char;
+    }
+  }
+
+  if (field !== '' || record.length > 0) {
+    record.push(field);
+    if (record.length > 1 || record[0] !== '') records.push(record);
+  }
+
+  return records;
+}
+
 function parseSpeedOfServiceReport(csvText: string): SpeedOfServiceParseResult {
-  const lines = csvText.split(/\r?\n/).filter((line) => line.trim() !== '');
-  if (lines.length < 2) {
+  const records = parseCsvRecords(csvText);
+  if (records.length === 0) {
     throw new Error('This report has no data rows.');
   }
 
-  const header = parseCsvLine(lines[0]);
-  const viewTypeIdx = header.indexOf('View Type');
-  const viewIdx = header.indexOf('View');
-  const mealPeriodIdx = header.indexOf('Meal Period');
-  const avgBumpIdx = header.indexOf('Average Bump Time');
-  const totalAvgBumpIdx = header.indexOf('Total Average Bump Time');
+  const header = records[0];
+  const hasHeader = header.indexOf('View Type') !== -1;
 
-  if (viewTypeIdx === -1 || viewIdx === -1 || mealPeriodIdx === -1 || avgBumpIdx === -1 || totalAvgBumpIdx === -1) {
-    throw new Error('This report is missing expected columns.');
+  let viewTypeIdx: number;
+  let viewIdx: number;
+  let mealPeriodIdx: number;
+  let avgBumpIdx: number;
+  let totalAvgBumpIdx: number;
+  let rows: string[][];
+  let mealPeriodMatches: (cell: string, period: MealPeriod) => boolean;
+
+  if (hasHeader) {
+    // Legacy export: a header row names each column, meal periods match exactly.
+    viewTypeIdx = header.indexOf('View Type');
+    viewIdx = header.indexOf('View');
+    mealPeriodIdx = header.indexOf('Meal Period');
+    avgBumpIdx = header.indexOf('Average Bump Time');
+    totalAvgBumpIdx = header.indexOf('Total Average Bump Time');
+
+    if (viewTypeIdx === -1 || viewIdx === -1 || mealPeriodIdx === -1 || avgBumpIdx === -1 || totalAvgBumpIdx === -1) {
+      throw new Error('This report is missing expected columns.');
+    }
+
+    rows = records.slice(1);
+    mealPeriodMatches = (cell, period) => cell === period;
+  } else {
+    // Newer QSR export: no header row, positional columns. The meal-period cell
+    // includes its time range (e.g. "Lunch    5:00AM - 4:00PM"), so match on the
+    // leading label, and "Night" is reported as "Late Night".
+    viewTypeIdx = 4;
+    viewIdx = 5;
+    mealPeriodIdx = 8;
+    avgBumpIdx = 9;
+    totalAvgBumpIdx = 11;
+
+    if (header.length <= totalAvgBumpIdx) {
+      throw new Error('This report is missing expected columns.');
+    }
+
+    rows = records;
+    mealPeriodMatches = (cell, period) => {
+      const label = (cell ?? '').trim().toLowerCase();
+      if (period === 'Night') return label.startsWith('late night') || label.startsWith('night');
+      return label.startsWith(period.toLowerCase());
+    };
   }
 
-  const rows = lines.slice(1).map((line) => parseCsvLine(line));
-
-  const findSeconds = (viewType: string, view: string, mealPeriod: string, column: number) => {
+  const findSeconds = (viewType: string, view: string, mealPeriod: MealPeriod, column: number) => {
     const row = rows.find(
-      (r) => r[viewTypeIdx] === viewType && r[viewIdx] === view && r[mealPeriodIdx] === mealPeriod
+      (r) => r[viewTypeIdx] === viewType && r[viewIdx] === view && mealPeriodMatches(r[mealPeriodIdx], mealPeriod)
     );
     return row ? parseTimeToSeconds(row[column]) : null;
   };
