@@ -4,6 +4,7 @@ import { supabase, Location } from '../lib/supabase';
 import { parseCSV, ParsedLineItem } from '../lib/csvParser';
 import { parseExcel, WeekData } from '../lib/excelParser';
 import { computeQtdForUpload } from '../lib/needToSave';
+import { refreshSummaryPlFieldsForPeriod } from '../lib/summaryPlFields';
 
 export default function UploadPage() {
   const [locations, setLocations] = useState<Location[]>([]);
@@ -158,6 +159,10 @@ export default function UploadPage() {
       errors: [] as string[]
     };
 
+    // (location, fiscal year, period) combinations whose P&L changed, so we can
+    // refresh the stored P&L-driven fields on their saved summaries afterwards.
+    const affectedPeriods = new Set<string>();
+
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
@@ -269,6 +274,8 @@ export default function UploadPage() {
             if (itemsError) {
               results.failed++;
               results.errors.push(`${file.name} (Week ${week.weekEndingDate}): ${itemsError.message}`);
+            } else if (calWeek) {
+              affectedPeriods.add(`${locationId}|${calWeek.fiscal_year}|${calWeek.period}`);
             }
           }
 
@@ -277,6 +284,21 @@ export default function UploadPage() {
         } catch (fileError: any) {
           results.failed++;
           results.errors.push(`${file.name}: ${fileError.message || 'Unknown error'}`);
+        }
+      }
+
+      // Refresh stored P&L-driven fields (period budget, QTD, PTD costs) on any
+      // saved summaries for the periods we just uploaded P&L for, so reports and
+      // dashboards reflect the new P&L without the chef re-saving. Best-effort.
+      if (affectedPeriods.size > 0) {
+        setUploadProgress({ total: files.length, completed: files.length, current: 'Updating summaries...' });
+        for (const key of affectedPeriods) {
+          const [locId, fyStr, periodStr] = key.split('|');
+          try {
+            await refreshSummaryPlFieldsForPeriod(locId, Number(fyStr), Number(periodStr));
+          } catch (e) {
+            console.error('Failed to refresh summary P&L fields for', key, e);
+          }
         }
       }
 
