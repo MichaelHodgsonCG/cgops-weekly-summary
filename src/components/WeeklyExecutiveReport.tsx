@@ -409,7 +409,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
         const qtdSalesVariance = qtdSales - qtdBudget;
         const foodCostPL = locationPL.find(pl => pl.line_item_name === 'Cost of Sales (Food)');
         const labourPL = locationPL.find(pl => pl.line_item_name === 'Kitchen Labour' || pl.line_item_name === 'Labour');
-        const ptdSales = foodSalesPL?.current_actual || 0;
+        const ptdSales = foodSalesPL?.current_actual || current.sales_ptd_actual || 0;
         const weekFoodCost = current.actual_food_cost_pct || 0;
         const weekBudgetFoodCost = current.budget_food_cost_pct || 0;
         const weekFoodCostVariance = weekFoodCost - weekBudgetFoodCost;
@@ -983,7 +983,7 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
 
         const foodCostPL = locationPL.find(pl => pl.line_item_name === 'Cost of Sales (Food)');
         const labourPL = locationPL.find(pl => pl.line_item_name === 'Kitchen Labour' || pl.line_item_name === 'Labour');
-        const ptdSales = foodSalesPL?.current_actual || 0;
+        const ptdSales = foodSalesPL?.current_actual || current.sales_ptd_actual || 0;
 
         const weekFoodCost = current.actual_food_cost_pct || 0;
         const weekBudgetFoodCost = current.budget_food_cost_pct || 0;
