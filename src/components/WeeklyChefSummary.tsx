@@ -5,6 +5,19 @@ import { useAuth } from '../lib/auth';
 import { exportChefSummaryToExcel, exportChefSummaryToPdf, FoodCostCategoryRow } from '../lib/chefSummaryExport';
 import { GuidedWeeklyPackage, GuidedFieldUpdates } from './GuidedWeeklyPackage';
 
+// Supabase/PostgREST errors are plain objects, not Error instances, so the usual
+// `error instanceof Error` check drops their message. Surface the real message
+// (and code) so failures like a missing column or constraint are diagnosable.
+function describeError(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === 'object') {
+    const e = error as { message?: string; details?: string; hint?: string; code?: string };
+    const parts = [e.message, e.details, e.hint, e.code && `(${e.code})`].filter(Boolean);
+    if (parts.length) return parts.join(' — ');
+  }
+  return fallback;
+}
+
 interface FeatureItem {
   name: string;
   sold: number;
@@ -885,7 +898,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     } catch (error) {
       setMessage({
         type: 'error',
-        text: error instanceof Error ? error.message : 'Failed to save summary'
+        text: describeError(error, 'Failed to save summary')
       });
     } finally {
       setSaving(false);
@@ -911,7 +924,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     } catch (error) {
       setMessage({
         type: 'error',
-        text: error instanceof Error ? error.message : 'Failed to delete summary'
+        text: describeError(error, 'Failed to delete summary')
       });
     } finally {
       setDeleting(false);
