@@ -411,6 +411,13 @@ function buildDiscountsSummary(result: DiscountsParseResult): string {
 const MEAL_PERIODS = ['Lunch', 'Dinner', 'Night'] as const;
 type MealPeriod = typeof MEAL_PERIODS[number];
 
+// Locations name the expedite stations slightly differently in their Speed of
+// Service report (e.g. Beertown's "Expo" vs The Bauer Kitchen's "Expo 1"), so
+// each role is matched against a list of accepted View names, in priority order.
+const SPEED_DINE_IN_VIEWS = ['Dine In'];
+const SPEED_EXPO_VIEWS = ['Expo', 'Expo 1'];
+const SPEED_PIVOT_VIEWS = ['Pivot'];
+
 type SpeedOfServiceParseResult = {
   expediter: Record<MealPeriod, number> & { average: number };
   windowTime: Record<MealPeriod, number> & { average: number };
@@ -530,11 +537,15 @@ function parseSpeedOfServiceReport(csvText: string): SpeedOfServiceParseResult {
     };
   }
 
-  const findSeconds = (viewType: string, view: string, mealPeriod: MealPeriod, column: number) => {
-    const row = rows.find(
-      (r) => r[viewTypeIdx] === viewType && r[viewIdx] === view && mealPeriodMatches(r[mealPeriodIdx], mealPeriod)
-    );
-    return row ? parseTimeToSeconds(row[column]) : null;
+  const findSeconds = (viewType: string, views: string | string[], mealPeriod: MealPeriod, column: number) => {
+    const candidates = Array.isArray(views) ? views : [views];
+    for (const view of candidates) {
+      const row = rows.find(
+        (r) => r[viewTypeIdx] === viewType && r[viewIdx] === view && mealPeriodMatches(r[mealPeriodIdx], mealPeriod)
+      );
+      if (row) return parseTimeToSeconds(row[column]);
+    }
+    return null;
   };
 
   const expediter = {} as Record<MealPeriod, number> & { average: number };
@@ -542,9 +553,9 @@ function parseSpeedOfServiceReport(csvText: string): SpeedOfServiceParseResult {
   const expo = {} as Record<MealPeriod, number> & { average: number };
 
   MEAL_PERIODS.forEach((period) => {
-    const dineInSeconds = findSeconds('Expediter', 'Dine In', period, avgBumpIdx);
-    const expoSeconds = findSeconds('Expediter', 'Expo', period, avgBumpIdx);
-    const pivotSeconds = findSeconds('Assembler', 'Pivot', period, avgBumpIdx);
+    const dineInSeconds = findSeconds('Expediter', SPEED_DINE_IN_VIEWS, period, avgBumpIdx);
+    const expoSeconds = findSeconds('Expediter', SPEED_EXPO_VIEWS, period, avgBumpIdx);
+    const pivotSeconds = findSeconds('Assembler', SPEED_PIVOT_VIEWS, period, avgBumpIdx);
 
     if (dineInSeconds === null) {
       throw new Error(`Could not find Expediter / Dine In data for ${period}.`);
@@ -558,9 +569,9 @@ function parseSpeedOfServiceReport(csvText: string): SpeedOfServiceParseResult {
     expo[period] = expoSeconds;
   });
 
-  const dineInAverage = findSeconds('Expediter', 'Dine In', 'Lunch', totalAvgBumpIdx);
-  const expoAverage = findSeconds('Expediter', 'Expo', 'Lunch', totalAvgBumpIdx);
-  const pivotAverage = findSeconds('Assembler', 'Pivot', 'Lunch', totalAvgBumpIdx);
+  const dineInAverage = findSeconds('Expediter', SPEED_DINE_IN_VIEWS, 'Lunch', totalAvgBumpIdx);
+  const expoAverage = findSeconds('Expediter', SPEED_EXPO_VIEWS, 'Lunch', totalAvgBumpIdx);
+  const pivotAverage = findSeconds('Assembler', SPEED_PIVOT_VIEWS, 'Lunch', totalAvgBumpIdx);
 
   if (dineInAverage === null || expoAverage === null || pivotAverage === null) {
     throw new Error('Could not find the total average bump times in this report.');
