@@ -242,8 +242,9 @@ function parseCsvLine(line: string): string[] {
   return fields;
 }
 
-function findRow(rows: any[][], label: string): any[] | undefined {
-  return rows.find((row) => String(row[0] ?? '').trim() === label);
+function findRow(rows: any[][], label: string | string[]): any[] | undefined {
+  const labels = Array.isArray(label) ? label : [label];
+  return rows.find((row) => labels.includes(String(row[0] ?? '').trim()));
 }
 
 function parseProfitCenterReport(buffer: ArrayBuffer): ProfitCenterParseResult {
@@ -257,7 +258,7 @@ function parseProfitCenterReport(buffer: ArrayBuffer): ProfitCenterParseResult {
   const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
   const salesRow = findRow(rows, 'Sales Total');
-  const labourRow = findRow(rows, 'Labor Total');
+  const labourRow = findRow(rows, ['Labor Total', 'Labour Total']);
   const overtimeRow = findRow(rows, 'Overtime');
   const doubletimeRow = findRow(rows, 'Doubletime');
 
