@@ -212,7 +212,8 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
             section,
             fiscalYear: currentPeriod.fiscal_year,
             period: currentPeriod.period,
-            week: currentPeriod.week
+            week: currentPeriod.week,
+            leadershipNotes: report.leadership_notes || ''
           })
         }
       );
