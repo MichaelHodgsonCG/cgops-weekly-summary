@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ClipboardCheck, Upload, CheckCircle2, AlertCircle, X, Plus, Trash2 } from 'lucide-react';
+import { ClipboardCheck, Upload, CheckCircle2, AlertCircle, X, Plus, Trash2, Pencil } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -1050,6 +1050,16 @@ export function GuidedWeeklyPackage({
     }
   };
 
+  const handleSalesDailyChange = (dayIndex: number, value: string) => {
+    if (!salesResult) return;
+    const salesDaily = salesResult.salesDaily.map((v, i) =>
+      i === dayIndex ? parseFloat(value) || 0 : v
+    );
+    const salesTotal = salesDaily.reduce((sum, v) => sum + v, 0);
+    setSalesResult({ ...salesResult, salesDaily, salesTotal });
+    onFieldsChange?.({ food_sales_labour_push: salesTotal });
+  };
+
   const handleTransferEntriesChange = (entries: TransferEntry[]) => {
     setTransferEntries(entries);
     const summary = summarizeTransfers(entries);
@@ -1425,6 +1435,7 @@ export function GuidedWeeklyPackage({
         result={salesResult}
         error={salesError}
         onFileSelect={handleSalesFileSelect}
+        onSalesDailyChange={handleSalesDailyChange}
         onBack={() => setStep('start')}
         onNext={() => setStep('transfers')}
       />
@@ -1931,6 +1942,7 @@ function GuidedSalesStep({
   result,
   error,
   onFileSelect,
+  onSalesDailyChange,
   onBack,
   onNext,
 }: {
@@ -1942,16 +1954,29 @@ function GuidedSalesStep({
   result: ProfitCenterParseResult | null;
   error: string;
   onFileSelect: (file: File) => void;
+  onSalesDailyChange: (dayIndex: number, value: string) => void;
   onBack: () => void;
   onNext: () => void;
 }) {
   const [dragActive, setDragActive] = useState(false);
+  const [editingSales, setEditingSales] = useState(false);
+  const [salesInputs, setSalesInputs] = useState<string[]>([]);
   const days = [1, 2, 3, 4, 5, 6, 7];
 
   const handleFiles = (files: FileList | null) => {
     if (files && files.length > 0) {
       onFileSelect(files[0]);
     }
+  };
+
+  const beginEditingSales = () => {
+    setSalesInputs(result ? result.salesDaily.map((v) => String(v)) : []);
+    setEditingSales(true);
+  };
+
+  const handleSalesInputChange = (index: number, value: string) => {
+    setSalesInputs((prev) => prev.map((v, i) => (i === index ? value : v)));
+    onSalesDailyChange(index, value);
   };
 
   const formatCurrency = (value: number) =>
@@ -2042,44 +2067,78 @@ function GuidedSalesStep({
         )}
 
         {result && (
-          <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-3 py-2 text-left font-medium text-slate-500">Metric</th>
-                  {days.map((day) => (
-                    <th key={day} className="px-3 py-2 text-right font-medium text-slate-500">
-                      Day {day}
-                    </th>
-                  ))}
-                  <th className="px-3 py-2 text-right font-medium text-slate-500">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-t border-slate-200">
-                  <td className="px-3 py-2 text-slate-700 whitespace-nowrap">Sales Total</td>
-                  {result.salesDaily.map((value, i) => (
-                    <td key={i} className="px-3 py-2 text-right text-slate-700">
-                      {formatCurrency(value)}
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-slate-500">
+                {editingSales
+                  ? 'Editing daily sales — the total updates automatically. Day 7 is Sunday.'
+                  : 'Daily breakdown'}
+              </p>
+              <button
+                type="button"
+                onClick={() => (editingSales ? setEditingSales(false) : beginEditingSales())}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+              >
+                {editingSales ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" /> Done editing
+                  </>
+                ) : (
+                  <>
+                    <Pencil className="w-4 h-4" /> Edit sales
+                  </>
+                )}
+              </button>
+            </div>
+            <div className="border border-slate-200 rounded-lg overflow-hidden overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium text-slate-500">Metric</th>
+                    {days.map((day) => (
+                      <th key={day} className="px-3 py-2 text-right font-medium text-slate-500">
+                        Day {day}
+                      </th>
+                    ))}
+                    <th className="px-3 py-2 text-right font-medium text-slate-500">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-t border-slate-200">
+                    <td className="px-3 py-2 text-slate-700 whitespace-nowrap">Sales Total</td>
+                    {result.salesDaily.map((value, i) => (
+                      <td key={i} className="px-3 py-2 text-right text-slate-700">
+                        {editingSales ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={salesInputs[i] ?? ''}
+                            onChange={(e) => handleSalesInputChange(i, e.target.value)}
+                            className="w-24 px-2 py-1 text-right border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-slate-800"
+                          />
+                        ) : (
+                          formatCurrency(value)
+                        )}
+                      </td>
+                    ))}
+                    <td className="px-3 py-2 text-right font-semibold text-slate-800">
+                      {formatCurrency(result.salesTotal)}
                     </td>
-                  ))}
-                  <td className="px-3 py-2 text-right font-semibold text-slate-800">
-                    {formatCurrency(result.salesTotal)}
-                  </td>
-                </tr>
-                <tr className="border-t border-slate-200">
-                  <td className="px-3 py-2 text-slate-700 whitespace-nowrap">Labor Total</td>
-                  {result.labourDaily.map((value, i) => (
-                    <td key={i} className="px-3 py-2 text-right text-slate-700">
-                      {formatCurrency(value)}
+                  </tr>
+                  <tr className="border-t border-slate-200">
+                    <td className="px-3 py-2 text-slate-700 whitespace-nowrap">Labor Total</td>
+                    {result.labourDaily.map((value, i) => (
+                      <td key={i} className="px-3 py-2 text-right text-slate-700">
+                        {formatCurrency(value)}
+                      </td>
+                    ))}
+                    <td className="px-3 py-2 text-right font-semibold text-slate-800">
+                      {formatCurrency(result.labourTotal)}
                     </td>
-                  ))}
-                  <td className="px-3 py-2 text-right font-semibold text-slate-800">
-                    {formatCurrency(result.labourTotal)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
