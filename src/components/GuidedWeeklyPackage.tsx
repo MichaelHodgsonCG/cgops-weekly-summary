@@ -430,11 +430,13 @@ function buildDiscountsSummary(result: DiscountsParseResult): string {
 const MEAL_PERIODS = ['Lunch', 'Dinner', 'Night'] as const;
 type MealPeriod = typeof MEAL_PERIODS[number];
 
-// Locations name the expedite stations slightly differently in their Speed of
-// Service report (e.g. Beertown's "Expo" vs The Bauer Kitchen's "Expo 1"), so
-// each role is matched against a list of accepted View names, in priority order.
-const SPEED_DINE_IN_VIEWS = ['Dine In'];
-const SPEED_EXPO_VIEWS = ['Expo', 'Expo 1'];
+// Locations name the expedite stations differently in their Speed of Service
+// report (Beertown's "Expo"/"Dine In", Bauer's "Expo 1", Wildcraft's "Expo Main"
+// / "Expo Main Dine-in"), so each role is matched against a list of accepted View
+// names, in priority order (exact match, so e.g. "Expo Main" won't catch
+// "Expo Main (TO)").
+const SPEED_DINE_IN_VIEWS = ['Dine In', 'Expo Main Dine-in'];
+const SPEED_EXPO_VIEWS = ['Expo', 'Expo 1', 'Expo Main'];
 const SPEED_PIVOT_VIEWS = ['Pivot'];
 
 type SpeedOfServiceParseResult = {
