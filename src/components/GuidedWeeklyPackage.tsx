@@ -430,28 +430,109 @@ function formatSecondsAsTime(totalSeconds: number): string {
   return `${sign}${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
+// Quote-aware CSV parser that keeps fields containing embedded newlines together.
+// The newer QSR export wraps the report title in a multi-line quoted field, so a
+// simple line-by-line split would break each record apart.
+function parseCsvRecords(csvText: string): string[][] {
+  const records: string[][] = [];
+  let field = '';
+  let record: string[] = [];
+  let inQuotes = false;
+
+  for (let i = 0; i < csvText.length; i++) {
+    const char = csvText[i];
+
+    if (inQuotes) {
+      if (char === '"') {
+        if (csvText[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += char;
+      }
+    } else if (char === '"') {
+      inQuotes = true;
+    } else if (char === ',') {
+      record.push(field);
+      field = '';
+    } else if (char === '\n' || char === '\r') {
+      if (char === '\r' && csvText[i + 1] === '\n') i++;
+      record.push(field);
+      field = '';
+      if (record.length > 1 || record[0] !== '') records.push(record);
+      record = [];
+    } else {
+      field += char;
+    }
+  }
+
+  if (field !== '' || record.length > 0) {
+    record.push(field);
+    if (record.length > 1 || record[0] !== '') records.push(record);
+  }
+
+  return records;
+}
+
 function parseSpeedOfServiceReport(csvText: string): SpeedOfServiceParseResult {
-  const lines = csvText.split(/\r?\n/).filter((line) => line.trim() !== '');
-  if (lines.length < 2) {
+  const records = parseCsvRecords(csvText);
+  if (records.length === 0) {
     throw new Error('This report has no data rows.');
   }
 
-  const header = parseCsvLine(lines[0]);
-  const viewTypeIdx = header.indexOf('View Type');
-  const viewIdx = header.indexOf('View');
-  const mealPeriodIdx = header.indexOf('Meal Period');
-  const avgBumpIdx = header.indexOf('Average Bump Time');
-  const totalAvgBumpIdx = header.indexOf('Total Average Bump Time');
+  const header = records[0];
+  const hasHeader = header.indexOf('View Type') !== -1;
 
-  if (viewTypeIdx === -1 || viewIdx === -1 || mealPeriodIdx === -1 || avgBumpIdx === -1 || totalAvgBumpIdx === -1) {
-    throw new Error('This report is missing expected columns.');
+  let viewTypeIdx: number;
+  let viewIdx: number;
+  let mealPeriodIdx: number;
+  let avgBumpIdx: number;
+  let totalAvgBumpIdx: number;
+  let rows: string[][];
+  let mealPeriodMatches: (cell: string, period: MealPeriod) => boolean;
+
+  if (hasHeader) {
+    // Legacy export: a header row names each column, meal periods match exactly.
+    viewTypeIdx = header.indexOf('View Type');
+    viewIdx = header.indexOf('View');
+    mealPeriodIdx = header.indexOf('Meal Period');
+    avgBumpIdx = header.indexOf('Average Bump Time');
+    totalAvgBumpIdx = header.indexOf('Total Average Bump Time');
+
+    if (viewTypeIdx === -1 || viewIdx === -1 || mealPeriodIdx === -1 || avgBumpIdx === -1 || totalAvgBumpIdx === -1) {
+      throw new Error('This report is missing expected columns.');
+    }
+
+    rows = records.slice(1);
+    mealPeriodMatches = (cell, period) => cell === period;
+  } else {
+    // Newer QSR export: no header row, positional columns. The meal-period cell
+    // includes its time range (e.g. "Lunch    5:00AM - 4:00PM"), so match on the
+    // leading label, and "Night" is reported as "Late Night".
+    viewTypeIdx = 4;
+    viewIdx = 5;
+    mealPeriodIdx = 8;
+    avgBumpIdx = 9;
+    totalAvgBumpIdx = 11;
+
+    if (header.length <= totalAvgBumpIdx) {
+      throw new Error('This report is missing expected columns.');
+    }
+
+    rows = records;
+    mealPeriodMatches = (cell, period) => {
+      const label = (cell ?? '').trim().toLowerCase();
+      if (period === 'Night') return label.startsWith('late night') || label.startsWith('night');
+      return label.startsWith(period.toLowerCase());
+    };
   }
 
-  const rows = lines.slice(1).map((line) => parseCsvLine(line));
-
-  const findSeconds = (viewType: string, view: string, mealPeriod: string, column: number) => {
+  const findSeconds = (viewType: string, view: string, mealPeriod: MealPeriod, column: number) => {
     const row = rows.find(
-      (r) => r[viewTypeIdx] === viewType && r[viewIdx] === view && r[mealPeriodIdx] === mealPeriod
+      (r) => r[viewTypeIdx] === viewType && r[viewIdx] === view && mealPeriodMatches(r[mealPeriodIdx], mealPeriod)
     );
     return row ? parseTimeToSeconds(row[column]) : null;
   };
@@ -5350,8 +5431,26 @@ function GuidedRecapStep({
       const labourSpent = m.labour_spent ?? 0;
       const usageAmount = m.usage_amount ?? 0;
       const idealUsageAmount = m.ideal_usage_amount ?? 0;
-      const budgetFoodCostPct = 0;
-      const labourBudgetPct = m.labour_budget_pct ?? 0;
+      // Source the food-cost and labour budget %s from the P&L baseline — the same
+      // place the guided final-food-cost step reads them. Without this the export
+      // would show a 0% budget and a meaningless +0.00pt variance.
+      let budgetFoodCostPct = 0;
+      let labourBudgetPct = m.labour_budget_pct ?? 0;
+      let baselineWeekEndingDate: string | undefined;
+      if (locationId && fiscalYear && periodNumber && weekNumber) {
+        try {
+          const [fcBaseline, labourBaseline] = await Promise.all([
+            fetchFoodCostPlBaseline(locationId, fiscalYear, periodNumber, weekNumber),
+            fetchLabourPlBaseline(locationId, fiscalYear, periodNumber, weekNumber),
+          ]);
+          budgetFoodCostPct = fcBaseline?.periodBudgetPct ?? 0;
+          baselineWeekEndingDate = fcBaseline?.weekEndingDate;
+          // Fall back to the labour baseline only when the chef left the field blank.
+          if (!labourBudgetPct) labourBudgetPct = labourBaseline?.periodBudgetPct ?? 0;
+        } catch {
+          // Keep the chef-entered / zero defaults if the baseline can't be loaded.
+        }
+      }
       const budgetFoodSalesPeriod = m.budget_food_sales_period ?? 0;
       const weekBudget = budgetFoodSalesPeriod > 0 ? budgetFoodSalesPeriod / 4 : 0;
       const actualFoodCostPct = foodSalesPush > 0 ? (usageAmount / foodSalesPush) * 100 : 0;
@@ -5367,7 +5466,7 @@ function GuidedRecapStep({
         period_number: periodNumber ?? 0,
         fiscal_year: fiscalYear ?? 0,
         budget_food_cost_pct: budgetFoodCostPct,
-        on_hand_amount: 0,
+        on_hand_amount: m.on_hand_amount ?? 0,
         sage_food_sales_qtd: m.recap_sales_ytd_actual ?? 0,
         sage_fcost_qtd_pct: m.recap_fc_ytd_pct ?? 0,
         food_cost_ptd_pct: m.recap_fc_ptd_pct ?? 0,
@@ -5394,21 +5493,22 @@ function GuidedRecapStep({
         lab_ptd_var_amount: 0,
         qtd_labour_variance_pct: 0,
         labour_spent: labourSpent,
-        overtime_amount: 0,
+        overtime_amount: m.overtime_amount ?? 0,
         lab_qtd_var_amount: m.recap_labour_ytd_variance_amount ?? 0,
         ebidta_budget_period_pct: 0,
         ebidta_ptd_pct: 0,
         ebidta_variance_pct: 0,
         qsr_weekend_lunch_time: '',
-        qsr_expo_time: '',
+        qsr_expo_time: m.qsr_expo_time ?? '',
+        window_time: m.window_time,
         teamshare_amount: 0,
-        petty_cash: 0,
-        waste_amount: 0,
+        petty_cash: m.cogs_petty_cash_amount ?? 0,
+        waste_amount: m.waste_amount ?? 0,
         last_audit_score_pct: auditScore ? parseFloat(auditScore) || 0 : 0,
-        boh_promo_amount: 0,
+        boh_promo_amount: m.boh_promo_amount ?? 0,
         promo_ptd: 0,
         promo_qtd: 0,
-        sous_vac_days: 0,
+        sous_vac_days: m.sous_vac_days ?? 0,
         food_cost_summary: foodCostComments,
         labour_summary: labourReviewActionPlan,
         boh_promo_summary: salesActionPlan,
@@ -5419,14 +5519,14 @@ function GuidedRecapStep({
         rm_issues: rmIssues,
         cleaning_focus: cleaningFocus,
         audit_score_comment: auditScoreComment,
-        ideal_cooks: 0,
-        current_cooks: 0,
-        ideal_prep: 0,
-        current_prep: 0,
-        ideal_dish: 0,
-        current_dish: 0,
-        ideal_other: 0,
-        current_other: 0,
+        ideal_cooks: m.ideal_cooks ?? 0,
+        current_cooks: m.current_cooks ?? 0,
+        ideal_prep: m.ideal_prep ?? 0,
+        current_prep: m.current_prep ?? 0,
+        ideal_dish: m.ideal_dish ?? 0,
+        current_dish: m.current_dish ?? 0,
+        ideal_other: m.ideal_other ?? 0,
+        current_other: m.current_other ?? 0,
         hiring_notes: hiringNotes,
         tm_mots_of_note: tmMotsOfNote,
         development_path_updates: developmentPathUpdates,
@@ -5456,7 +5556,7 @@ function GuidedRecapStep({
         labourCostPct,
         lcVariance,
         undefined,
-        undefined,
+        baselineWeekEndingDate,
         m.recap_sales_wtd_actual,
         m.recap_sales_wtd_budget,
         m.recap_fc_wtd_pct,
