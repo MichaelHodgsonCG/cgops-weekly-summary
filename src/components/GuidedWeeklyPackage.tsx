@@ -283,26 +283,51 @@ function parseProfitCenterReport(buffer: ArrayBuffer): ProfitCenterParseResult {
 function parseDiscountsReport(csvText: string): DiscountsParseResult {
   const lines = csvText.split(/\r?\n/);
 
-  const fromDateLine = lines.find((line) => line.startsWith('From Date:'));
-  const fromDateMatch = fromDateLine?.match(/From Date:,(\d{4}-\d{2}-\d{2})/);
-  if (!fromDateMatch) {
-    throw new Error('Could not find the From Date in this report.');
-  }
-  const fromDate = new Date(`${fromDateMatch[1]}T00:00:00`);
+  let fromDate: Date;
+  let headerIndex: number;
+  let dateIdx: number;
+  let discountIdx: number;
+  let amountIdx: number;
+  let itemDescIdx: number;
 
   const sectionIndex = lines.findIndex((line) => line.includes('GenerateDiscountReport'));
-  if (sectionIndex === -1) {
-    throw new Error('Could not find the discount detail section in this report.');
+  const fromDateLine = lines.find((line) => line.startsWith('From Date:'));
+  const fromDateMatch = fromDateLine?.match(/From Date:,(\d{4}-\d{2}-\d{2})/);
+
+  if (sectionIndex !== -1 && fromDateMatch) {
+    // Legacy "GenerateDiscountReport" export: From Date line + lowercase columns.
+    fromDate = new Date(`${fromDateMatch[1]}T00:00:00`);
+    headerIndex = sectionIndex + 1;
+    const header = parseCsvLine(lines[headerIndex]);
+    dateIdx = header.indexOf('date');
+    discountIdx = header.indexOf('discount');
+    amountIdx = header.indexOf('discountAmount');
+    itemDescIdx = header.indexOf('itemDesc');
+  } else {
+    // Newer "DiscountsDataBit" export: Date Range line + title-case columns.
+    const dateRangeLine = lines.find((line) => line.trim().startsWith('Date Range,'));
+    const dateRangeMatch = dateRangeLine?.match(/(\d{4}-\d{2}-\d{2})/);
+    if (!dateRangeMatch) {
+      throw new Error('Could not find the date range in this report.');
+    }
+    fromDate = new Date(`${dateRangeMatch[1]}T00:00:00`);
+
+    headerIndex = lines.findIndex((line) => {
+      const fields = parseCsvLine(line);
+      return fields[0] === 'Check #' && fields.includes('Reason');
+    });
+    if (headerIndex === -1) {
+      throw new Error('Could not find the discount detail header row in this report.');
+    }
+    const header = parseCsvLine(lines[headerIndex]);
+    dateIdx = header.indexOf('Date');
+    discountIdx = header.indexOf('Reason');
+    amountIdx = header.indexOf('Discount');
+    itemDescIdx = header.indexOf('Item');
   }
 
-  const header = parseCsvLine(lines[sectionIndex + 1]);
-  const dateIdx = header.indexOf('date');
-  const discountIdx = header.indexOf('discount');
-  const amountIdx = header.indexOf('discountAmount');
-  const itemDescIdx = header.indexOf('itemDesc');
-
   if (dateIdx === -1 || discountIdx === -1 || amountIdx === -1) {
-    throw new Error('This report is missing expected columns (date, discount, discountAmount).');
+    throw new Error('This report is missing expected columns (date, discount reason, discount amount).');
   }
 
   const days = [1, 2, 3, 4, 5, 6, 7];
@@ -315,7 +340,7 @@ function parseDiscountsReport(csvText: string): DiscountsParseResult {
     items: [],
   }));
 
-  let rowIndex = sectionIndex + 2;
+  let rowIndex = headerIndex + 1;
   while (rowIndex < lines.length && lines[rowIndex].trim() !== '') {
     const row = parseCsvLine(lines[rowIndex]);
     const rowDateStr = row[dateIdx];
