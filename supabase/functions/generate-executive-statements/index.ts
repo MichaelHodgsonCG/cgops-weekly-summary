@@ -173,6 +173,8 @@ IMPORTANT RULES:
 * Never fabricate results or add assumptions
 * Use concise restaurant-industry language
 * Avoid clichés, generic business jargon, or AI-sounding phrasing
+* Where Leadership Notes are provided, treat them as this week's priorities and reflect their themes directly in both statements — never ignore them
+* This is a weekly report: it must read differently each week based on the actual results, chef summaries and leadership notes — never recycle generic phrasing from a typical week
 
 OPENING STATEMENT GOALS:
 * Set the tone for the week
@@ -228,7 +230,7 @@ ${leadershipNotes?.trim() || "No leadership notes provided."}`;
             { role: "user", content: userContent },
           ],
           max_tokens: 800,
-          temperature: 0.4,
+          temperature: 0.5,
         }),
       }
     );

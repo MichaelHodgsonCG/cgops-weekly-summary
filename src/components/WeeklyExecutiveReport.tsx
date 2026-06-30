@@ -212,7 +212,8 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
             section,
             fiscalYear: currentPeriod.fiscal_year,
             period: currentPeriod.period,
-            week: currentPeriod.week
+            week: currentPeriod.week,
+            leadershipNotes: report.leadership_notes || ''
           })
         }
       );
@@ -529,9 +530,11 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
         const wtdLabVariance = wtdLabPct - ptdLabBudgetPct;
 
         return {
+          // Sales budget is a full-period figure; pro-rate it to the weeks elapsed
+          // so PTD/YTD variances don't count budget for weeks we haven't reached.
           wtdSales, wtdSalesVariance,
-          ptdSales, ptdSalesVariance: ptdSales - ptdBudget,
-          ytdSales, ytdSalesVariance: ytdSales - ytdBudget,
+          ptdSales, ptdSalesVariance: ptdSales - ptdBudget * Math.min(week, 4) / 4,
+          ytdSales, ytdSalesVariance: ytdSales - (ytdBudget - ptdBudget * (4 - Math.min(week, 4)) / 4),
           wtdFCPct, wtdFCVariance,
           ptdFCPct, ptdFCVariance: ptdFCPct - ptdFCBudgetPct,
           ytdFCPct, ytdFCVariance: ytdFCPct - ytdFCBudgetPct,
@@ -580,7 +583,6 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
           { label: 'Promos $ Week', values: restaurants.map(r => ({ v: r.weekPromo, isPromo: true, highlight: r.shouldHighlightPromo })) },
           { label: 'Promos $ Period', values: restaurants.map(r => ({ v: r.ptdPromo, isPromo: true })) },
           { label: 'Expo Time', values: restaurants.map(r => ({ text: r.expoTime, highlight: r.highlightExpo })) },
-          { label: 'Brunch Time', values: restaurants.map(r => ({ text: r.brunchTime, highlight: r.highlightBrunch })) },
         ];
         const colWidth = `${Math.floor(75 / restaurants.length)}%`;
         return `
@@ -648,10 +650,10 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Weekly Culinary Report — FY ${fiscalYear} P${period} W${week}</title>
+  <title>Weekly Culinary Summary — FY ${fiscalYear} P${period} W${week}</title>
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; max-width: 960px; margin: 0 auto; padding: 32px 24px; line-height: 1.5;">
-  <h1 style="font-size: 22px; font-weight: 700; color: #1e293b; margin: 0 0 4px 0;">Weekly Culinary Report</h1>
+  <h1 style="font-size: 22px; font-weight: 700; color: #1e293b; margin: 0 0 4px 0;">Weekly Culinary Summary</h1>
   <p style="font-size: 13px; color: #1e293b; margin: 0 0 28px 0;">FY ${fiscalYear} — Period ${period}, Week ${week}${weekEndingDate ? ` &nbsp;|&nbsp; Week Ending ${weekEndingDate}` : ''}</p>
 
   ${openingHtml}
@@ -661,7 +663,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
   ${consolidatedSectionHtml('Beertown + Sociable', btMetrics, true)}
   ${consolidatedSectionHtml('Trinity (WC/TBK/Sole)', trinityMetrics)}
 
-  <h2 style="font-size: 16px; font-weight: 700; color: #1e293b; margin: 28px 0 16px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">Budget Variance by Restaurant</h2>
+  <h2 style="font-size: 16px; font-weight: 700; color: #1e293b; margin: 28px 0 16px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">Variance by Restaurant</h2>
   ${restaurants.length > 0 ? varianceTableHtml() : '<p style="color: #64748b; font-size: 13px;">No data available.</p>'}
 
   <h2 style="font-size: 16px; font-weight: 700; color: #1e293b; margin: 28px 0 16px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">Restaurant Performance</h2>
@@ -739,7 +741,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Weekly Culinary Report</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Weekly Culinary Summary</h1>
           <div className="flex items-center gap-2 mt-1 text-sm text-slate-600">
             <Calendar className="w-4 h-4" />
             <span>FY {currentPeriod?.fiscal_year} - Period {currentPeriod?.period}, Week {currentPeriod?.week}</span>
@@ -1311,7 +1313,7 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
 
       <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
         <div className="p-4 bg-slate-50 border-b border-slate-200">
-          <h2 className="text-lg font-semibold text-slate-800">Budget Variance Summary</h2>
+          <h2 className="text-lg font-semibold text-slate-800">Variance by Restaurant</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -1415,16 +1417,6 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
                 {restaurants.map((restaurant, index) => (
                   <td key={index} className={`px-4 py-3 text-sm text-center ${shouldHighlightTime(restaurant.expoTime, restaurant.code) ? 'text-red-600 font-semibold' : 'text-slate-700'}`}>
                     {restaurant.expoTime}
-                  </td>
-                ))}
-              </tr>
-              <tr className="hover:bg-slate-50">
-                <td className="px-6 py-3 text-sm font-medium text-slate-700 bg-slate-50 sticky left-0 min-w-[200px]">
-                  Brunch Time
-                </td>
-                {restaurants.map((restaurant, index) => (
-                  <td key={index} className={`px-4 py-3 text-sm text-center ${shouldHighlightTime(restaurant.brunchTime, restaurant.code, true) ? 'text-red-600 font-semibold' : 'text-slate-700'}`}>
-                    {restaurant.brunchTime}
                   </td>
                 ))}
               </tr>
@@ -1591,12 +1583,15 @@ function ConsolidatedSummaries({ fiscalYear, period, week }: { fiscalYear: numbe
       // PTD (Period-to-Date) metrics - from current_actual and current_budget
       const ptdSales = locationIds.reduce((sum, locId) => sum + getLineItemValue(locId, 'Food Sales', 'current_actual'), 0);
       const ptdBudget = locationIds.reduce((sum, locId) => sum + getLineItemValue(locId, 'Food Sales', 'current_budget'), 0);
-      const ptdSalesVariance = ptdSales - ptdBudget;
+      // Pro-rate the full-period sales budget to the weeks elapsed so the variance
+      // doesn't include budget for weeks we haven't reached yet (periods = 4 weeks).
+      const weeksElapsed = Math.min(week, 4);
+      const ptdSalesVariance = ptdSales - ptdBudget * weeksElapsed / 4;
 
       // YTD (Year-to-Date) metrics - from ytd_actual and ytd_budget
       const ytdSales = locationIds.reduce((sum, locId) => sum + getLineItemValue(locId, 'Food Sales', 'ytd_actual'), 0);
       const ytdBudget = locationIds.reduce((sum, locId) => sum + getLineItemValue(locId, 'Food Sales', 'ytd_budget'), 0);
-      const ytdSalesVariance = ytdSales - ytdBudget;
+      const ytdSalesVariance = ytdSales - (ytdBudget - ptdBudget * (4 - weeksElapsed) / 4);
 
       // WTD (Week-to-Date) metrics - totalled from the chef summaries for the week
       const filteredChefSummary = (chefSummaryData || []).filter(s => locationCodes.includes(s.locations.code));
