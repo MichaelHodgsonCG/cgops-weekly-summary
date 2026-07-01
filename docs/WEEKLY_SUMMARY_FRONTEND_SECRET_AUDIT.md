@@ -92,6 +92,9 @@ Scanned tracked files: `src/`, `public/`, `index.html`, `.gitignore`, all
   deletion** rather than removing unilaterally.
 - **Safe before CGOPS?** Yes — removing an unused zip is low-risk; history still
   retains it, so pair with the CGOPS-side PIN rotation.
+- **Status:** the zip was **removed from the working tree** (git-tracked deletion).
+  It remains in history; the embedded CGOPS admin PIN must still be rotated
+  CGOPS-side.
 
 ### F-3 — Supabase URL + anon key in the browser bundle — **LOW (informational; by design)**
 
