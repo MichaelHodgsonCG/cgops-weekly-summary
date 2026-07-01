@@ -5,16 +5,18 @@ now broadening to serve Executive Chefs, Beverage Managers, General Managers, an
 potentially other departments). Provider: **CGOPS Dashboard**.
 Contract version: **1.0**. Transport: **HTTPS + JSON**. Access: **read-only**.
 
-> **Status: FUTURE contract — not active yet.** Weekly Summary is **not**
-> integrating with CGOPS now. This contract activates only after CGOPS has matured
-> into the operational platform and provides: Push/labour/discount integrations,
-> Authentication/SSO, a Daily Guided Workflow, daily operational comments, a stable
-> capability-contract framework, an enterprise data dictionary, and mature location
-> & fiscal-calendar services. Until then Weekly Summary collects data manually.
-> This document is the standing spec to hand the CGOPS team when that framework
-> exists — reconcile the provider side against it then. See
-> `docs/CGOPS_CHEF_SUMMARY_INTEGRATION_PLAN.md` for the full architecture,
-> prerequisites, ownership boundaries, and roadmap.
+> **Status: incremental activation.** The apps integrate in phases — Phase 1 is
+> **authentication/access** (CGOPS becomes the login, permissions, and application
+> access layer; Weekly Summary served at `cgops.ca/weekly-summary` or
+> `cgops.ca/chefs`), Phase 2 stands up **this contract's plumbing** (endpoint,
+> auth, keys — `fields: []` is a valid response, so the framework ships before any
+> data), and Phase 3 enables the fields below **one capability at a time** as each
+> CGOPS feed becomes reliable (e.g. sales first → `food_sales_labour_push` goes
+> live and the corresponding upload step is retired to a fallback; then discounts,
+> labour, etc.). Fields CGOPS does not yet provide are simply omitted — Weekly
+> Summary keeps collecting those manually. See
+> `docs/CGOPS_CHEF_SUMMARY_INTEGRATION_PLAN.md` for the full phased architecture,
+> ownership boundaries, and per-capability readiness gates.
 
 Once active, Weekly Summary calls this when a weekly package is started or
 refreshed, stores the returned values as **suggestions**, and a manager confirms

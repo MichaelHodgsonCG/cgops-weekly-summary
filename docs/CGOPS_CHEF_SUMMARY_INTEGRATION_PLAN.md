@@ -1,17 +1,18 @@
-# CGOPS Dashboard ↔ Weekly Summary — Future Integration Architecture
+# CGOPS Dashboard ↔ Weekly Summary — Incremental Integration Architecture
 
 _Last reviewed: 2026-06-30_
 
-> **Status: FUTURE ARCHITECTURE — not scheduled for implementation.**
-> We are **not** integrating Weekly Summary with CGOPS yet. CGOPS will first
-> mature into the operational platform (stable APIs, daily workflows,
-> authentication, normalized operational data). Only once the
-> [prerequisites](#2-prerequisites-gate-before-any-integration-work) are met does
-> Weekly Summary begin consuming data from CGOPS. **Until then, Weekly Summary
-> keeps collecting data manually via its guided upload workflow.** This document
-> is the target architecture and the standing contract design — it is preserved so
-> it is ready to execute when the platform is ready, not a signal to start
-> building now.
+> **Status: INCREMENTAL INTEGRATION STRATEGY.**
+> We are **not** doing a full data integration yet — but we **are** beginning to
+> platform-enable Weekly Summary through CGOPS, starting with **authentication
+> and application access** (Phase 1), then a **basic secure capability contract**
+> (Phase 2). Operational data is added **one capability at a time** as CGOPS
+> matures (Phase 3+): when CGOPS has a reliable feed (e.g. sales), that field is
+> exposed to Weekly Summary and the corresponding upload step is retired;
+> everything CGOPS does not yet provide **continues to be collected manually**
+> via the guided upload workflow. Connecting the apps does **not** wait for all
+> data integrations. The goal is to chip away safely while preserving the
+> long-term platform architecture described here.
 
 > **Naming transition:** the application historically called **"Chef Summary"** is
 > becoming **"Weekly Summary."** It is evolving beyond chefs to serve **Executive
@@ -36,16 +37,19 @@ from CGOPS so managers confirm or override them**, instead of re-uploading repor
 CGOPS already holds — and, ultimately, to assemble the week from daily
 observations captured in CGOPS rather than reconstructing it after the fact.
 
-That goal is **downstream of CGOPS maturing first.** This document therefore
-describes the target end-state and the contract that will govern it; the
-[roadmap](#15-strategic-roadmap) sequences CGOPS platform maturity **before** any
-Weekly Summary integration work.
+We get there **incrementally**. Rather than waiting for full CGOPS data maturity
+before connecting anything, the apps are joined **now at the platform layer**
+(login, permissions, application access — see §2), a **basic secure capability
+contract** is stood up next, and data capabilities are then switched on **one at
+a time** as each CGOPS feed becomes reliable. The
+[roadmap](#15-strategic-roadmap) sequences this as five phases.
 
 Long-term roles:
 
-- **CGOPS Dashboard** = the operational platform / data hub. Upstream provider of
-  normalized operational data and, later, the consumer of the final published
-  weekly package.
+- **CGOPS Dashboard** = the operational platform: **login, permissions, and
+  application access layer** for the app suite, and the operational data hub.
+  Upstream provider of normalized operational data and, later, the consumer of
+  the final published weekly package.
 - **Weekly Summary** = the weekly package **system of record**. It owns the final
   numbers, the financial calculations, the review, the narrative, the approval,
   and the published package.
@@ -63,35 +67,106 @@ Long-term roles:
    reconciliation, etc.).
 4. **Build a reusable pattern**, not a CGOPS-specific hack — a generic
    "prefill provider" contract so future app-to-app feeds plug in the same way.
-5. **Do not rebuild Weekly Summary inside CGOPS.** The two apps stay separate; the
-   only coupling is the data contract.
+5. **Do not rebuild Weekly Summary inside CGOPS — and do not merge the
+   codebases.** The two apps stay separate; the only couplings are the auth/access
+   layer and the data contract.
+6. **Connect the apps before the data.** Authentication/access integration does
+   not wait for data integrations; data capabilities are enabled **one at a
+   time** as each CGOPS feed becomes reliable, and manual upload remains the path
+   for everything else.
 
-Preferred integration architecture (for when prerequisites are met): **CGOPS
+Preferred data-integration architecture (per capability, as each matures): **CGOPS
 exposes a weekly prefill capability. Weekly Summary calls it** (server-side) when
 a weekly package is started or refreshed, and stores the suggested values plus
 source metadata, confirmation status, and any overrides.
 
 ---
 
-## 2. Prerequisites (gate before any integration work)
+## 2. Incremental integration strategy
 
-**Integration should not begin until CGOPS provides all of the following.** Until
-each exists and is stable, Weekly Summary continues collecting data manually.
+The integration proceeds in five phases (detailed in the
+[roadmap](#15-strategic-roadmap)); the defining property is that **each phase is
+useful on its own and none waits for full CGOPS data maturity**:
 
-| Prerequisite | Why it gates integration |
+1. **Phase 1 — Authentication/access integration.** CGOPS becomes the login,
+   permissions, and application access layer.
+2. **Phase 2 — Basic API/capability contract.** A minimal, secure, versioned
+   contract between the two apps — even before it carries much data.
+3. **Phase 3 — Field-by-field prefill integration.** Data capabilities switched
+   on one at a time as CGOPS feeds become reliable.
+4. **Phase 4 — Daily workflow commentary integration.** Daily CGOPS observations
+   assemble into the weekly package.
+5. **Phase 5 — Final weekly package publication back to CGOPS.**
+
+### 2.1 Phase 1 — CGOPS as the login, permissions & access layer
+
+Weekly Summary **remains a separate application** (separate codebase, separate
+deploy), but users reach it **through CGOPS** — target address
+**`cgops.ca/weekly-summary`** (or **`cgops.ca/chefs`**), served via CGOPS routing
+(reverse proxy or sub-app mount; either keeps the codebases separate).
+
+- **CGOPS owns identity:** login, sessions, permissions, and which users can see
+  the Weekly Summary app at all.
+- **Weekly Summary trusts CGOPS identity:** on entry, CGOPS passes a signed,
+  short-TTL identity token (user id, name, role/permission claims, location
+  scope). Weekly Summary validates the signature and establishes its session from
+  it — replacing today's **PIN + `localStorage` login** (`src/lib/auth.tsx`,
+  `AUTHENTICATION_NOTES.md`), which is the weakest part of the current app and
+  makes Phase 1 a security upgrade in its own right.
+- **Role mapping:** CGOPS roles/permissions map onto Weekly Summary's existing
+  `users`/`roles`/`permissions` tables (a mapping table, same spirit as the
+  location map in §9), so Weekly Summary's internal permission checks keep
+  working unchanged.
+- **No data flows yet.** Phase 1 changes who signs you in and where the app
+  lives — nothing about how the weekly package is filled.
+
+### 2.2 Phase 2 — basic secure API/capability contract
+
+Stand up the **plumbing** of the provider contract (§7) before it carries
+operational data: the versioned endpoint shape, service-to-service auth (§8),
+location mapping (§9), and fiscal-key alignment (§10) — proven end-to-end with a
+trivial or empty payload (`fields: []` is a valid response by design). This
+de-risks the framework separately from any individual feed.
+
+### 2.3 Phase 3 — one capability at a time
+
+Each data capability is enabled **independently**, gated only on its own
+readiness — never on the whole platform:
+
+| CGOPS capability, once reliable | Weekly Summary fields it unlocks | Upload step it retires (kept as fallback) |
+|---|---|---|
+| **Sales** (Push API, hourly/real-time) | `food_sales_labour_push` | Push Profit Center XLSX upload (Step 1) |
+| **Labour** | `labour_spent_gross`, `overtime_amount` (+ DT) | Same Push XLSX (Steps 1/3) |
+| **Discounts** | `boh_promo_amount` | Silverware Discounts CSV (Step 5) |
+| **Speed of service** | `qsr_expo_time`, `window_time` | QSR CSV (Step 6) |
+| **P&L baseline** | `recap_*` fields | Sage P&L upload (Step 17 baseline) |
+| **Audit scores** | `last_audit_score_pct` | Prior-week prefill (Step 16) |
+| **Guest feedback** | future optional field | — (new capability) |
+| **Daily comments** (Phase 4) | narrative sections | End-of-week reconstruction |
+
+The worked example: **once CGOPS has reliable sales, expose sales to Weekly
+Summary and remove that upload step** — the field arrives as a suggested value
+(confirm/override per §12–13), the upload zone becomes the fallback, and nothing
+else changes. Then repeat for discounts, labour, daily comments, etc.
+
+**Anything CGOPS does not yet provide, Weekly Summary keeps collecting
+manually.** Optimum Control data stays a Weekly Summary upload permanently (§3).
+
+### 2.4 Per-capability readiness gates
+
+What each phase/capability needs before it switches on — these gate **only their
+own row**, not the program:
+
+| Readiness item | Gates |
 |---|---|
-| **Push API integration** (hourly / real-time sales) | Sales pre-fill needs a live, normalized sales feed — not a re-exported file |
-| **Labour integration** | Labour $ / OT pre-fill needs normalized labour data at source |
-| **Discount integration** | Promo/discount pre-fill needs normalized discount data |
-| **Authentication / SSO** | Cross-app calls need a shared, secure identity model |
-| **Daily Guided Workflow** (in CGOPS) | The daily-capture surface that eventually feeds the weekly package |
-| **Daily operational comments** (in CGOPS) | The narrative/observation stream Weekly Summary will assemble from |
-| **Stable capability contract framework** | The versioned provider/consumer contract must be a first-class, stable CGOPS capability |
-| **Enterprise data dictionary** | Field meanings/units must be authoritative and shared, not inferred |
-| **Mature location & fiscal calendar services** | Location identity and fiscal period/week alignment must be authoritative in CGOPS |
-
-Until this gate is cleared, the sections below are **design, not backlog.** Weekly
-Summary's existing manual upload flow remains the sole, guaranteed data path.
+| **Authentication / SSO** in CGOPS | Phase 1 (and everything after) |
+| **Stable capability contract framework** | Phase 2 (and all Phase 3 feeds) |
+| **Mature location & fiscal calendar services** | Phase 2 key alignment |
+| **Enterprise data dictionary entry** for a field | That field's Phase 3 enablement |
+| **Push API integration** (hourly/real-time sales) | Sales prefill |
+| **Labour integration** | Labour/OT prefill |
+| **Discount integration** | Discount prefill |
+| **Daily Guided Workflow + daily operational comments** | Phase 4 |
 
 ---
 
@@ -107,7 +182,7 @@ Clear separation of what each system owns in the target architecture:
 | Guest feedback | Weekly review |
 | Daily operational comments | Action plans |
 | Daily workflow | AI-generated weekly narrative |
-| Authentication | Final approval |
+| Authentication, permissions & application access (Phase 1) | Final approval |
 | Operational integrations | Published weekly package |
 | Enterprise operational data | |
 
@@ -117,7 +192,7 @@ rebuilds the other.
 
 ---
 
-## 4. Daily workflow vision (the long-term architecture)
+## 4. Daily workflow vision (Phase 4 — the long-term architecture)
 
 The strategic end-state is that **managers provide operational commentary through
 CGOPS every day**, rather than reconstructing the week afterward. For example:
@@ -147,9 +222,10 @@ assembly is the mature form.
 
 ## 5. Input-by-input mapping (target pre-fill design)
 
-_Applies once the §2 prerequisites are met. Until then every row is collected
-manually._ Each row maps a Weekly Summary workflow step to its future CGOPS
-pre-fill potential. Field names are the actual `GuidedFieldUpdates` /
+_This is the Phase 3 target. Each row switches on **individually** when its CGOPS
+capability is reliable (§2.3–2.4); until then that row is collected manually._
+Each row maps a Weekly Summary workflow step to its future CGOPS pre-fill
+potential. Field names are the actual `GuidedFieldUpdates` /
 `weekly_chef_summary` keys (`GuidedWeeklyPackage.tsx:934`). Confidence reflects how
 directly CGOPS is expected to hold a normalized equivalent — **to be confirmed
 against the CGOPS enterprise data dictionary.**
@@ -172,7 +248,7 @@ against the CGOPS enterprise data dictionary.**
 | **11. Final Food Cost** | `final_food_cost_items`, `usage_amount`, `ideal_usage_amount`, `waste_amount` | OC food-cost CSV | — (Optimum Control upload; Weekly-Summary-owned) | **N/A** | — | n/a | Unchanged (OC) |
 | **16. Audit** | `last_audit_score_pct` | Prefilled from prior week, edited | Audit/inspection feed if in CGOPS | **Low–Med** | Latest score % | **Yes** | Existing prior-week prefill |
 | **17. Recap** | `recap_sales_*`, `recap_fc_*`, `recap_labour_*` | Derived from Sage P&L upload | CGOPS-normalized P&L baseline (WTD/PTD/QTD/YTD) | **Medium–High** | Provide actual/budget per horizon; Weekly Summary still computes %/variance | **Yes** | Existing `pl_uploads` baseline (`needToSave.ts`) |
-| **All steps** | `fiscal_year`, `period_number`, `week_number`, `location_id` | Selected when starting package | CGOPS fiscal calendar + location registry (mature services, §2) | **High** | Resolve via location map + fiscal alignment (§9–10) | Implicit | Weekly Summary `fiscal_calendar` + `locations` |
+| **All steps** | `fiscal_year`, `period_number`, `week_number`, `location_id` | Selected when starting package | CGOPS fiscal calendar + location registry (readiness gates, §2.4) | **High** | Resolve via location map + fiscal alignment (§9–10) | Implicit | Weekly Summary `fiscal_calendar` + `locations` |
 
 **Realistically pre-fillable from CGOPS once mature (high/medium):** Push food
 sales, gross labour $, overtime/doubletime, promo/discount totals,
@@ -216,7 +292,7 @@ Weekly Summary business rule, it doesn't belong in the contract.
 
 ---
 
-## 7. The data contract
+## 7. The data contract (Phase 2 plumbing, Phase 3 payload)
 
 A versioned, read-only **weekly prefill** capability. CGOPS owns the endpoint;
 Weekly Summary is the client. JSON over HTTPS. The full field-by-field provider
@@ -286,9 +362,9 @@ Design notes:
 ## 8. Authentication
 
 Service-to-service, **never from the browser**, built on the CGOPS Auth/SSO
-capability (a §2 prerequisite). Mirrors how Weekly Summary already isolates
-secrets in edge functions (`generate-chef-summary` reads `OPENAI_API_KEY`
-server-side).
+capability delivered in Phase 1 (§2.1). Mirrors how Weekly Summary already
+isolates secrets in edge functions (`generate-chef-summary` reads
+`OPENAI_API_KEY` server-side).
 
 - Add a Weekly Summary **edge function `fetch-cgops-prefill`**. The browser calls
   it with the user's session (same pattern as `${VITE_SUPABASE_URL}/functions/v1/...`).
@@ -457,17 +533,21 @@ guaranteed path, so no failure can block a manager from finishing a package.
 
 ## 15. Strategic roadmap
 
-The integration is deliberately sequenced **after** CGOPS platform maturity. Each
-phase is a prerequisite for the next.
+Five phases, each shippable on its own. The point is to **chip away safely**:
+connect the apps early, add data only as each CGOPS capability becomes reliable,
+and preserve the long-term platform architecture throughout.
 
-| Phase | Focus | What happens |
-|---|---|---|
-| **Phase 1** | **CGOPS matures into the operational platform** | CGOPS builds the §2 prerequisites: Push/labour/discount integrations, Auth/SSO, stable capability-contract framework, enterprise data dictionary, mature location & fiscal calendar services. Weekly Summary continues **manual** data collection throughout. |
-| **Phase 2** | **Daily workflows replace end-of-week commentary** | CGOPS's Daily Guided Workflow captures daily sales/discount/staffing/operational comments. Managers shift to daily commentary instead of reconstructing the week. |
-| **Phase 3** | **Weekly Summary consumes operational data from CGOPS** | The prefill contract (§7) goes live: Weekly Summary pulls suggested values (and, increasingly, assembled daily observations), managers confirm/override, manual upload remains the fallback. The weekly process becomes review-and-approval. |
-| **Phase 4** | **Weekly Summary publishes finalized packages back to CGOPS** | On approval/publish, Weekly Summary emits the final package (the `weekly_chef_summary` record + `weekly_actions`) to CGOPS for executive/portfolio reporting. CGOPS consumes it; it does not rebuild the package. |
+| Phase | Focus | What happens | Exit criteria |
+|---|---|---|---|
+| **Phase 1** | **Authentication/access integration** | CGOPS becomes the login, permissions, and application access layer (§2.1). Users reach Weekly Summary at `cgops.ca/weekly-summary` (or `cgops.ca/chefs`); CGOPS identity replaces the PIN + `localStorage` login; CGOPS roles map onto Weekly Summary's `users`/`roles`/`permissions`. **No data flows.** Weekly Summary stays a separate app. | A user signs into CGOPS once and uses Weekly Summary with the right permissions, no separate PIN |
+| **Phase 2** | **Basic API/capability contract** | The versioned contract plumbing (§7), service-to-service auth (§8), location map (§9), and fiscal-key alignment (§10) go live end-to-end — even with an empty/trivial payload (`fields: []` is valid by design). | A round-trip prefill call succeeds for a pilot location; framework proven independent of any feed |
+| **Phase 3** | **Field-by-field prefill integration** | Capabilities switch on one at a time per §2.3 as each CGOPS feed becomes reliable — e.g. sales first: `food_sales_labour_push` arrives as a suggested value, the Push XLSX upload step is retired to a fallback. Then discounts, labour, speed of service, P&L baselines, audit scores. Managers confirm/override everything; manual upload continues for whatever CGOPS doesn't yet provide. | Each enabled capability replaces its upload step, with confirm/override and manual fallback intact |
+| **Phase 4** | **Daily workflow commentary integration** | CGOPS's Daily Guided Workflow captures daily sales/discount/staffing/operational comments (§4); Weekly Summary assembles the accumulated daily observations into the weekly package. The weekly process becomes review-and-approval, not data collection. | Narrative sections arrive pre-assembled from daily comments; managers review, adjust, approve |
+| **Phase 5** | **Final weekly package publication back to CGOPS** | On approval/publish, Weekly Summary emits the final package (the `weekly_chef_summary` record + `weekly_actions`) to CGOPS for executive/portfolio reporting. CGOPS consumes it; it does not rebuild the package. | CGOPS executive views read published Weekly Summary packages |
 
 Guardrails that hold across all phases:
+- The codebases are **never merged** and business logic is never duplicated —
+  coupling is limited to the auth/access layer and the versioned contract.
 - Weekly Summary's manual path is never removed; integration is additive.
 - Imported values are always suggestions requiring confirmation.
 - Weekly Summary remains the system of record and the owner of financial calcs,
