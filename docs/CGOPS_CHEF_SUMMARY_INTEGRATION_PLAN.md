@@ -51,7 +51,9 @@ CGOPS audit**, since this repo cannot see the CGOPS schema.
 
 | Step (section) | Chef Summary field(s) | Currently manual upload | Possible CGOPS source | Confidence | Required transformation | Chef confirmation? | Fallback if CGOPS missing |
 |---|---|---|---|---|---|---|---|
-| **1. Budget & Sales** | `food_sales_labour_push` | Push Profit Center Report (XLSX, `BOH` sheet) | Normalized weekly POS/sales total | **High** | Sum to weekly total; map Push→canonical sales | **Yes** | Keep XLSX upload (`parseProfitCenterReport`) |
+| **1. Budget & Sales** | `food_sales_labour_push` | Push Profit Center Report (XLSX, `BOH` sheet) | **Push** food sales (Silverware/Sage-aligned; labour denominator) | **High** | Weekly Push sales total — a source-specific measure, **not** merged with OC sales | **Yes** | Keep XLSX upload (`parseProfitCenterReport`) |
+| **11 / reconciliation** | `food_sales_oc` | OC food-cost CSV | **Optimum Control** food sales (sales linked to products) | **Medium** | OC weekly sales — a *distinct* measure that may differ from Push/Silverware; **never collapsed into `food_sales_labour_push`** | **Yes** | Keep OC CSV upload (`parseFoodCostReport`) |
+| **11 / reconciliation** | `week_variance_amount` (+ variance %) | Derived | Derived from the two sales measures | **N/A (derived)** | `source − OC`; % vs. ops tolerance → **control flag** on excess (item-linking/setup issue) | n/a (chef reviews flag) | Computed in CS regardless of CGOPS |
 | **1. Budget & Sales** | `budget_food_sales_period`, `labour_budget_pct` | Typed by chef | Budget feed if CGOPS holds budgets | **Low–Med** | Period budget → number; budget % whole-number | **Yes** | Manual entry (unchanged) |
 | **1 / 3. Sales & Labour** | `labour_spent` | Push Profit Center Report | Normalized weekly labour $ | **High** | `labour_total − transfers` is a CS calc; CGOPS sends **gross labour $**, CS subtracts transfers | **Yes** | Keep XLSX upload |
 | **3. Overtime** | `overtime_amount` (+ doubletime) | Push Profit Center Report | OT/DT if normalized | **Medium** | Weekly OT $ (and DT $ if present) | **Yes** | Keep XLSX upload; default 0 |
@@ -62,14 +64,16 @@ CGOPS audit**, since this repo cannot see the CGOPS schema.
 | **8. COGS checklist** | `cogs_*`, `cogs_petty_cash_amount` | Manual confirmations (OC tasks) | — (operational checklist) | **N/A** | — | n/a | Unchanged |
 | **9. Purchases** | `purchases_*_amount` | OC General Ledger CSV | GL purchases if CGOPS ingests accounting | **Low–Med** | Map GL categories → 5 CS categories | **Yes** | Keep CSV upload (`parsePurchasesReport`) |
 | **10. Usage Review** | `usage_review_items` (JSON) | Two OC Usage CSVs | — (OC inventory specific) | **Low** | — | n/a | Unchanged (OC) |
-| **11. Final Food Cost** | `final_food_cost_items`, `usage_amount`, `ideal_usage_amount`, `waste_amount`, `food_sales_oc` | OC food-cost CSV | — (OC inventory specific) | **Low** | — | n/a | Unchanged (OC) |
+| **11. Final Food Cost** | `final_food_cost_items`, `usage_amount`, `ideal_usage_amount`, `waste_amount` | OC food-cost CSV | — (OC inventory specific; OC sales handled in the reconciliation rows above) | **Low** | — | n/a | Unchanged (OC) |
 | **16. Audit** | `last_audit_score_pct` | Prefilled from prior week, edited | Audit/inspection feed if in CGOPS | **Low–Med** | Latest score % | **Yes** | Existing prior-week prefill |
 | **17. Recap** | `recap_sales_*`, `recap_fc_*`, `recap_labour_*` | Derived from Sage P&L upload | CGOPS-normalized P&L baseline (WTD/PTD/QTD/YTD) | **Medium–High** | Provide actual/budget per horizon; CS still computes %/variance | **Yes** | Existing `pl_uploads` baseline (`needToSave.ts`) |
 | **All steps** | `fiscal_year`, `period_number`, `week_number`, `location_id` | Selected when starting package | CGOPS fiscal calendar + location registry | **High** | Resolve via location map + fiscal alignment (§5–6) | Implicit | Chef Summary `fiscal_calendar` + `locations` |
 
-**Summary of what's realistically pre-fillable now (high/medium):** weekly sales,
-gross labour $, overtime/doubletime, promo/discount totals, speed-of-service
-times, P&L recap baselines, and fiscal/location metadata. **Inventory-derived
+**Summary of what's realistically pre-fillable now (high/medium):** Push food
+sales and OC food sales (kept as **two separate source-specific measures**, with
+the OC↔source variance surfaced as a control metric), gross labour $,
+overtime/doubletime, promo/discount totals, speed-of-service times, P&L recap
+baselines, and fiscal/location metadata. **Inventory-derived
 steps (usage, final food cost) and chef-judgement steps (transfers, COGS
 checklist, team/facilities/features) stay manual** — they are OC- or
 chef-specific and are out of scope for CGOPS pre-fill.
@@ -86,6 +90,7 @@ Chef-Summary-specific derived KPIs. The dividing line:
 | Weekly sales $, gross labour $, OT/DT $ | Food cost % / theoretical % / labour % = usage·labour ÷ push sales (`GuidedWeeklyPackage.tsx:5608`) |
 | Promo/discount total $ | Item-level "ignore this discount" decisions |
 | Speed-of-service seconds | `m:ss` formatting, expo/window derivation choices |
+| Push sales **and** OC sales as two distinct measures | Sales reconciliation: `week_variance_amount = push − OC`, variance % vs. tolerance, and the control flag for excessive OC↔source divergence |
 | P&L actuals & budgets per horizon | Need-to-save, QTD roll-up (`needToSave.ts`) |
 | Fiscal calendar mapping, location registry | The canonical `weekly_chef_summary` row & package assembly |
 

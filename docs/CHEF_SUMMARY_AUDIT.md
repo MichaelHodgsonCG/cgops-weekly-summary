@@ -25,7 +25,7 @@ client-side in the browser.
 | Source system | What it provides | Export path (as shown in-app) | File format | Parser |
 |---|---|---|---|---|
 | **Push** (labour + POS sales) | Daily/weekly **sales total, labour $ spent, overtime, doubletime** | `Push > Reports > Sales > Profit Center Report > Select Dates > Run > Download as Excel` | **XLSX** — must contain a sheet literally named **`BOH`** | `parseProfitCenterReport` (`GuidedWeeklyPackage.tsx:250`) |
-| **Silverware** (POS) | **Discounts** by reason/item → BOH promo $; also Silverware food-sales reference | `Silverware > Loss Prevention > Discounts > Select Dates > Major Classes: FOOD-ADD-ONS, FOOD-APPS, FOOD-DESSERTS, FOOD-ENTREES > CSV` | **CSV** — two known variants (see §6) | `parseDiscountsReport` (`GuidedWeeklyPackage.tsx:302`) |
+| **Silverware** (POS) | **Discounts** by reason/item → BOH promo $. Also the **origin POS food-sales source** that feeds both Push and OC (see note below) | `Silverware > Loss Prevention > Discounts > Select Dates > Major Classes: FOOD-ADD-ONS, FOOD-APPS, FOOD-DESSERTS, FOOD-ENTREES > CSV` | **CSV** — two known variants (see §6) | `parseDiscountsReport` (`GuidedWeeklyPackage.tsx:302`) |
 | **Optimum Control (OC)** (inventory / recipe costing) | **Usage** (over/under + group totals), **GL purchases**, **final food cost / variance**, COGS task checklist, transfer standards | `OC > Reports > …` (Usage Summary, General Ledger, Invoice Account Balances, Period-End variance) | **CSV** (wide, positional columns) | `parseUsageReport`, `parsePurchasesReport`, `parseFoodCostReport` (`GuidedWeeklyPackage.tsx:701`, `754`, `834`) |
 | **QSR / Speed of Service** | Expediter / window / expo / pivot **bump times** by meal period | "Speed of Service Summary report (CSV)" | **CSV** — two known variants (header vs. headerless positional) | `parseSpeedOfServiceReport` (`GuidedWeeklyPackage.tsx:525`) |
 | **Sage / accounting P&L** | Weekly **P&L line items** (sales, food cost, kitchen labour, supplies, EBITDA …) used as the recap/"need-to-save" baseline | Uploaded via the P&L upload page | **CSV or XLSX** — two layouts (multi-week "Week Ending" vs. single "As of") | `parseCSV` (`csvParser.ts:383`), `parseExcel` (`excelParser.ts:379`) |
@@ -34,6 +34,25 @@ Key takeaway: **the entire pipeline is export-file-driven.** There is no live
 connection to any source system; correctness depends on operators picking the
 right report, date range, and export option, and on the file matching the exact
 shape the parsers expect.
+
+### Food sales is three lineages, not one number — by design
+
+**Silverware is the origin POS sales source**, and it feeds both **Push** and
+**Optimum Control**. These are intentionally tracked as separate measures:
+
+- **`food_sales_labour_push`** — Push food sales (from the Profit Center Report).
+  Should match Silverware/Sage; used as the **labour-reporting denominator**.
+  (Historically the column was `food_sales_silverware`, renamed in
+  `20260617000001_rename_food_sales_silverware.sql`.)
+- **`food_sales_oc`** — Optimum Control food sales (from the OC food-cost report,
+  `parseFoodCostReport`). OC links sales to **products**, so if a menu item isn't
+  linked to a product, OC sales can legitimately diverge from Silverware/Push/Sage.
+- **`week_variance_amount`** = `food_sales_labour_push − food_sales_oc`
+  (`GuidedWeeklyPackage.tsx:5637`) — an **intentional reconciliation/control
+  metric**. A small tolerance is expected noise; **excessive variance is an
+  operational flag** for item-linking / product-setup issues that need
+  investigation. It is not a duplicate-field naming conflict and must not be
+  collapsed.
 
 ### Format conventions the parsers assume
 

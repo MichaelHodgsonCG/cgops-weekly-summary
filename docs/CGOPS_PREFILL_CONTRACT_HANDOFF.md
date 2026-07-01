@@ -91,7 +91,8 @@ yes for every field below).
 
 | field_key | unit | value type | Meaning | Confirm? |
 |---|---|---|---|---|
-| `food_sales_labour_push` | currency | number | Weekly (WTD) food/POS sales total | yes |
+| `food_sales_labour_push` | currency | number | **Push** weekly food sales (Silverware/Sage-aligned; the labour-% denominator). **Do not collapse with `food_sales_oc`.** | yes |
+| `food_sales_oc` | currency | number | **Optimum Control** weekly food sales (sales linked to products). A *separate* measure that can legitimately differ from Push/Silverware. **Do not collapse with `food_sales_labour_push`.** | yes |
 | `labour_spent_gross` | currency | number | **Gross** weekly labour $ (consumer subtracts transfers itself → do NOT net transfers) | yes |
 | `overtime_amount` | currency | number | Weekly overtime $ | yes |
 | `boh_promo_amount` | currency | number | Weekly promo/discount total for the 4 BOH reason categories | yes |
@@ -123,6 +124,13 @@ yes for every field below).
 Notes:
 - **`labour_spent_gross` is the only non-passthrough key**: it is intentionally
   gross. The consumer computes final `labour_spent = gross − chef transfers`.
+- **Food sales is deliberately two separate source-specific measures, not one
+  canonical field.** Silverware is the origin POS source and feeds both Push and
+  Optimum Control. `food_sales_labour_push` should match Silverware/Sage;
+  `food_sales_oc` links sales to products in OC and can legitimately differ when a
+  menu item isn't linked to a product. Send both when available; **never** merge,
+  average, or substitute one for the other. The consumer derives the
+  reconciliation (see §4a) — do not collapse them to resolve the difference.
 - Every other `field_key` matches a Chef Summary field name 1:1.
 - **Unit values in use:** `currency`, `percent`, `seconds`. (Reserved for future:
   `integer`, `text`, `time_mmss`.)
@@ -130,6 +138,27 @@ Notes:
   `doubletime_amount` (currency/number) and guest-feedback signals
   `guest_feedback_score` (integer) / `guest_feedback_note` (text). Not required
   for v1.0.
+
+---
+
+## 4a. Food-sales reconciliation (consumer-derived control metric)
+
+The consumer already reconciles the two sales measures and will continue to own
+that logic (matches existing `week_variance_amount = food_sales_labour_push −
+food_sales_oc`):
+
+- **`week_variance_amount`** (currency) = source sales (`food_sales_labour_push`)
+  − OC sales (`food_sales_oc`). **Computed by Chef Summary; not part of the
+  provider contract.**
+- A **variance %** (of source sales) is evaluated against an ops-configured
+  tolerance. Within tolerance = normal noise; **beyond tolerance = an operational
+  control flag** signalling item-linking / product-setup issues in OC that need
+  investigation — it is a data-quality signal, **not** a naming conflict to be
+  smoothed over.
+- Provider responsibilities: (1) supply the two measures with **accurate,
+  distinct `source_system` provenance** so the variance is meaningful; (2)
+  optionally expose CGOPS's own variance/health flag as separate future fields —
+  but must not reconcile by overwriting either measure.
 
 ---
 
@@ -164,7 +193,7 @@ Per field, all required:
 
 | key | type | meaning |
 |---|---|---|
-| `source_system` | string enum | `push` \| `silverware` \| `qsr` \| `accounting` \| `audit` \| `cgops` |
+| `source_system` | string enum | `push` \| `silverware` \| `optimum_control` \| `qsr` \| `accounting` \| `audit` \| `cgops` |
 | `source_ref` | string | upstream provenance handle (report id / natural key), stored for audit |
 | `as_of` | string ISO 8601 UTC | freshness of the underlying data (shown to chef; drives "stale?" prompts) |
 | `confidence` | string enum | see §6 |
