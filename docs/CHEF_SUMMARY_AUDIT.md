@@ -1,8 +1,16 @@
-# Chef Summary Process — Audit & Data Flow
+# Weekly Summary (formerly Chef Summary) Process — Audit & Data Flow
 
 _Last reviewed: 2026-06-30_
 
-This document audits how the weekly Chef Summary ("Culinary Performance Summary")
+> **Naming transition:** the application historically called **"Chef Summary"** is
+> becoming **"Weekly Summary"** as it broadens beyond chefs to serve Executive
+> Chefs, Beverage Managers, General Managers, and potentially other departments.
+> This audit describes the **current** app, so it still references "chef"-era code
+> identifiers verbatim (the `weekly_chef_summary` table, `ChefSummary*` components,
+> the `food_sales_labour_push` column) — those are unchanged until a deliberate
+> code rename. Read "chef" as "the manager completing the package."
+
+This document audits how the weekly package ("Culinary Performance Summary")
 is assembled: where each number comes from, what format it arrives in, how the
 guided weekly package is structured, which steps are still manual, where we can
 automate, and — for the dashboard initiative — the formatting and structural

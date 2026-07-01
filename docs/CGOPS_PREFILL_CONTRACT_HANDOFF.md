@@ -1,12 +1,25 @@
 # CGOPS Weekly Prefill — Provider Contract (Handoff for CGOPS repo)
 
-Consumer: **Chef Summary**. Provider: **CGOPS Dashboard**.
+Consumer: **Weekly Summary** (the application formerly called "Chef Summary" —
+now broadening to serve Executive Chefs, Beverage Managers, General Managers, and
+potentially other departments). Provider: **CGOPS Dashboard**.
 Contract version: **1.0**. Transport: **HTTPS + JSON**. Access: **read-only**.
 
-Chef Summary calls this once when a weekly package is started or refreshed,
-stores the returned values as **suggestions**, and a chef confirms or overrides
-each one. Nothing here is final until a chef acts on it. This doc is the exact
-consumer expectation — reconcile the provider side against it.
+> **Status: FUTURE contract — not active yet.** Weekly Summary is **not**
+> integrating with CGOPS now. This contract activates only after CGOPS has matured
+> into the operational platform and provides: Push/labour/discount integrations,
+> Authentication/SSO, a Daily Guided Workflow, daily operational comments, a stable
+> capability-contract framework, an enterprise data dictionary, and mature location
+> & fiscal-calendar services. Until then Weekly Summary collects data manually.
+> This document is the standing spec to hand the CGOPS team when that framework
+> exists — reconcile the provider side against it then. See
+> `docs/CGOPS_CHEF_SUMMARY_INTEGRATION_PLAN.md` for the full architecture,
+> prerequisites, ownership boundaries, and roadmap.
+
+Once active, Weekly Summary calls this when a weekly package is started or
+refreshed, stores the returned values as **suggestions**, and a manager confirms
+or overrides each one. Nothing here is final until a manager acts on it. This doc
+is the exact consumer expectation.
 
 ---
 
@@ -21,18 +34,19 @@ calendar alignment):
 
 | Param | Type | Notes |
 |---|---|---|
-| `cgops_location_id` | string | CGOPS's own location id (Chef Summary resolves it, see §7) |
+| `cgops_location_id` | string | CGOPS's own location id (Weekly Summary resolves it, see §8) |
 | `fiscal_year` | integer | e.g. `2026` |
 | `period_number` | integer | 1–13 |
 | `week_number` | integer | week within period |
 | `week_ending_date` | string `YYYY-MM-DD` | **Sunday** week-ending; CGOPS aligns its data to this (see §8) |
 
 ### Auth
-Server-to-server only (Chef Summary calls from a backend function; the credential
-is never in a browser). Expected: **OAuth2 client-credentials** (preferred) or a
-**signed short-TTL service JWT** in `Authorization: Bearer …`. Scope: read-only
-weekly prefill, limited to mapped locations. Auth failure is treated by the
-consumer as "unavailable" (no hard error to the chef).
+Server-to-server only (Weekly Summary calls from a backend function; the
+credential is never in a browser), built on the CGOPS Auth/SSO capability.
+Expected: **OAuth2 client-credentials** (preferred) or a **signed short-TTL
+service JWT** in `Authorization: Bearer …`. Scope: read-only weekly prefill,
+limited to mapped locations. Auth failure is treated by the consumer as
+"unavailable" (no hard error to the manager).
 
 ---
 
@@ -86,13 +100,12 @@ Rules:
 ## 4. Exact `field_key` list — unit and value type
 
 `value type` = JSON type. `unit` = semantic unit the consumer expects.
-"Confirm?" = chef confirmation required before it lands in the package (always
+"Confirm?" = manager confirmation required before it lands in the package (always
 yes for every field below).
 
 | field_key | unit | value type | Meaning | Confirm? |
 |---|---|---|---|---|
-| `food_sales_labour_push` | currency | number | **Push** weekly food sales (Silverware/Sage-aligned; the labour-% denominator). **Do not collapse with `food_sales_oc`.** | yes |
-| `food_sales_oc` | currency | number | **Optimum Control** weekly food sales (sales linked to products). A *separate* measure that can legitimately differ from Push/Silverware. **Do not collapse with `food_sales_labour_push`.** | yes |
+| `food_sales_labour_push` | currency | number | **Push** weekly food sales (ultimately Push/Silverware; Sage-aligned; the labour-% denominator). **Do not collapse with `food_sales_oc`** (which CGOPS does not provide — see note). | yes |
 | `labour_spent_gross` | currency | number | **Gross** weekly labour $ (consumer subtracts transfers itself → do NOT net transfers) | yes |
 | `overtime_amount` | currency | number | Weekly overtime $ | yes |
 | `boh_promo_amount` | currency | number | Weekly promo/discount total for the 4 BOH reason categories | yes |
@@ -123,15 +136,17 @@ yes for every field below).
 
 Notes:
 - **`labour_spent_gross` is the only non-passthrough key**: it is intentionally
-  gross. The consumer computes final `labour_spent = gross − chef transfers`.
+  gross. The consumer computes final `labour_spent = gross − manager-entered transfers`.
 - **Food sales is deliberately two separate source-specific measures, not one
-  canonical field.** Silverware is the origin POS source and feeds both Push and
-  Optimum Control. `food_sales_labour_push` should match Silverware/Sage;
-  `food_sales_oc` links sales to products in OC and can legitimately differ when a
-  menu item isn't linked to a product. Send both when available; **never** merge,
-  average, or substitute one for the other. The consumer derives the
-  reconciliation (see §4a) — do not collapse them to resolve the difference.
-- Every other `field_key` matches a Chef Summary field name 1:1.
+  canonical field — but CGOPS only supplies one of them.** Silverware is the
+  origin POS source and feeds both Push and Optimum Control. CGOPS provides
+  `food_sales_labour_push` (should match Silverware/Sage). The second measure,
+  `food_sales_oc`, comes from **Weekly Summary's own Optimum Control upload** and
+  is **not** part of this contract; it links sales to products in OC and can
+  legitimately differ. **Never** merge, average, or substitute one for the other,
+  and do not attempt to supply `food_sales_oc`. Weekly Summary derives the
+  reconciliation (see §4a).
+- Every other `field_key` matches a Weekly Summary field name 1:1.
 - **Unit values in use:** `currency`, `percent`, `seconds`. (Reserved for future:
   `integer`, `text`, `time_mmss`.)
 - **Optional/future (send only if trivially available; consumer ignores today):**
@@ -141,24 +156,28 @@ Notes:
 
 ---
 
-## 4a. Food-sales reconciliation (consumer-derived control metric)
+## 4a. Food-sales reconciliation (Weekly-Summary-derived control metric)
 
-The consumer already reconciles the two sales measures and will continue to own
-that logic (matches existing `week_variance_amount = food_sales_labour_push −
-food_sales_oc`):
+Weekly Summary reconciles the two sales measures and owns that logic (matches
+existing `week_variance_amount = food_sales_labour_push − food_sales_oc`):
 
-- **`week_variance_amount`** (currency) = source sales (`food_sales_labour_push`)
-  − OC sales (`food_sales_oc`). **Computed by Chef Summary; not part of the
-  provider contract.**
-- A **variance %** (of source sales) is evaluated against an ops-configured
-  tolerance. Within tolerance = normal noise; **beyond tolerance = an operational
-  control flag** signalling item-linking / product-setup issues in OC that need
-  investigation — it is a data-quality signal, **not** a naming conflict to be
-  smoothed over.
-- Provider responsibilities: (1) supply the two measures with **accurate,
-  distinct `source_system` provenance** so the variance is meaningful; (2)
-  optionally expose CGOPS's own variance/health flag as separate future fields —
-  but must not reconcile by overwriting either measure.
+- **`food_sales_labour_push`** = provided by CGOPS (this contract).
+- **`food_sales_oc`** = from Weekly Summary's **Optimum Control upload** (not this
+  contract).
+- **`week_variance_amount`** (currency) = `food_sales_labour_push − food_sales_oc`.
+  **Computed inside Weekly Summary; not part of the provider contract.**
+- A **variance %** (of `food_sales_labour_push`) is evaluated against an
+  ops-configured tolerance. Within tolerance = normal noise; **beyond tolerance =
+  an operational control for OC product-mapping quality** — it flags
+  item-linking / product-setup issues in OC that need investigation. It is a
+  data-quality signal, **not** a naming conflict to be smoothed over.
+- Provider responsibilities: supply `food_sales_labour_push` with **accurate
+  `source_system` provenance** so the variance is meaningful. CGOPS must **not**
+  supply `food_sales_oc` or attempt the reconciliation. (A separate CGOPS
+  data-health flag could be exposed as a future field, but must not overwrite
+  either measure.)
+- **Do not reintroduce a separate Silverware upload in Weekly Summary** — none
+  exists; the Silverware-origin figure arrives via `food_sales_labour_push`.
 
 ---
 
@@ -183,7 +202,7 @@ confirmation is required (always required); it only drives UI emphasis/warnings.
 Expected mapping:
 - `high` — directly normalized from the authoritative source (e.g. Push sales).
 - `medium` — derived/aggregated or format-variant-sensitive.
-- `low` — best-effort; encourage the chef to scrutinize.
+- `low` — best-effort; encourage the manager to scrutinize.
 
 ---
 
@@ -195,7 +214,7 @@ Per field, all required:
 |---|---|---|
 | `source_system` | string enum | `push` \| `silverware` \| `optimum_control` \| `qsr` \| `accounting` \| `audit` \| `cgops` |
 | `source_ref` | string | upstream provenance handle (report id / natural key), stored for audit |
-| `as_of` | string ISO 8601 UTC | freshness of the underlying data (shown to chef; drives "stale?" prompts) |
+| `as_of` | string ISO 8601 UTC | freshness of the underlying data (shown to manager; drives "stale?" prompts) |
 | `confidence` | string enum | see §6 |
 
 ---
@@ -203,14 +222,15 @@ Per field, all required:
 ## 8. Location + fiscal key requirements
 
 **Location**
-- Request carries `cgops_location_id` (CGOPS's own id). Chef Summary maintains the
-  CGOPS↔ChefSummary mapping on its side; CGOPS only needs to key by its own id.
+- Request carries `cgops_location_id` (CGOPS's own id). Weekly Summary maintains
+  the CGOPS↔Weekly-Summary mapping on its side; CGOPS only needs to key by its own
+  id.
 - If CGOPS cannot resolve the id → return `fields: []` (consumer treats as no
   prefill).
 
 **Fiscal / weekly key**
 - Canonical weekly key: `location + fiscal_year + period_number + week_number`.
-- Chef Summary **owns the fiscal calendar** and additionally sends
+- Weekly Summary **owns the fiscal calendar** and additionally sends
   `week_ending_date` (Sunday). CGOPS must **align its data to `week_ending_date`**
   rather than to its own period math, and echo the full `key` back.
 - If CGOPS can't map that week → return `fields: []`.
@@ -223,7 +243,7 @@ So the provider understands how values are used:
 - Each field renders as a **suggestion** (badge: `Suggested · CGOPS`, with
   `confidence` and `as_of`), pre-filled but visually distinct, with **Confirm**
   and **Override/Edit**.
-- Confirm → value written to the package as-is. Override → chef edits; original
+- Confirm → value written to the package as-is. Override → manager edits; original
   suggestion retained; optional `override_reason`.
 - **Refresh** re-fetches; a suggestion that changed vs. an already-confirmed value
   is flagged for re-review and **never auto-overwrites** the confirmed value.
@@ -236,7 +256,7 @@ So the provider understands how values are used:
 
 ## 10. Data the consumer stores per imported field
 
-Chef Summary persists one `weekly_prefill` row per
+Weekly Summary persists one `weekly_prefill` row per
 `(location_id, fiscal_year, period_number, week_number, field_key)`:
 
 | column | source |
@@ -249,12 +269,12 @@ Chef Summary persists one `weekly_prefill` row per
 | `source_as_of` | response `as_of` |
 | `fetched_at` | consumer clock at fetch |
 | `status` | `suggested` \| `confirmed` \| `overridden` \| `dismissed` \| `missing` |
-| `final_value` / `final_text` | chef's confirmed/overridden value (written to package) |
-| `override_reason` | chef, optional |
-| `decided_by` / `decided_at` | chef + timestamp |
+| `final_value` / `final_text` | manager's confirmed/overridden value (written to package) |
+| `override_reason` | manager, optional |
+| `decided_by` / `decided_at` | manager + timestamp |
 
 Only `final_*` (once `confirmed`/`overridden`) is written into the
-`weekly_chef_summary` package row — Chef Summary remains the owner of final
+`weekly_chef_summary` package row — Weekly Summary remains the owner of final
 values.
 
 ---
@@ -270,5 +290,5 @@ values.
 | Auth failure | Treated as unavailable; secret never surfaced |
 | Refresh conflicts w/ confirmed value | Flag for re-review; never auto-overwrite |
 
-The integration is strictly additive — a provider outage can never block a chef
-from completing a weekly package.
+The integration is strictly additive — a provider outage can never block a
+manager from completing a weekly package.
