@@ -5,7 +5,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { supabase } from '../lib/supabase';
 import { fetchLabourPlBaseline, fetchSalesPlBaseline, fetchFoodCostPlBaseline, getWeeksRemainingInYear, LabourPlBaseline, SalesPlBaseline, FoodCostPlBaseline } from '../lib/needToSave';
-import { exportChefSummaryToPdf, FcapRow } from '../lib/chefSummaryExport';
+import { exportChefSummaryToPdf, FcapRow, NextPeriodFcap } from '../lib/chefSummaryExport';
 
 type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs' | 'purchases' | 'usageReview' | 'finalFoodCost' | 'finalFoodCostRecap' | 'nextPeriodFcap' | 'team' | 'facilities' | 'features' | 'audit' | 'recap';
 
@@ -1932,6 +1932,7 @@ export function GuidedWeeklyPackage({
         error={summaryError}
         recapMetrics={recapMetrics}
         foodCostSummary={foodCostSummary}
+        isPeriodEnd={isPeriodEnd}
         onBack={() => setStep('audit')}
         onFinish={() => onClose?.()}
       />
@@ -4331,6 +4332,9 @@ function GuidedFinalFoodCostRecapStep({
   const [fcapLoading, setFcapLoading] = useState(false);
   const [fcapSaving, setFcapSaving] = useState(false);
   const [fcapSavedAt, setFcapSavedAt] = useState<string | null>(null);
+  // At period end, next period's plan (created in step 3) is appended to the
+  // kitchen-posting PDF so both the completed and the new FCAP get posted.
+  const [nextPeriodFcap, setNextPeriodFcap] = useState<NextPeriodFcap | null>(null);
 
   useEffect(() => {
     if (!locationId || !fiscalYear || !periodNumber || !weekNumber) return;
@@ -4390,6 +4394,36 @@ function GuidedFinalFoodCostRecapStep({
       cancelled = true;
     };
   }, [locationId, fiscalYear, periodNumber]);
+
+  useEffect(() => {
+    if (!isPeriodEnd || !locationId || !fiscalYear || !periodNumber) {
+      setNextPeriodFcap(null);
+      return;
+    }
+
+    const nextFiscalYear = periodNumber === 13 ? fiscalYear + 1 : fiscalYear;
+    const nextPeriodNumber = periodNumber === 13 ? 1 : periodNumber + 1;
+
+    let cancelled = false;
+    supabase
+      .from('food_cost_action_plans')
+      .select('items')
+      .eq('location_id', locationId)
+      .eq('fiscal_year', nextFiscalYear)
+      .eq('period_number', nextPeriodNumber)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        const items = Array.isArray(data.items) ? (data.items as FcapItem[]) : [];
+        if (items.length > 0) {
+          setNextPeriodFcap({ items, fiscalYear: nextFiscalYear, periodNumber: nextPeriodNumber });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isPeriodEnd, locationId, fiscalYear, periodNumber]);
 
   const currentWeekKey = (`wk${Math.min(Math.max(weekNumber ?? 1, 1), 4)}`) as 'wk1' | 'wk2' | 'wk3' | 'wk4';
 
@@ -4587,6 +4621,64 @@ function GuidedFinalFoodCostRecapStep({
     doc.setFontSize(9);
     doc.setTextColor(120);
     doc.text(`Generated ${new Date().toLocaleDateString()}`, 30, finalY + 20);
+    doc.setTextColor(0);
+
+    if (nextPeriodFcap) {
+      doc.addPage('letter', 'landscape');
+
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Food Cost Action Plan — Period ${nextPeriodFcap.periodNumber} (New)`, pageWidth / 2, 36, {
+        align: 'center',
+      });
+
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+      const nextSubtitle = [locationName, `Fiscal Year ${nextPeriodFcap.fiscalYear}`, `Period ${nextPeriodFcap.periodNumber}`, 'Set at period end']
+        .filter(Boolean)
+        .join('   •   ');
+      doc.text(nextSubtitle, pageWidth / 2, 54, { align: 'center' });
+
+      const nextRows = nextPeriodFcap.items.map((it) => {
+        const total = it.wk1 + it.wk2 + it.wk3 + it.wk4;
+        return [
+          it.item,
+          fmt(it.cost),
+          fmt(it.variancePerDay),
+          it.reason,
+          it.action,
+          it.manager,
+          it.teamMembers,
+          fmt(it.wk1),
+          fmt(it.wk2),
+          fmt(it.wk3),
+          fmt(it.wk4),
+          fmt(total),
+          fmt(total - it.cost),
+        ];
+      });
+
+      autoTable(doc, {
+        startY: 70,
+        head: [['Item', 'Cost', 'Var/Day', 'Reason', 'Action', 'Manager', 'Team Members', 'WK1', 'WK2', 'WK3', 'WK4', 'Total', 'PTD Diff']],
+        body: nextRows,
+        styles: { fontSize: 8, cellPadding: 5, valign: 'middle' },
+        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: {
+          0: { fontStyle: 'bold', cellWidth: 90 },
+          3: { cellWidth: 100 },
+          4: { cellWidth: 110 },
+        },
+        margin: { left: 30, right: 30 },
+      });
+
+      const nextFinalY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+      doc.setFontSize(9);
+      doc.setTextColor(120);
+      doc.text(`Generated ${new Date().toLocaleDateString()}`, 30, nextFinalY + 20);
+      doc.setTextColor(0);
+    }
 
     doc.save(`FCAP_${fiscalYear ?? ''}_P${periodNumber ?? ''}.pdf`);
   };
@@ -5701,6 +5793,7 @@ function GuidedRecapStep({
   error,
   recapMetrics,
   foodCostSummary,
+  isPeriodEnd,
   onBack,
   onFinish,
 }: {
@@ -5728,6 +5821,7 @@ function GuidedRecapStep({
   error: string;
   recapMetrics: GuidedFieldUpdates;
   foodCostSummary: FoodCostSummary | null;
+  isPeriodEnd?: boolean;
   onBack: () => void;
   onFinish: () => void;
 }) {
@@ -5744,6 +5838,8 @@ function GuidedRecapStep({
 
   // Food Cost Action Plan items, loaded so they can be folded into the PDF export.
   const [fcapItems, setFcapItems] = useState<FcapRow[]>([]);
+  // At period end, next period's freshly created FCAP is exported alongside it.
+  const [nextPeriodFcap, setNextPeriodFcap] = useState<NextPeriodFcap | null>(null);
 
   // Load any actions already committed for this week (so the step is resumable).
   useEffect(() => {
@@ -5808,6 +5904,38 @@ function GuidedRecapStep({
       cancelled = true;
     };
   }, [locationId, fiscalYear, periodNumber]);
+
+  // At period end, also load next period's plan (created in Section 6 step 3)
+  // so the PDF includes both the completed and the new FCAP.
+  useEffect(() => {
+    if (!isPeriodEnd || !locationId || !fiscalYear || !periodNumber) {
+      setNextPeriodFcap(null);
+      return;
+    }
+
+    const nextFiscalYear = periodNumber === 13 ? fiscalYear + 1 : fiscalYear;
+    const nextPeriodNumber = periodNumber === 13 ? 1 : periodNumber + 1;
+
+    let cancelled = false;
+    supabase
+      .from('food_cost_action_plans')
+      .select('items')
+      .eq('location_id', locationId)
+      .eq('fiscal_year', nextFiscalYear)
+      .eq('period_number', nextPeriodNumber)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        const items = Array.isArray(data.items) ? (data.items as FcapRow[]) : [];
+        if (items.length > 0) {
+          setNextPeriodFcap({ items, fiscalYear: nextFiscalYear, periodNumber: nextPeriodNumber });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isPeriodEnd, locationId, fiscalYear, periodNumber]);
 
   const handleAddAction = () => {
     setWeekAheadActions((prev) => [...prev, createBlankAction()]);
@@ -6155,7 +6283,9 @@ function GuidedRecapStep({
         weekAheadActions
           .filter((a) => a.action_text.trim())
           .map((a) => ({ action_text: a.action_text, owner: a.owner, due_by: a.due_by })),
-        fcapItems
+        fcapItems,
+        'save',
+        nextPeriodFcap ?? undefined
       );
     } catch (err) {
       setPdfError(err instanceof Error ? err.message : 'Failed to export PDF.');

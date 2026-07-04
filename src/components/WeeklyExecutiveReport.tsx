@@ -3,7 +3,7 @@ import { FileText, Loader2, Download, Sparkles, Calendar, ChevronRight, Check } 
 import { supabase } from '../lib/supabase';
 import { useCurrentFiscalPeriod, useFiscalCalendar } from '../lib/useFiscalCalendar';
 import { ChefSummariesTable } from './ChefSummariesTable';
-import { exportChefSummaryToPdf, FoodCostCategoryRow, FcapRow, WeekAheadAction } from '../lib/chefSummaryExport';
+import { exportChefSummaryToPdf, FoodCostCategoryRow, FcapRow, NextPeriodFcap, WeekAheadAction } from '../lib/chefSummaryExport';
 
 type WeeklyReport = {
   id: string;
@@ -979,11 +979,36 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
         .maybeSingle();
       const fcapItems: FcapRow[] = Array.isArray(fcapRow?.items) ? (fcapRow!.items as FcapRow[]) : [];
 
+      // If this is the period's last week, next period's FCAP (created in the
+      // guided workflow at period end) rides along in the same PDF.
+      let nextPeriodFcap: NextPeriodFcap | undefined;
+      const { data: periodWeeks } = await supabase
+        .from('fiscal_calendar')
+        .select('week')
+        .eq('fiscal_year', fiscalYear)
+        .eq('period', period);
+      const lastWeek = periodWeeks && periodWeeks.length > 0 ? Math.max(...periodWeeks.map((w) => w.week)) : 4;
+      if (week >= lastWeek) {
+        const nextFiscalYear = period === 13 ? fiscalYear + 1 : fiscalYear;
+        const nextPeriodNumber = period === 13 ? 1 : period + 1;
+        const { data: nextFcapRow } = await supabase
+          .from('food_cost_action_plans')
+          .select('items')
+          .eq('location_id', locationId)
+          .eq('fiscal_year', nextFiscalYear)
+          .eq('period_number', nextPeriodNumber)
+          .maybeSingle();
+        const nextItems: FcapRow[] = Array.isArray(nextFcapRow?.items) ? (nextFcapRow!.items as FcapRow[]) : [];
+        if (nextItems.length > 0) {
+          nextPeriodFcap = { items: nextItems, fiscalYear: nextFiscalYear, periodNumber: nextPeriodNumber };
+        }
+      }
+
       const url = exportChefSummaryToPdf(
         row, name, weekBudget, actualFoodCostPct, fcVariance, theoreticalFoodCostPct,
         theoreticalVariance, labourCostPct, lcVariance, undefined, weekEndingDate,
         sales, weekBudget, actualFoodCostPct, labourCostPct,
-        foodCostCategories, weekAheadActions, fcapItems, 'bloburl'
+        foodCostCategories, weekAheadActions, fcapItems, 'bloburl', nextPeriodFcap
       ) as string;
 
       setReportTitle(name);
