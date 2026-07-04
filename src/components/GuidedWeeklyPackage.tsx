@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase';
 import { fetchLabourPlBaseline, fetchSalesPlBaseline, fetchFoodCostPlBaseline, getWeeksRemainingInYear, LabourPlBaseline, SalesPlBaseline, FoodCostPlBaseline } from '../lib/needToSave';
 import { exportChefSummaryToPdf, FcapRow } from '../lib/chefSummaryExport';
 
-type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs' | 'purchases' | 'usageReview' | 'finalFoodCost' | 'finalFoodCostRecap' | 'team' | 'facilities' | 'features' | 'audit' | 'recap';
+type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs' | 'purchases' | 'usageReview' | 'finalFoodCost' | 'finalFoodCostRecap' | 'nextPeriodFcap' | 'team' | 'facilities' | 'features' | 'audit' | 'recap';
 
 type StepMeta = {
   section: number;
@@ -115,12 +115,20 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     overallIndex: 12,
     stepLabel: 'Food Cost Recap & Action Plan',
   },
+  nextPeriodFcap: {
+    section: 6,
+    sectionLabel: 'Final Food Cost Report',
+    sectionStepIndex: 3,
+    sectionStepCount: 3,
+    overallIndex: 13,
+    stepLabel: 'Next Period Action Plan (FCAP)',
+  },
   team: {
     section: 7,
     sectionLabel: 'Team',
     sectionStepIndex: 1,
     sectionStepCount: 1,
-    overallIndex: 13,
+    overallIndex: 14,
     stepLabel: 'Team Staffing & Notes',
   },
   facilities: {
@@ -128,7 +136,7 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     sectionLabel: 'Facilities',
     sectionStepIndex: 1,
     sectionStepCount: 1,
-    overallIndex: 14,
+    overallIndex: 15,
     stepLabel: 'R&M and Cleaning',
   },
   features: {
@@ -136,7 +144,7 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     sectionLabel: 'Features',
     sectionStepIndex: 1,
     sectionStepCount: 1,
-    overallIndex: 15,
+    overallIndex: 16,
     stepLabel: 'Feature Items',
   },
   audit: {
@@ -144,7 +152,7 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     sectionLabel: 'Audit',
     sectionStepIndex: 1,
     sectionStepCount: 1,
-    overallIndex: 16,
+    overallIndex: 17,
     stepLabel: 'Last Audit Score',
   },
   recap: {
@@ -152,7 +160,7 @@ const STEP_META: Record<Exclude<GuidedStep, 'start'>, StepMeta> = {
     sectionLabel: 'Recap',
     sectionStepIndex: 1,
     sectionStepCount: 1,
-    overallIndex: 17,
+    overallIndex: 18,
     stepLabel: 'Weekly Recap',
   },
 };
@@ -1172,6 +1180,31 @@ export function GuidedWeeklyPackage({
   const [generatingSummary, setGeneratingSummary] = useState(false);
   const [summaryError, setSummaryError] = useState('');
 
+  // Period end = the reporting week is the last week of the fiscal period. At
+  // period end, Section 6 gains a third step to set up next period's FCAP.
+  const [isPeriodEnd, setIsPeriodEnd] = useState(false);
+
+  useEffect(() => {
+    if (!fiscalYear || !periodNumber || !weekNumber) return;
+
+    let cancelled = false;
+
+    supabase
+      .from('fiscal_calendar')
+      .select('week')
+      .eq('fiscal_year', fiscalYear)
+      .eq('period', periodNumber)
+      .then(({ data }) => {
+        if (cancelled) return;
+        const lastWeek = data && data.length > 0 ? Math.max(...data.map((row) => row.week)) : 4;
+        setIsPeriodEnd(weekNumber >= lastWeek);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fiscalYear, periodNumber, weekNumber]);
+
   useEffect(() => {
     if (!locationId || !fiscalYear || !periodNumber || !weekNumber) return;
     if (initialValues?.last_audit_score_pct) return;
@@ -1781,6 +1814,7 @@ export function GuidedWeeklyPackage({
         error={foodCostError}
         onFileSelect={handleFoodCostFileSelect}
         onFieldsChange={handleFieldsChange}
+        isPeriodEnd={isPeriodEnd}
         onBack={() => setStep('usageReview')}
         onFinish={() => setStep('finalFoodCostRecap')}
       />
@@ -1798,8 +1832,20 @@ export function GuidedWeeklyPackage({
         fiscalYear={fiscalYear}
         periodNumber={periodNumber}
         weekNumber={weekNumber}
+        isPeriodEnd={isPeriodEnd}
         onBack={() => setStep('finalFoodCost')}
-        onFinish={() => setStep('team')}
+        onFinish={() => setStep(isPeriodEnd ? 'nextPeriodFcap' : 'team')}
+      />
+    );
+  } else if (step === 'nextPeriodFcap') {
+    content = (
+      <GuidedNextPeriodFcapStep
+        fourWeekRows={usageFourWeekRows}
+        locationId={locationId}
+        fiscalYear={fiscalYear}
+        periodNumber={periodNumber}
+        onBack={() => setStep('finalFoodCostRecap')}
+        onNext={() => setStep('team')}
       />
     );
   } else if (step === 'team') {
@@ -1820,7 +1866,7 @@ export function GuidedWeeklyPackage({
         onTmMotsOfNoteChange={handleTmMotsOfNoteChange}
         developmentPathUpdates={developmentPathUpdates}
         onDevelopmentPathUpdatesChange={handleDevelopmentPathUpdatesChange}
-        onBack={() => setStep('finalFoodCostRecap')}
+        onBack={() => setStep(isPeriodEnd ? 'nextPeriodFcap' : 'finalFoodCostRecap')}
         onNext={() => setStep('facilities')}
       />
     );
@@ -3976,6 +4022,7 @@ function GuidedFinalFoodCostStep({
   error,
   onFileSelect,
   onFieldsChange,
+  isPeriodEnd,
   onBack,
   onFinish,
 }: {
@@ -3984,6 +4031,7 @@ function GuidedFinalFoodCostStep({
   error: string;
   onFileSelect: (file: File) => void;
   onFieldsChange?: (updates: GuidedFieldUpdates) => void;
+  isPeriodEnd?: boolean;
   onBack: () => void;
   onFinish: () => void;
 }) {
@@ -4028,7 +4076,9 @@ function GuidedFinalFoodCostStep({
 
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
-      <StepProgressHeader meta={STEP_META.finalFoodCost} />
+      <StepProgressHeader
+        meta={isPeriodEnd ? { ...STEP_META.finalFoodCost, sectionStepCount: 3 } : STEP_META.finalFoodCost}
+      />
 
       <div className="mt-4">
         <h3 className="text-base font-semibold text-slate-800">Run the Report</h3>
@@ -4252,6 +4302,7 @@ function GuidedFinalFoodCostRecapStep({
   fiscalYear,
   periodNumber,
   weekNumber,
+  isPeriodEnd,
   onBack,
   onFinish,
 }: {
@@ -4265,6 +4316,7 @@ function GuidedFinalFoodCostRecapStep({
   fiscalYear?: number;
   periodNumber?: number;
   weekNumber?: number;
+  isPeriodEnd?: boolean;
   onBack: () => void;
   onFinish: () => void;
 }) {
@@ -4613,7 +4665,9 @@ function GuidedFinalFoodCostRecapStep({
 
   return (
     <div className="max-w-3xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
-      <StepProgressHeader meta={STEP_META.finalFoodCostRecap} />
+      <StepProgressHeader
+        meta={isPeriodEnd ? { ...STEP_META.finalFoodCostRecap, sectionStepCount: 3 } : STEP_META.finalFoodCostRecap}
+      />
 
       {loadingPL && (
         <p className="mt-4 text-sm text-slate-500">Loading P&L data...</p>
@@ -4862,7 +4916,391 @@ function GuidedFinalFoodCostRecapStep({
           onClick={onFinish}
           className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
         >
-          Finish
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function usageRowToFcapItem(row: UsageReportRow): FcapItem {
+  return {
+    item: row.itemName,
+    cost: row.varianceAmount,
+    variancePerDay: row.varianceAmount / 28,
+    reason: '',
+    action: '',
+    manager: '',
+    teamMembers: '',
+    wk1: 0,
+    wk2: 0,
+    wk3: 0,
+    wk4: 0,
+  };
+}
+
+function GuidedNextPeriodFcapStep({
+  fourWeekRows,
+  locationId,
+  fiscalYear,
+  periodNumber,
+  onBack,
+  onNext,
+}: {
+  fourWeekRows: UsageReportRow[] | null;
+  locationId?: string;
+  fiscalYear?: number;
+  periodNumber?: number;
+  onBack: () => void;
+  onNext: () => void;
+}) {
+  const nextFiscalYear = fiscalYear !== undefined && periodNumber === 13 ? fiscalYear + 1 : fiscalYear;
+  const nextPeriodNumber = periodNumber !== undefined ? (periodNumber === 13 ? 1 : periodNumber + 1) : undefined;
+
+  const [fcapItems, setFcapItems] = useState<FcapItem[]>([]);
+  const [ignoredNames, setIgnoredNames] = useState<Set<string>>(new Set());
+  const [fcapId, setFcapId] = useState<string | null>(null);
+  const [fcapLoading, setFcapLoading] = useState(false);
+  const [fcapLoaded, setFcapLoaded] = useState(false);
+  const [fcapSaving, setFcapSaving] = useState(false);
+  const [fcapSavedAt, setFcapSavedAt] = useState<string | null>(null);
+
+  // Over-used items from the trailing 4-week Top 25 report, worst first. The
+  // top 10 seed the chart; the rest queue up as replacements for ignored items.
+  const candidates = (fourWeekRows ?? [])
+    .filter((row) => row.varianceAmount > 0)
+    .sort((a, b) => b.varianceAmount - a.varianceAmount);
+
+  useEffect(() => {
+    if (!locationId || !nextFiscalYear || !nextPeriodNumber) {
+      setFcapLoaded(true);
+      return;
+    }
+
+    let cancelled = false;
+    setFcapLoading(true);
+
+    supabase
+      .from('food_cost_action_plans')
+      .select('id, items, updated_at')
+      .eq('location_id', locationId)
+      .eq('fiscal_year', nextFiscalYear)
+      .eq('period_number', nextPeriodNumber)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        if (data) {
+          setFcapId(data.id);
+          const items = Array.isArray(data.items) ? (data.items as FcapItem[]) : [];
+          if (items.length > 0) setFcapItems(items);
+          setFcapSavedAt(data.updated_at ?? null);
+        }
+        setFcapLoading(false);
+        setFcapLoaded(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [locationId, nextFiscalYear, nextPeriodNumber]);
+
+  useEffect(() => {
+    if (!fcapLoaded || fcapItems.length > 0 || candidates.length === 0) return;
+    setFcapItems(candidates.slice(0, 10).map(usageRowToFcapItem));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fcapLoaded, fcapItems.length, fourWeekRows]);
+
+  const handleIgnore = (index: number) => {
+    const removed = fcapItems[index];
+    if (!removed) return;
+
+    const nextIgnored = new Set(ignoredNames);
+    nextIgnored.add(normalizeFcapItemName(removed.item));
+    setIgnoredNames(nextIgnored);
+
+    const remaining = fcapItems.filter((_, i) => i !== index);
+    const inUse = new Set(remaining.map((it) => normalizeFcapItemName(it.item)));
+    const replacement = candidates.find(
+      (row) =>
+        !nextIgnored.has(normalizeFcapItemName(row.itemName)) &&
+        !inUse.has(normalizeFcapItemName(row.itemName))
+    );
+
+    setFcapItems(
+      replacement && remaining.length < 10 ? [...remaining, usageRowToFcapItem(replacement)] : remaining
+    );
+  };
+
+  const handleItemChange = (index: number, field: keyof FcapItem, value: string) => {
+    setFcapItems((prev) =>
+      prev.map((it, i) => {
+        if (i !== index) return it;
+        const isNumeric = field === 'cost' || field === 'variancePerDay' || field === 'wk1' || field === 'wk2' || field === 'wk3' || field === 'wk4';
+        return { ...it, [field]: isNumeric ? parseFloat(value) || 0 : value };
+      })
+    );
+  };
+
+  const handleSaveFcap = async () => {
+    if (!locationId || !nextFiscalYear || !nextPeriodNumber) return;
+    setFcapSaving(true);
+    try {
+      const { data, error: saveError } = await supabase
+        .from('food_cost_action_plans')
+        .upsert(
+          {
+            id: fcapId ?? undefined,
+            location_id: locationId,
+            fiscal_year: nextFiscalYear,
+            period_number: nextPeriodNumber,
+            items: fcapItems,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'location_id,fiscal_year,period_number' }
+        )
+        .select('id, updated_at')
+        .single();
+
+      if (!saveError && data) {
+        setFcapId(data.id);
+        setFcapSavedAt(data.updated_at ?? null);
+      }
+    } finally {
+      setFcapSaving(false);
+    }
+  };
+
+  const handleNext = async () => {
+    if (fcapItems.length > 0) {
+      await handleSaveFcap();
+    }
+    onNext();
+  };
+
+  const formatCurrency = (value: number) =>
+    `${value < 0 ? '-' : ''}$${Math.abs(value).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+
+  const maxCost = fcapItems.reduce((max, it) => Math.max(max, it.cost), 0);
+
+  const fcapTotals = fcapItems.reduce(
+    (acc, it) => {
+      const total = it.wk1 + it.wk2 + it.wk3 + it.wk4;
+      return {
+        cost: acc.cost + it.cost,
+        variancePerDay: acc.variancePerDay + it.variancePerDay,
+        wk1: acc.wk1 + it.wk1,
+        wk2: acc.wk2 + it.wk2,
+        wk3: acc.wk3 + it.wk3,
+        wk4: acc.wk4 + it.wk4,
+        total: acc.total + total,
+        ptdDifference: acc.ptdDifference + (total - it.cost),
+      };
+    },
+    { cost: 0, variancePerDay: 0, wk1: 0, wk2: 0, wk3: 0, wk4: 0, total: 0, ptdDifference: 0 }
+  );
+
+  return (
+    <div className="max-w-3xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+      <StepProgressHeader meta={STEP_META.nextPeriodFcap} />
+
+      <p className="mt-4 text-sm text-slate-600">
+        It's period end — time to set the food cost focus for Period {nextPeriodNumber ?? '—'}. The chart below is
+        auto-filled with the top 10 over-used items from your trailing 4-week Top 25 report. Click the X on any item
+        that shouldn't be a focus (e.g. already resolved or a count error) and the next item from the report will
+        take its place. Then fill in the plan details in the table — this becomes next period's FCAP and will be
+        waiting in the Food Cost Recap step each week.
+      </p>
+
+      {fcapLoading && <p className="mt-2 text-xs text-slate-500">Loading existing plan...</p>}
+      {fcapSavedAt && (
+        <p className="mt-2 text-xs text-slate-400">Last saved {new Date(fcapSavedAt).toLocaleString()}</p>
+      )}
+
+      {(!fourWeekRows || fourWeekRows.length === 0) && fcapItems.length === 0 && !fcapLoading && (
+        <p className="mt-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+          No trailing 4-week Top 25 report found for this session. Go back to Section 5 (Usage Review) and upload
+          the trailing 4-week report to auto-populate this chart.
+        </p>
+      )}
+
+      {fcapItems.length > 0 && (
+        <>
+          <div className="mt-6">
+            <h3 className="text-base font-semibold text-slate-800">
+              Top Over-Used Items — Trailing 4 Weeks
+            </h3>
+            <div className="mt-3 space-y-2">
+              {fcapItems.map((it, index) => (
+                <div key={`${it.item}-${index}`} className="flex items-center gap-3">
+                  <span className="w-40 shrink-0 text-sm text-slate-700 truncate" title={it.item}>
+                    {it.item}
+                  </span>
+                  <div className="flex-1 h-6 bg-slate-100 rounded overflow-hidden">
+                    <div
+                      className="h-full bg-red-500/80 rounded"
+                      style={{ width: `${maxCost > 0 ? Math.max((it.cost / maxCost) * 100, 2) : 0}%` }}
+                    />
+                  </div>
+                  <span className="w-24 shrink-0 text-right text-sm font-medium text-slate-800">
+                    {formatCurrency(it.cost)}
+                  </span>
+                  <button
+                    onClick={() => handleIgnore(index)}
+                    className="shrink-0 p-1 text-slate-400 hover:text-red-600 transition-colors"
+                    title="Ignore this item (the next item from the Top 25 report will take its place)"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <h3 className="text-base font-semibold text-slate-800">
+              Period {nextPeriodNumber ?? '—'} Food Cost Action Plan
+            </h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Fill in the reason, action, and owners for each item. Weekly progress (WK1–WK4) gets updated as you
+              work through next period.
+            </p>
+            <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium text-slate-500">Item</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-500">Cost</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-500">Var/Day</th>
+                    <th className="px-3 py-2 text-left font-medium text-slate-500">Reason</th>
+                    <th className="px-3 py-2 text-left font-medium text-slate-500">Action</th>
+                    <th className="px-3 py-2 text-left font-medium text-slate-500">Manager</th>
+                    <th className="px-3 py-2 text-left font-medium text-slate-500">Team Members</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-500">WK1</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-500">WK2</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-500">WK3</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-500">WK4</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-500">Total</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-500">PTD Diff</th>
+                    <th className="px-3 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fcapItems.map((it, index) => {
+                    const total = it.wk1 + it.wk2 + it.wk3 + it.wk4;
+                    const ptdDifference = total - it.cost;
+                    return (
+                      <tr key={index} className="border-t border-slate-200">
+                        <td className="px-3 py-2">
+                          <input
+                            value={it.item}
+                            onChange={(e) => handleItemChange(index, 'item', e.target.value)}
+                            className="w-full min-w-[100px] px-2 py-1 border border-slate-200 rounded text-slate-700"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(it.cost)}</td>
+                        <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(it.variancePerDay)}</td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={it.reason}
+                            onChange={(e) => handleItemChange(index, 'reason', e.target.value)}
+                            className="w-full min-w-[140px] px-2 py-1 border border-slate-200 rounded text-slate-700"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={it.action}
+                            onChange={(e) => handleItemChange(index, 'action', e.target.value)}
+                            className="w-full min-w-[140px] px-2 py-1 border border-slate-200 rounded text-slate-700"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={it.manager}
+                            onChange={(e) => handleItemChange(index, 'manager', e.target.value)}
+                            className="w-full min-w-[90px] px-2 py-1 border border-slate-200 rounded text-slate-700"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={it.teamMembers}
+                            onChange={(e) => handleItemChange(index, 'teamMembers', e.target.value)}
+                            className="w-full min-w-[100px] px-2 py-1 border border-slate-200 rounded text-slate-700"
+                          />
+                        </td>
+                        {(['wk1', 'wk2', 'wk3', 'wk4'] as const).map((wk) => (
+                          <td key={wk} className="px-3 py-2">
+                            <input
+                              type="number"
+                              value={it[wk]}
+                              onChange={(e) => handleItemChange(index, wk, e.target.value)}
+                              className="w-20 px-2 py-1 border border-slate-200 rounded text-right text-slate-700"
+                            />
+                          </td>
+                        ))}
+                        <td className="px-3 py-2 text-right font-medium text-slate-800">{formatCurrency(total)}</td>
+                        <td className={`px-3 py-2 text-right font-medium ${ptdDifference <= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                          {formatCurrency(ptdDifference)}
+                        </td>
+                        <td className="px-3 py-2">
+                          <button
+                            onClick={() => handleIgnore(index)}
+                            className="text-slate-400 hover:text-red-600"
+                            title="Ignore this item (the next item from the Top 25 report will take its place)"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="border-t border-slate-200 bg-slate-50 font-semibold text-slate-800">
+                    <td className="px-3 py-2">TOTALS</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(fcapTotals.cost)}</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(fcapTotals.variancePerDay)}</td>
+                    <td className="px-3 py-2" colSpan={4}></td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(fcapTotals.wk1)}</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(fcapTotals.wk2)}</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(fcapTotals.wk3)}</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(fcapTotals.wk4)}</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(fcapTotals.total)}</td>
+                    <td className={`px-3 py-2 text-right ${fcapTotals.ptdDifference <= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                      {formatCurrency(fcapTotals.ptdDifference)}
+                    </td>
+                    <td className="px-3 py-2"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-4">
+              <button
+                onClick={handleSaveFcap}
+                disabled={fcapSaving || !locationId || !nextFiscalYear || !nextPeriodNumber}
+                className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium text-sm hover:bg-slate-700 transition-colors disabled:opacity-50"
+              >
+                {fcapSaving ? 'Saving...' : 'Save Plan'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      <div className="mt-8 flex justify-between">
+        <button
+          onClick={onBack}
+          className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+        >
+          Back
+        </button>
+        <button
+          onClick={handleNext}
+          disabled={fcapSaving}
+          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors disabled:opacity-50"
+        >
+          Next
         </button>
       </div>
     </div>
