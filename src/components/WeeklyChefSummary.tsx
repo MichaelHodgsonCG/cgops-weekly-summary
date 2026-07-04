@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, LogOut, ChevronDown, FileText, AlertTriangle, Download, ClipboardCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
-import { exportChefSummaryToExcel, exportChefSummaryToPdf, FoodCostCategoryRow } from '../lib/chefSummaryExport';
+import { exportChefSummaryToExcel, exportChefSummaryToPdf, FcapRow, FoodCostCategoryRow, NextPeriodFcap } from '../lib/chefSummaryExport';
 import { GuidedWeeklyPackage, GuidedFieldUpdates } from './GuidedWeeklyPackage';
 import { computePlDrivenSummaryFields } from '../lib/summaryPlFields';
 
@@ -746,6 +746,47 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
       weekEndingDate = undefined;
     }
 
+    // Fold in the shared FCAP for this period, and — when this is the
+    // period's last week — the new plan already created for next period.
+    let fcapItems: FcapRow[] | undefined;
+    let nextPeriodFcap: NextPeriodFcap | undefined;
+    try {
+      const { data: fcapRow } = await supabase
+        .from('food_cost_action_plans')
+        .select('items')
+        .eq('location_id', locationId)
+        .eq('fiscal_year', formData.fiscal_year)
+        .eq('period_number', formData.period_number)
+        .maybeSingle();
+      const items = Array.isArray(fcapRow?.items) ? (fcapRow!.items as FcapRow[]) : [];
+      if (items.length > 0) fcapItems = items;
+
+      const { data: periodWeeks } = await supabase
+        .from('fiscal_calendar')
+        .select('week')
+        .eq('fiscal_year', formData.fiscal_year)
+        .eq('period', formData.period_number);
+      const lastWeek = periodWeeks && periodWeeks.length > 0 ? Math.max(...periodWeeks.map((w) => w.week)) : 4;
+      if (formData.week_number >= lastWeek) {
+        const nextFiscalYear = formData.period_number === 13 ? formData.fiscal_year + 1 : formData.fiscal_year;
+        const nextPeriodNumber = formData.period_number === 13 ? 1 : formData.period_number + 1;
+        const { data: nextFcapRow } = await supabase
+          .from('food_cost_action_plans')
+          .select('items')
+          .eq('location_id', locationId)
+          .eq('fiscal_year', nextFiscalYear)
+          .eq('period_number', nextPeriodNumber)
+          .maybeSingle();
+        const nextItems = Array.isArray(nextFcapRow?.items) ? (nextFcapRow!.items as FcapRow[]) : [];
+        if (nextItems.length > 0) {
+          nextPeriodFcap = { items: nextItems, fiscalYear: nextFiscalYear, periodNumber: nextPeriodNumber };
+        }
+      }
+    } catch {
+      fcapItems = undefined;
+      nextPeriodFcap = undefined;
+    }
+
     let foodCostCategories: FoodCostCategoryRow[] | undefined;
     try {
       const parsed = JSON.parse(formData.final_food_cost_items || '[]');
@@ -782,7 +823,11 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
       weekBudget,
       actualFoodCostPct,
       labourCostPct,
-      foodCostCategories
+      foodCostCategories,
+      undefined,
+      fcapItems,
+      'save',
+      nextPeriodFcap
     );
   };
 

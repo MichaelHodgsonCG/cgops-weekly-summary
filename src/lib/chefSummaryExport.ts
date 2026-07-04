@@ -28,6 +28,16 @@ export interface FcapRow {
   wk4: number;
 }
 
+/**
+ * At period end the workflow creates next period's FCAP alongside the one
+ * being completed; pass it here so the PDF carries both plans.
+ */
+export interface NextPeriodFcap {
+  items: FcapRow[];
+  fiscalYear: number;
+  periodNumber: number;
+}
+
 export interface FoodCostCategoryRow {
   category: string;
   opening: number;
@@ -302,7 +312,8 @@ export function exportChefSummaryToPdf(
   fcapItems?: FcapRow[],
   // 'save' downloads the file (default); 'bloburl' returns an object URL for
   // in-app viewing (e.g. embedding in an iframe) without forcing a download.
-  outputMode: 'save' | 'bloburl' = 'save'
+  outputMode: 'save' | 'bloburl' = 'save',
+  nextPeriodFcap?: NextPeriodFcap
 ): string | void {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -766,8 +777,10 @@ export function exportChefSummaryToPdf(
   // ---------- FOOD COST ACTION PLAN (landscape) ----------
   // Folded in from the standalone FCAP export so the whole package is one file.
   // The 13-column variance table needs the width, so this page is landscape.
-  const fcap = (fcapItems ?? []).filter((it) => it.item && it.item.trim());
-  if (fcap.length > 0) {
+  const addFcapPage = (title: string, subtitle: string, items: FcapRow[]) => {
+    const fcap = items.filter((it) => it.item && it.item.trim());
+    if (fcap.length === 0) return;
+
     doc.addPage('letter', 'landscape');
     const lw = doc.internal.pageSize.getWidth();
     const fmtMoney = (v: number) =>
@@ -775,13 +788,10 @@ export function exportChefSummaryToPdf(
 
     doc.setFontSize(15);
     doc.setFont('helvetica', 'bold');
-    doc.text('Food Cost Action Plan', lw / 2, 36, { align: 'center' });
+    doc.text(title, lw / 2, 36, { align: 'center' });
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    const sub = [locationName, `FY${data.fiscal_year}`, `Period ${data.period_number}`, `Week ${data.week_number}`]
-      .filter(Boolean)
-      .join('   •   ');
-    doc.text(sub, lw / 2, 52, { align: 'center' });
+    doc.text(subtitle, lw / 2, 52, { align: 'center' });
 
     const fcapRows = fcap.map((it) => {
       const total = it.wk1 + it.wk2 + it.wk3 + it.wk4;
@@ -856,6 +866,26 @@ export function exportChefSummaryToPdf(
     doc.setTextColor(120);
     doc.text(`Generated ${new Date().toLocaleDateString()}`, 30, fcapFinalY + 18);
     doc.setTextColor(0, 0, 0);
+  };
+
+  addFcapPage(
+    'Food Cost Action Plan',
+    [locationName, `FY${data.fiscal_year}`, `Period ${data.period_number}`, `Week ${data.week_number}`]
+      .filter(Boolean)
+      .join('   •   '),
+    fcapItems ?? []
+  );
+
+  // At period end, the freshly created plan for the upcoming period rides
+  // along so the kitchen can post next period's focus from the same report.
+  if (nextPeriodFcap) {
+    addFcapPage(
+      `Food Cost Action Plan — Period ${nextPeriodFcap.periodNumber} (New)`,
+      [locationName, `FY${nextPeriodFcap.fiscalYear}`, `Period ${nextPeriodFcap.periodNumber}`, 'Set at period end']
+        .filter(Boolean)
+        .join('   •   '),
+      nextPeriodFcap.items
+    );
   }
 
   const filename = `ChefSummary_${locationName.replace(/\s+/g, '_')}_FY${data.fiscal_year}_P${data.period_number}_W${data.week_number}.pdf`;
