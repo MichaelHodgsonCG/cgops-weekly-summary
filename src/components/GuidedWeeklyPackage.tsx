@@ -1142,7 +1142,20 @@ export function GuidedWeeklyPackage({
     initialValues?.purchases_invoices_confirmed ?? false
   );
   const [purchasesFile, setPurchasesFile] = useState<File | null>(null);
-  const [purchasesResult, setPurchasesResult] = useState<PurchasesParseResult | null>(null);
+  // Seed from previously saved amounts so reopening a saved summary shows
+  // the GL table (editable) instead of an empty upload zone.
+  const [purchasesResult, setPurchasesResult] = useState<PurchasesParseResult | null>(() => {
+    const saved: Record<PurchaseCategory, number> = {
+      Bakery: initialValues?.purchases_bakery_amount ?? 0,
+      Dairy: initialValues?.purchases_dairy_amount ?? 0,
+      'Meat And Seafood': initialValues?.purchases_meat_seafood_amount ?? 0,
+      'Other Food': initialValues?.purchases_other_food_amount ?? 0,
+      Produce: initialValues?.purchases_produce_amount ?? 0,
+    };
+    const categories = PURCHASE_CATEGORIES.map((name) => ({ name, amount: saved[name] }));
+    const total = categories.reduce((sum, c) => sum + c.amount, 0);
+    return total !== 0 ? { categories, total } : null;
+  });
   const [purchasesError, setPurchasesError] = useState('');
   const [usageWeekFile, setUsageWeekFile] = useState<File | null>(null);
   const [usageWeekRows, setUsageWeekRows] = useState<UsageReportRow[] | null>(null);
@@ -1753,6 +1766,15 @@ export function GuidedWeeklyPackage({
         error={salesError}
         onFileSelect={handleSalesFileSelect}
         onSalesDailyChange={handleSalesDailyChange}
+        savedTotals={
+          (initialValues?.food_sales_labour_push ?? 0) > 0
+            ? {
+                sales: initialValues?.food_sales_labour_push ?? 0,
+                labour: initialValues?.labour_spent ?? 0,
+                overtime: initialValues?.overtime_amount ?? 0,
+              }
+            : null
+        }
         onBack={() => setStep('start')}
         onNext={() => setStep('transfers')}
       />
@@ -1809,6 +1831,7 @@ export function GuidedWeeklyPackage({
         onNotesChange={handleDiscountReviewNotesChange}
         ignoredItems={ignoredDiscountItems}
         onToggleIgnore={handleToggleIgnoreDiscount}
+        savedPromoAmount={initialValues?.boh_promo_amount ?? 0}
         onBack={() => setStep('review')}
         onNext={() => setStep('speedOfService')}
       />
@@ -1822,6 +1845,8 @@ export function GuidedWeeklyPackage({
         onFileSelect={handleSpeedFileSelect}
         notes={speedOfServiceNotes}
         onNotesChange={handleSpeedOfServiceNotesChange}
+        savedExpoTime={initialValues?.qsr_expo_time ?? ''}
+        savedWindowTime={initialValues?.window_time ?? ''}
         onBack={() => setStep('discounts')}
         onNext={() => setStep('salesRecap')}
       />
@@ -2056,6 +2081,20 @@ export function GuidedWeeklyPackage({
   );
 }
 
+// Shown above a disabled Next button: tells the chef what the step still
+// needs before they can move on.
+function StepGateHint({ ready, hint }: { ready: boolean; hint: string }) {
+  if (ready) return null;
+  return (
+    <p className="mt-6 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+      {hint}
+    </p>
+  );
+}
+
+const GATED_NEXT_CLASS =
+  'px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+
 function StepProgressHeader({ meta }: { meta: StepMeta }) {
   const pct = Math.round((meta.overallIndex / TOTAL_STEPS) * 100);
 
@@ -2280,6 +2319,7 @@ function GuidedSalesStep({
   error,
   onFileSelect,
   onSalesDailyChange,
+  savedTotals,
   onBack,
   onNext,
 }: {
@@ -2292,6 +2332,7 @@ function GuidedSalesStep({
   error: string;
   onFileSelect: (file: File) => void;
   onSalesDailyChange: (dayIndex: number, value: string) => void;
+  savedTotals?: { sales: number; labour: number; overtime: number } | null;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -2318,6 +2359,9 @@ function GuidedSalesStep({
 
   const formatCurrency = (value: number) =>
     value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const salesStepReady =
+    (result !== null || !!savedTotals) && (parseFloat(salesBudget) || 0) > 0 && (parseFloat(labourBudgetPct) || 0) > 0;
 
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
@@ -2497,7 +2541,20 @@ function GuidedSalesStep({
             </div>
           </div>
         )}
+
+        {!result && savedTotals && (
+          <p className="mt-4 text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+            Previously saved: Sales {`$${formatCurrency(savedTotals.sales)}`} • Labour{' '}
+            {`$${formatCurrency(savedTotals.labour)}`} • Overtime {`$${formatCurrency(savedTotals.overtime)}`}. Upload
+            a new report only if these need to change.
+          </p>
+        )}
       </div>
+
+      <StepGateHint
+        ready={salesStepReady}
+        hint="Enter the sales budget and labour budget %, and upload the Profit Center report to continue."
+      />
 
       <div className="mt-8 flex justify-between">
         <button
@@ -2508,7 +2565,8 @@ function GuidedSalesStep({
         </button>
         <button
           onClick={onNext}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          disabled={!salesStepReady}
+          className={GATED_NEXT_CLASS}
         >
           Next
         </button>
@@ -3038,6 +3096,7 @@ function GuidedDiscountsStep({
   onNotesChange,
   ignoredItems,
   onToggleIgnore,
+  savedPromoAmount,
   onBack,
   onNext,
 }: {
@@ -3049,6 +3108,7 @@ function GuidedDiscountsStep({
   onNotesChange: (value: string) => void;
   ignoredItems: Set<string>;
   onToggleIgnore: (categoryLabel: string, itemDesc: string) => void;
+  savedPromoAmount?: number;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -3059,6 +3119,8 @@ function GuidedDiscountsStep({
       onFileSelect(files[0]);
     }
   };
+
+  const discountsStepReady = result !== null || (savedPromoAmount ?? 0) > 0;
 
   const grossDiscountsTotal = result ? result.categories.reduce((s, c) => s + c.totalAmount, 0) : 0;
   const adjustedDiscountsTotal = effectiveDiscountsTotal(result, ignoredItems);
@@ -3225,7 +3287,16 @@ function GuidedDiscountsStep({
             />
           </div>
         )}
+
+        {!result && (savedPromoAmount ?? 0) > 0 && (
+          <p className="mt-4 text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+            Previously saved: BOH promo total ${(savedPromoAmount ?? 0).toFixed(2)}. Upload a new report only if it
+            needs to change.
+          </p>
+        )}
       </div>
+
+      <StepGateHint ready={discountsStepReady} hint="Upload the Discounts report to continue." />
 
       <div className="mt-8 flex justify-between">
         <button
@@ -3236,7 +3307,8 @@ function GuidedDiscountsStep({
         </button>
         <button
           onClick={onNext}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          disabled={!discountsStepReady}
+          className={GATED_NEXT_CLASS}
         >
           Next
         </button>
@@ -3513,6 +3585,8 @@ function GuidedCogsStep({
     '5. Internal Transfers': [internalTransfers, onInternalTransfersChange],
   };
 
+  const cogsStepReady = confirmSales && brownieOnUs && recordingWaste && internalTransfers;
+
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
       <StepProgressHeader meta={STEP_META.cogs} />
@@ -3558,6 +3632,11 @@ function GuidedCogsStep({
         ))}
       </div>
 
+      <StepGateHint
+        ready={cogsStepReady}
+        hint="Mark every checklist task as done to continue."
+      />
+
       <div className="mt-8 flex justify-between">
         <button
           onClick={onBack}
@@ -3567,7 +3646,8 @@ function GuidedCogsStep({
         </button>
         <button
           onClick={onNext}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          disabled={!cogsStepReady}
+          className={GATED_NEXT_CLASS}
         >
           Next
         </button>
@@ -3583,6 +3663,8 @@ function GuidedSpeedOfServiceStep({
   onFileSelect,
   notes,
   onNotesChange,
+  savedExpoTime,
+  savedWindowTime,
   onBack,
   onNext,
 }: {
@@ -3592,6 +3674,8 @@ function GuidedSpeedOfServiceStep({
   onFileSelect: (file: File) => void;
   notes: string;
   onNotesChange: (value: string) => void;
+  savedExpoTime?: string;
+  savedWindowTime?: string;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -3602,6 +3686,8 @@ function GuidedSpeedOfServiceStep({
       onFileSelect(files[0]);
     }
   };
+
+  const speedStepReady = result !== null || !!savedExpoTime;
 
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
@@ -3712,7 +3798,17 @@ function GuidedSpeedOfServiceStep({
             />
           </div>
         )}
+
+        {!result && savedExpoTime && (
+          <p className="mt-4 text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+            Previously saved: Expo time {savedExpoTime}
+            {savedWindowTime ? ` • Window time ${savedWindowTime}` : ''}. Upload a new report only if these need to
+            change.
+          </p>
+        )}
       </div>
+
+      <StepGateHint ready={speedStepReady} hint="Upload the Speed of Service Summary report to continue." />
 
       <div className="mt-8 flex justify-between">
         <button
@@ -3723,7 +3819,8 @@ function GuidedSpeedOfServiceStep({
         </button>
         <button
           onClick={onNext}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          disabled={!speedStepReady}
+          className={GATED_NEXT_CLASS}
         >
           Next
         </button>
@@ -3905,6 +4002,11 @@ function GuidedPurchasesStep({
         )}
       </div>
 
+      <StepGateHint
+        ready={invoicesConfirmed && result !== null}
+        hint="Confirm the invoices and upload the GL report (or enter the amounts manually) to continue."
+      />
+
       <div className="mt-8 flex justify-between">
         <button
           onClick={onBack}
@@ -3914,7 +4016,8 @@ function GuidedPurchasesStep({
         </button>
         <button
           onClick={onNext}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          disabled={!(invoicesConfirmed && result !== null)}
+          className={GATED_NEXT_CLASS}
         >
           Next
         </button>
@@ -4026,6 +4129,9 @@ function GuidedUsageReviewStep({
       maximumFractionDigits: 2,
     })}`;
 
+  // Fresh uploads this session, or flagged items restored from a saved summary.
+  const usageStepReady = (weekRows !== null && fourWeekRows !== null) || flaggedItems.length > 0;
+
   const underItems = flaggedItems.filter((item) => item.direction === 'under');
   const overItems = flaggedItems.filter((item) => item.direction === 'over');
 
@@ -4121,6 +4227,11 @@ function GuidedUsageReviewStep({
         </div>
       )}
 
+      <StepGateHint
+        ready={usageStepReady}
+        hint="Upload both the reporting week and trailing 4-week Top 25 reports to continue."
+      />
+
       <div className="mt-8 flex justify-between">
         <button
           onClick={onBack}
@@ -4130,7 +4241,8 @@ function GuidedUsageReviewStep({
         </button>
         <button
           onClick={onFinish}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          disabled={!usageStepReady}
+          className={GATED_NEXT_CLASS}
         >
           Next
         </button>
@@ -4344,6 +4456,11 @@ function GuidedFinalFoodCostStep({
 
       </div>
 
+      <StepGateHint
+        ready={summary !== null}
+        hint="Upload the Usage Summary - Group Totals report to continue."
+      />
+
       <div className="mt-8 flex justify-between">
         <button
           onClick={onBack}
@@ -4353,7 +4470,8 @@ function GuidedFinalFoodCostStep({
         </button>
         <button
           onClick={onFinish}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          disabled={summary === null}
+          className={GATED_NEXT_CLASS}
         >
           Next
         </button>

@@ -757,6 +757,15 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     await handleSave();
   };
 
+  // Closing the guide part-way also saves whatever has been entered so far,
+  // so nothing is lost and the chef can pick up where they left off.
+  const handleGuideClose = async () => {
+    setShowGuide(false);
+    if (hasUnsavedChanges) {
+      await handleSave();
+    }
+  };
+
   const handleDelete = async () => {
     if (!activeSummaryId) return;
     try {
@@ -1078,7 +1087,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 ai_summary: formData.ai_summary,
               }}
               onFieldsChange={handleGuideFieldsChange}
-              onClose={() => setShowGuide(false)}
+              onClose={handleGuideClose}
               onFinish={handleGuideFinish}
               locationId={locationId}
               locationName={locationName}
