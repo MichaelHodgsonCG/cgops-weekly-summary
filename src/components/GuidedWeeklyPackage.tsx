@@ -833,6 +833,26 @@ function buildFoodCostSummary(
   return { foodSalesOC, pushSales, categories };
 }
 
+// Recompute an existing summary with corrected GL purchase amounts. The
+// summary already carries everything else needed (opening/closing/waste/
+// ideal usage per category, sales), so chefs can fix OC's GL numbers after
+// the food cost report was uploaded and usage stays consistent.
+function rebuildFoodCostSummary(
+  summary: FoodCostSummary,
+  glPurchasesByCategory: Record<PurchaseCategory, number>
+): FoodCostSummary {
+  const parsed: FoodCostParseResult = {
+    foodSalesOC: summary.foodSalesOC,
+    rows: summary.categories.map((c) => ({
+      category: c.category,
+      opening: c.opening,
+      closing: c.closing,
+      waste: c.waste,
+      idealUsage: c.idealUsage,
+    })),
+  };
+  return buildFoodCostSummary(parsed, glPurchasesByCategory, summary.pushSales);
+}
 
 type UsageReportRow = {
   itemName: string;
@@ -1421,6 +1441,66 @@ export function GuidedWeeklyPackage({
     }
   };
 
+  // Chefs can correct the GL amounts after upload (OC's report is not always
+  // right). Edits re-save the purchases fields and, if the food cost report
+  // was already uploaded, recompute usage with the corrected numbers.
+  const applyPurchasesCategories = (categories: { name: PurchaseCategory; amount: number }[]) => {
+    const total = categories.reduce((sum, c) => sum + c.amount, 0);
+    setPurchasesResult({ categories, total });
+
+    const byName = Object.fromEntries(categories.map((c) => [c.name, c.amount])) as Record<PurchaseCategory, number>;
+    const updates: GuidedFieldUpdates = {
+      purchases_bakery_amount: byName['Bakery'] ?? 0,
+      purchases_dairy_amount: byName['Dairy'] ?? 0,
+      purchases_meat_seafood_amount: byName['Meat And Seafood'] ?? 0,
+      purchases_other_food_amount: byName['Other Food'] ?? 0,
+      purchases_produce_amount: byName['Produce'] ?? 0,
+    };
+
+    if (foodCostSummary) {
+      const rebuilt = rebuildFoodCostSummary(foodCostSummary, byName);
+      setFoodCostSummary(rebuilt);
+      const totals = rebuilt.categories.reduce(
+        (acc, c) => ({
+          actualUsage: acc.actualUsage + c.actualUsage,
+          idealUsage: acc.idealUsage + c.idealUsage,
+          waste: acc.waste + c.waste,
+          closing: acc.closing + c.closing,
+        }),
+        { actualUsage: 0, idealUsage: 0, waste: 0, closing: 0 }
+      );
+      updates.final_food_cost_items = JSON.stringify(rebuilt);
+      updates.usage_amount = totals.actualUsage;
+      updates.ideal_usage_amount = totals.idealUsage;
+      updates.waste_amount = totals.waste;
+      updates.on_hand_amount = totals.closing;
+    }
+
+    onFieldsChange?.(updates);
+  };
+
+  const handlePurchasesAmountChange = (name: PurchaseCategory, amount: number) => {
+    const base = purchasesResult ?? {
+      categories: PURCHASE_CATEGORIES.map((categoryName) => ({ name: categoryName, amount: 0 })),
+      total: 0,
+    };
+    applyPurchasesCategories(base.categories.map((c) => (c.name === name ? { ...c, amount } : c)));
+  };
+
+  const handlePurchasesManualStart = () => {
+    if (purchasesResult) return;
+    const initialByCategory: Record<PurchaseCategory, number> = {
+      Bakery: initialValues?.purchases_bakery_amount ?? 0,
+      Dairy: initialValues?.purchases_dairy_amount ?? 0,
+      'Meat And Seafood': initialValues?.purchases_meat_seafood_amount ?? 0,
+      'Other Food': initialValues?.purchases_other_food_amount ?? 0,
+      Produce: initialValues?.purchases_produce_amount ?? 0,
+    };
+    applyPurchasesCategories(
+      PURCHASE_CATEGORIES.map((name) => ({ name, amount: initialByCategory[name] }))
+    );
+  };
+
   const handleUsageWeekFileSelect = async (file: File) => {
     setUsageWeekFile(file);
     setUsageWeekError('');
@@ -1785,6 +1865,8 @@ export function GuidedWeeklyPackage({
         result={purchasesResult}
         error={purchasesError}
         onFileSelect={handlePurchasesFileSelect}
+        onAmountChange={handlePurchasesAmountChange}
+        onManualStart={handlePurchasesManualStart}
         onBack={() => setStep('cogs')}
         onNext={() => setStep('usageReview')}
       />
@@ -3652,6 +3734,8 @@ function GuidedPurchasesStep({
   result,
   error,
   onFileSelect,
+  onAmountChange,
+  onManualStart,
   onBack,
   onNext,
 }: {
@@ -3661,6 +3745,8 @@ function GuidedPurchasesStep({
   result: PurchasesParseResult | null;
   error: string;
   onFileSelect: (file: File) => void;
+  onAmountChange: (name: PurchaseCategory, amount: number) => void;
+  onManualStart: () => void;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -3759,29 +3845,58 @@ function GuidedPurchasesStep({
           </div>
         )}
 
-        {result && (
-          <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-3 py-2 text-left font-medium text-slate-500">Category</th>
-                  <th className="px-3 py-2 text-right font-medium text-slate-500">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.categories.map((category) => (
-                  <tr key={category.name} className="border-t border-slate-200">
-                    <td className="px-3 py-2 text-slate-700">{category.name}</td>
-                    <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(category.amount)}</td>
-                  </tr>
-                ))}
-                <tr className="border-t border-slate-200 bg-slate-50">
-                  <td className="px-3 py-2 font-semibold text-slate-800">Total</td>
-                  <td className="px-3 py-2 text-right font-semibold text-slate-800">{formatCurrency(result.total)}</td>
-                </tr>
-              </tbody>
-            </table>
+        {!result && (
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              onClick={onManualStart}
+              disabled={!invoicesConfirmed}
+              className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg font-medium text-sm hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Enter Amounts Manually
+            </button>
+            <p className="text-xs text-slate-500">
+              Can't get a clean GL report from OC? Enter the category totals yourself.
+            </p>
           </div>
+        )}
+
+        {result && (
+          <>
+            <p className="mt-4 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+              Review each amount against your invoices and correct any value if the OC report is off. These GL
+              totals drive the actual usage calculation in the Final Food Cost step.
+            </p>
+            <div className="mt-3 border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium text-slate-500">Category</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-500">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.categories.map((category) => (
+                    <tr key={category.name} className="border-t border-slate-200">
+                      <td className="px-3 py-2 text-slate-700">{category.name}</td>
+                      <td className="px-3 py-2 text-right">
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={category.amount}
+                          onChange={(e) => onAmountChange(category.name, parseFloat(e.target.value) || 0)}
+                          className="w-32 px-2 py-1 border border-slate-200 rounded text-right text-slate-700 focus:ring-2 focus:ring-slate-500"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="border-t border-slate-200 bg-slate-50">
+                    <td className="px-3 py-2 font-semibold text-slate-800">Total</td>
+                    <td className="px-3 py-2 text-right font-semibold text-slate-800">{formatCurrency(result.total)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
