@@ -39,17 +39,42 @@ type PlItem = {
 };
 
 /**
+ * This week's chef-entered actuals (Push sales, recomputed food usage, and
+ * post-transfer labour). When this week's own Sage P&L has not been uploaded
+ * yet, PTD is estimated as "prior weeks' Sage period-to-date + this week's
+ * chef actuals" so ops gets a live PTD Monday night without waiting for
+ * accounting. Once this week's P&L lands, the reconciled Sage figure takes
+ * over automatically (see computePlDrivenSummaryFields).
+ */
+export type ChefWeekActuals = {
+  salesPush: number;
+  usageAmount: number;
+  labourSpent: number;
+};
+
+/**
  * Compute the P&L-driven summary fields for one location/week from the current
  * P&L data. Mirrors the logic the chef-summary save uses (fetchPLDataForPeriod +
  * fetchPTDFromPL): period budget from the latest upload in the period, QTD from
  * the latest upload per period across the quarter, and PTD actuals from this
- * specific week's upload. Returns null when there's no P&L for the quarter yet.
+ * specific week's upload.
+ *
+ * PTD sourcing (Sage-uploaded = truth; chef estimate fills the gap):
+ *   - If this week's own P&L upload exists, PTD comes straight from it
+ *     (reconciled Sage — the truth).
+ *   - Otherwise, when chefActuals are supplied, PTD is estimated as the latest
+ *     prior-week P&L period-to-date plus this week's chef actuals, so the
+ *     Monday report isn't blank while accounting catches up. It flips to Sage
+ *     automatically the moment this week's P&L is uploaded.
+ *
+ * Returns null when there's no P&L for the quarter yet.
  */
 export async function computePlDrivenSummaryFields(
   locationId: string,
   fiscalYear: number,
   period: number,
-  week: number
+  week: number,
+  chefActuals?: ChefWeekActuals
 ): Promise<PlDrivenSummaryFields | null> {
   const quarterPeriods = getQuarterPeriods(period);
 
@@ -125,16 +150,39 @@ export async function computePlDrivenSummaryFields(
   const budget_food_cost_qtd_pct = foodSalesBudgetQtd > 0 ? (foodCostBudgetQtd / foodSalesBudgetQtd) * 100 : 0;
   const sage_labour_budget_qtd_pct = foodSalesBudgetQtd > 0 ? (labourBudgetQtd / foodSalesBudgetQtd) * 100 : 0;
 
-  // PTD actuals: this week's own upload.
+  // PTD actuals. Prefer this week's own reconciled Sage upload; otherwise
+  // estimate from the latest prior-week P&L plus this week's chef actuals.
   let food_cost_ptd_pct = 0;
   let labour_cost_ptd_pct = 0;
   let sales_ptd_actual = 0;
   const calWeek = calWeeks.find((c) => c.period === period && c.week === week);
   const weekUpload = calWeek ? uploads.find((u) => u.week_ending_date === calWeek.end_date) : undefined;
   if (weekUpload) {
+    // Reconciled Sage for this week exists — it is the truth.
     food_cost_ptd_pct = itemFor(weekUpload.id, 'Cost of Sales (Food)')?.current_actual_pct || 0;
     labour_cost_ptd_pct = itemFor(weekUpload.id, 'Kitchen Labour')?.current_actual_pct || 0;
     sales_ptd_actual = itemFor(weekUpload.id, 'Food Sales')?.current_actual || 0;
+  } else if (chefActuals) {
+    // No P&L for this week yet — estimate PTD so the Monday report isn't blank.
+    // periodUploads are all prior weeks here (this week's upload is absent), so
+    // the latest one carries period-to-date actuals through last week.
+    const weekEndOf = calWeek?.end_date;
+    const priorInPeriod = periodUploads.filter((u) => !weekEndOf || u.week_ending_date < weekEndOf);
+    let priorSales = 0;
+    let priorFoodCost = 0;
+    let priorLabour = 0;
+    if (priorInPeriod.length > 0) {
+      const latestPriorId = priorInPeriod[priorInPeriod.length - 1].id;
+      priorSales = itemFor(latestPriorId, 'Food Sales')?.current_actual || 0;
+      priorFoodCost = itemFor(latestPriorId, 'Cost of Sales (Food)')?.current_actual || 0;
+      priorLabour = itemFor(latestPriorId, 'Kitchen Labour')?.current_actual || 0;
+    }
+    const ptdSales = priorSales + chefActuals.salesPush;
+    const ptdFoodCost = priorFoodCost + chefActuals.usageAmount;
+    const ptdLabour = priorLabour + chefActuals.labourSpent;
+    sales_ptd_actual = ptdSales;
+    food_cost_ptd_pct = ptdSales > 0 ? (ptdFoodCost / ptdSales) * 100 : 0;
+    labour_cost_ptd_pct = ptdSales > 0 ? (ptdLabour / ptdSales) * 100 : 0;
   }
 
   return {
@@ -166,7 +214,7 @@ export async function refreshSummaryPlFieldsForPeriod(
 ): Promise<number> {
   const { data: summaries } = await supabase
     .from('weekly_chef_summary')
-    .select('id, week_number')
+    .select('id, week_number, food_sales_labour_push, usage_amount, labour_spent')
     .eq('location_id', locationId)
     .eq('fiscal_year', fiscalYear)
     .eq('period_number', period);
@@ -174,7 +222,14 @@ export async function refreshSummaryPlFieldsForPeriod(
 
   let updated = 0;
   for (const s of summaries) {
-    const fields = await computePlDrivenSummaryFields(locationId, fiscalYear, period, s.week_number);
+    // Pass this week's saved chef actuals so PTD still estimates correctly for
+    // weeks whose own Sage upload isn't in yet; weeks that do have a P&L ignore
+    // these and use the reconciled Sage figure.
+    const fields = await computePlDrivenSummaryFields(locationId, fiscalYear, period, s.week_number, {
+      salesPush: s.food_sales_labour_push || 0,
+      usageAmount: s.usage_amount || 0,
+      labourSpent: s.labour_spent || 0,
+    });
     if (!fields) continue;
     const { error } = await supabase
       .from('weekly_chef_summary')
