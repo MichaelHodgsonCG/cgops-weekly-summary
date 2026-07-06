@@ -2092,7 +2092,9 @@ function GuidedPackageStart({
         </div>
         <div className="bg-slate-50 rounded-lg p-4">
           <p className="text-xs font-medium text-slate-500 uppercase">Reporting Period</p>
-          <p className="text-base font-semibold text-slate-800">P11 W2</p>
+          <p className="text-base font-semibold text-slate-800">
+            {periodNumber && weekNumber ? `P${periodNumber} W${weekNumber}` : '—'}
+          </p>
         </div>
         <div className="bg-slate-50 rounded-lg p-4">
           <p className="text-xs font-medium text-slate-500 uppercase">Steps</p>

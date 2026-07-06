@@ -388,9 +388,46 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
         const prevWeek: number = prev.week_number;
         const prevPeriod: number = prev.period_number;
 
-        nextWeek = prevWeek >= 4 ? 1 : prevWeek + 1;
-        nextPeriod = prevWeek >= 4 ? prevPeriod + 1 : prevPeriod;
-        nextFiscalYear = prev.fiscal_year;
+        // Advance using the fiscal calendar: the week after the last saved
+        // summary. A hardcoded "4 weeks per period" assumption mislabels the
+        // new week in 5-week periods and turns P13 into a nonexistent P14.
+        const { data: nextCal } = await supabase
+          .from('fiscal_calendar')
+          .select('fiscal_year, period, week')
+          .eq('fiscal_year', prev.fiscal_year)
+          .or(`period.gt.${prevPeriod},and(period.eq.${prevPeriod},week.gt.${prevWeek})`)
+          .order('period', { ascending: true })
+          .order('week', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (nextCal) {
+          nextFiscalYear = nextCal.fiscal_year;
+          nextPeriod = nextCal.period;
+          nextWeek = nextCal.week;
+        } else {
+          // The last summary was the final week of its fiscal year — roll
+          // into the first calendar week of the next year.
+          const { data: nextYearCal } = await supabase
+            .from('fiscal_calendar')
+            .select('fiscal_year, period, week')
+            .eq('fiscal_year', prev.fiscal_year + 1)
+            .order('period', { ascending: true })
+            .order('week', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+
+          if (nextYearCal) {
+            nextFiscalYear = nextYearCal.fiscal_year;
+            nextPeriod = nextYearCal.period;
+            nextWeek = nextYearCal.week;
+          } else {
+            // No calendar rows to consult — fall back to simple arithmetic.
+            nextWeek = prevWeek >= 4 ? 1 : prevWeek + 1;
+            nextPeriod = prevWeek >= 4 ? prevPeriod + 1 : prevPeriod;
+            nextFiscalYear = prev.fiscal_year;
+          }
+        }
       }
 
       const plData = await fetchPLDataForPeriod(locationId, nextFiscalYear, nextPeriod, nextWeek);
