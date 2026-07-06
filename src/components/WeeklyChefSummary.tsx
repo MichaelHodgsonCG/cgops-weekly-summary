@@ -82,6 +82,7 @@ interface WeeklySummaryData {
   lab_qtd_var_amount: number;
   labour_transfer_vacation: number;
   labour_transfer_management: number;
+  labour_transfer_stat_holiday: number;
   labour_transfer_other: number;
   labour_transfer_notes: string;
   labour_transfer_entries: string;
@@ -198,6 +199,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     lab_qtd_var_amount: 0,
     labour_transfer_vacation: 0,
     labour_transfer_management: 0,
+    labour_transfer_stat_holiday: 0,
     labour_transfer_other: 0,
     labour_transfer_notes: '',
     labour_transfer_entries: '[]',
@@ -540,6 +542,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     lab_qtd_var_amount: 0,
     labour_transfer_vacation: 0,
     labour_transfer_management: 0,
+    labour_transfer_stat_holiday: 0,
     labour_transfer_other: 0,
     labour_transfer_notes: '',
     labour_transfer_entries: '[]',
@@ -1044,6 +1047,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 boh_promo_amount: formData.boh_promo_amount,
                 labour_transfer_vacation: formData.labour_transfer_vacation,
                 labour_transfer_management: formData.labour_transfer_management,
+                labour_transfer_stat_holiday: formData.labour_transfer_stat_holiday,
                 labour_transfer_other: formData.labour_transfer_other,
                 labour_transfer_notes: formData.labour_transfer_notes,
                 labour_transfer_entries: formData.labour_transfer_entries,
@@ -1359,6 +1363,12 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 <label className="block text-sm font-medium text-slate-700 mb-2">Transfer to Management Labour <span className="text-xs text-slate-400">(from guide)</span></label>
                 <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
                   ${(formData.labour_transfer_management || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Transfer to Stat Holiday Pay <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  ${(formData.labour_transfer_stat_holiday || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </div>
               <div>

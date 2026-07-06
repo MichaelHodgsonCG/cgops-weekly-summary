@@ -176,6 +176,9 @@ type ProfitCenterParseResult = {
   overtimeTotal: number;
   doubletimeDaily: number[];
   doubletimeTotal: number;
+  // Statutory holiday pay, when the BOH sheet breaks it out as its own row
+  // (e.g. Canada Day weeks). 0 when the report has no such row.
+  statHolidayTotal: number;
 };
 
 const DISCOUNT_REASON_CATEGORIES = [
@@ -205,11 +208,12 @@ type DiscountsParseResult = {
   categories: DiscountCategoryResult[];
 };
 
-type TransferDestination = 'vacation' | 'management' | 'other';
+type TransferDestination = 'vacation' | 'management' | 'statHoliday' | 'other';
 
 const TRANSFER_DESTINATIONS: { value: TransferDestination; label: string }[] = [
   { value: 'vacation', label: 'Transfer to Vacation' },
   { value: 'management', label: 'Transfer to Management Labour' },
+  { value: 'statHoliday', label: 'Transfer to Stat Holiday Pay' },
   { value: 'other', label: 'Transfer to Other' },
 ];
 
@@ -269,6 +273,15 @@ function parseProfitCenterReport(buffer: ArrayBuffer): ProfitCenterParseResult {
   const labourRow = findRow(rows, ['Labor Total', 'Labour Total']);
   const overtimeRow = findRow(rows, 'Overtime');
   const doubletimeRow = findRow(rows, 'Doubletime');
+  const statHolidayRow = findRow(rows, [
+    'Statutory Holiday',
+    'Statutory Holiday Pay',
+    'Stat Holiday',
+    'Stat Holiday Pay',
+    'Stat Pay',
+    'Holiday Pay',
+    'Holiday',
+  ]);
 
   if (!salesRow || !labourRow) {
     throw new Error('Could not find "Sales Total" or "Labor Total" rows on the BOH sheet.');
@@ -286,6 +299,7 @@ function parseProfitCenterReport(buffer: ArrayBuffer): ProfitCenterParseResult {
     overtimeTotal: overtimeRow ? parseFloat(String(overtimeRow[8] ?? 0)) || 0 : 0,
     doubletimeDaily: doubletimeRow ? toNumbers(doubletimeRow) : [0, 0, 0, 0, 0, 0, 0],
     doubletimeTotal: doubletimeRow ? parseFloat(String(doubletimeRow[8] ?? 0)) || 0 : 0,
+    statHolidayTotal: statHolidayRow ? parseFloat(String(statHolidayRow[8] ?? 0)) || 0 : 0,
   };
 }
 
@@ -926,7 +940,7 @@ function calculateTransferAmount(entry: TransferEntry): { dayWage: number; amoun
 }
 
 function summarizeTransfers(entries: TransferEntry[]) {
-  const totals: Record<TransferDestination, number> = { vacation: 0, management: 0, other: 0 };
+  const totals: Record<TransferDestination, number> = { vacation: 0, management: 0, statHoliday: 0, other: 0 };
   const noteLines: string[] = [];
 
   entries.forEach((entry) => {
@@ -947,6 +961,7 @@ function summarizeTransfers(entries: TransferEntry[]) {
   return {
     vacation: totals.vacation,
     management: totals.management,
+    statHoliday: totals.statHoliday,
     other: totals.other,
     notes: noteLines.join('\n'),
   };
@@ -972,6 +987,7 @@ export type GuidedFieldUpdates = {
   boh_promo_amount?: number;
   labour_transfer_vacation?: number;
   labour_transfer_management?: number;
+  labour_transfer_stat_holiday?: number;
   labour_transfer_other?: number;
   labour_transfer_notes?: string;
   labour_transfer_entries?: string;
@@ -1321,7 +1337,7 @@ export function GuidedWeeklyPackage({
       const totals = summarizeTransfers(transferEntries);
       onFieldsChange?.({
         food_sales_labour_push: result.salesTotal,
-        labour_spent: result.labourTotal - totals.vacation - totals.management - totals.other,
+        labour_spent: result.labourTotal - totals.vacation - totals.management - totals.statHoliday - totals.other,
         overtime_amount: result.overtimeTotal,
       });
     } catch (err) {
@@ -1346,12 +1362,16 @@ export function GuidedWeeklyPackage({
     onFieldsChange?.({
       labour_transfer_vacation: summary.vacation,
       labour_transfer_management: summary.management,
+      labour_transfer_stat_holiday: summary.statHoliday,
       labour_transfer_other: summary.other,
       labour_transfer_notes: summary.notes,
       labour_transfer_entries: JSON.stringify(entries),
       sous_vac_days: sousVacDays,
       ...(salesResult
-        ? { labour_spent: salesResult.labourTotal - summary.vacation - summary.management - summary.other }
+        ? {
+            labour_spent:
+              salesResult.labourTotal - summary.vacation - summary.management - summary.statHoliday - summary.other,
+          }
         : {}),
     });
   };
@@ -1822,7 +1842,11 @@ export function GuidedWeeklyPackage({
         wtdSales={salesResult?.salesTotal ?? initialValues?.food_sales_labour_push ?? 0}
         wtdLabour={
           salesResult
-            ? salesResult.labourTotal - transferTotals.vacation - transferTotals.management - transferTotals.other
+            ? salesResult.labourTotal -
+              transferTotals.vacation -
+              transferTotals.management -
+              transferTotals.statHoliday -
+              transferTotals.other
             : initialValues?.labour_spent ?? 0
         }
         wtdBudgetPct={parseFloat(labourBudgetPct) || 0}
@@ -2621,8 +2645,13 @@ function GuidedTransfersStep({
   };
 
   const totals = summarizeTransfers(entries);
-  const totalTransferred = totals.vacation + totals.management + totals.other;
+  const totalTransferred = totals.vacation + totals.management + totals.statHoliday + totals.other;
   const netLabour = salesResult ? salesResult.labourTotal - totalTransferred : 0;
+
+  const detectedStatPay = salesResult?.statHolidayTotal ?? 0;
+  const hasStatTransfer = entries.some(
+    (entry) => entry.destination === 'statHoliday' && calculateTransferAmount(entry).amount > 0
+  );
 
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
@@ -2633,6 +2662,13 @@ function GuidedTransfersStep({
         a $52,000 annual wage ÷ 52 weeks ÷ 5 days = $200/day. If 3 days need to move to Management
         Labour because the chef was on holidays and the sous covered, enter that below.
       </p>
+
+      {detectedStatPay > 0 && !hasStatTransfer && (
+        <p className="mt-4 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+          This week's report includes ${detectedStatPay.toFixed(2)} of statutory holiday pay. Add a transfer with
+          "Transfer to Stat Holiday Pay" as the destination so it comes off your weekly labour percentage.
+        </p>
+      )}
 
       <div className="mt-6 space-y-4">
         {entries.map((entry, index) => {
@@ -2719,7 +2755,7 @@ function GuidedTransfersStep({
         </button>
       </div>
 
-      <div className="mt-6 grid grid-cols-3 gap-4">
+      <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
         {TRANSFER_DESTINATIONS.map((d) => (
           <div key={d.value} className="bg-slate-50 rounded-lg p-4">
             <p className="text-xs font-medium text-slate-500 uppercase">{d.label}</p>
