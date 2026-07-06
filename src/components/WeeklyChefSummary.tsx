@@ -84,6 +84,7 @@ interface WeeklySummaryData {
   labour_transfer_management: number;
   labour_transfer_other: number;
   labour_transfer_notes: string;
+  labour_transfer_entries: string;
   ebidta_budget_period_pct: number;
   ebidta_ptd_pct: number;
   ebidta_variance_pct: number;
@@ -199,6 +200,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     labour_transfer_management: 0,
     labour_transfer_other: 0,
     labour_transfer_notes: '',
+    labour_transfer_entries: '[]',
     ebidta_budget_period_pct: 0,
     ebidta_ptd_pct: 0,
     ebidta_variance_pct: 0,
@@ -540,6 +542,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     labour_transfer_management: 0,
     labour_transfer_other: 0,
     labour_transfer_notes: '',
+    labour_transfer_entries: '[]',
     ebidta_budget_period_pct: 0,
     ebidta_ptd_pct: 0,
     ebidta_variance_pct: 0,
@@ -1043,6 +1046,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 labour_transfer_management: formData.labour_transfer_management,
                 labour_transfer_other: formData.labour_transfer_other,
                 labour_transfer_notes: formData.labour_transfer_notes,
+                labour_transfer_entries: formData.labour_transfer_entries,
                 labour_review_action_plan: formData.labour_review_action_plan,
                 discount_review_notes: formData.discount_review_notes,
                 speed_of_service_notes: formData.speed_of_service_notes,

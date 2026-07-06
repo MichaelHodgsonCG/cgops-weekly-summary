@@ -974,6 +974,7 @@ export type GuidedFieldUpdates = {
   labour_transfer_management?: number;
   labour_transfer_other?: number;
   labour_transfer_notes?: string;
+  labour_transfer_entries?: string;
   labour_review_action_plan?: string;
   discount_review_notes?: string;
   speed_of_service_notes?: string;
@@ -1119,7 +1120,19 @@ export function GuidedWeeklyPackage({
   const [salesFile, setSalesFile] = useState<File | null>(null);
   const [salesResult, setSalesResult] = useState<ProfitCenterParseResult | null>(null);
   const [salesError, setSalesError] = useState('');
-  const [transferEntries, setTransferEntries] = useState<TransferEntry[]>([createBlankTransferEntry()]);
+  // Restore the individual transfer rows from the saved summary so a
+  // reopened guide shows them editable instead of a blank list.
+  const [transferEntries, setTransferEntries] = useState<TransferEntry[]>(() => {
+    if (initialValues?.labour_transfer_entries) {
+      try {
+        const parsed = JSON.parse(initialValues.labour_transfer_entries) as TransferEntry[];
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {
+        // Fall through to a blank entry on malformed data.
+      }
+    }
+    return [createBlankTransferEntry()];
+  });
   const [overtimeNotes, setOvertimeNotes] = useState(initialValues?.overtime_notes ?? '');
   const [labourReviewActionPlan, setLabourReviewActionPlan] = useState(
     initialValues?.labour_review_action_plan ?? ''
@@ -1335,6 +1348,7 @@ export function GuidedWeeklyPackage({
       labour_transfer_management: summary.management,
       labour_transfer_other: summary.other,
       labour_transfer_notes: summary.notes,
+      labour_transfer_entries: JSON.stringify(entries),
       sous_vac_days: sousVacDays,
       ...(salesResult
         ? { labour_spent: salesResult.labourTotal - summary.vacation - summary.management - summary.other }
