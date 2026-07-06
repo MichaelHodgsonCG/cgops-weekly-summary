@@ -812,7 +812,10 @@ function buildFoodCostSummary(
 
   const categories = rows.map((row) => {
     const glPurchases = glPurchasesByCategory[FOOD_COST_TO_PURCHASE_CATEGORY[row.category]] ?? 0;
-    const actualUsage = row.opening + glPurchases - row.closing - row.waste;
+    // Usage = Opening Inventory + GL Purchases - Closing Inventory. Waste is
+    // reported alongside but NOT subtracted — it is already part of what was
+    // consumed, so removing it would understate usage.
+    const actualUsage = row.opening + glPurchases - row.closing;
     const variance = actualUsage - row.idealUsage;
     return {
       category: row.category,
@@ -4319,7 +4322,7 @@ function GuidedFinalFoodCostStep({
         <h3 className="text-base font-semibold text-slate-800">Run the Report</h3>
         <ul className="mt-2 space-y-1 list-disc list-inside text-sm text-slate-600">
           <li>OC &gt; Reports &gt; Usage Summary - Group Totals &gt; Select Date Range &gt; Category: Food &gt; Run Report &gt; Save to CSV.</li>
-          <li>Usage is recomputed using your GL purchase totals from the Purchases step, not this report's own purchase figures.</li>
+          <li>Usage is recomputed as Opening + GL Purchases (from the Purchases step) − Closing. Waste is shown for reference but is not subtracted from usage.</li>
         </ul>
       </div>
 
