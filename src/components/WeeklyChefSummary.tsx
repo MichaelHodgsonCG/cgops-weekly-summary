@@ -249,6 +249,20 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // Tracks edits (manual or from the guided workflow) that haven't been
+  // persisted yet, so chefs get a visible reminder and a leave warning
+  // instead of silently losing a finished summary.
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const warnBeforeLeave = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeLeave);
+    return () => window.removeEventListener('beforeunload', warnBeforeLeave);
+  }, [hasUnsavedChanges]);
 
   const weekBudget = formData.budget_food_sales_period > 0 ? formData.budget_food_sales_period / 4 : 0;
   // Sales Variance = Food Sales (Push) - Food Sales OC
@@ -309,6 +323,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
           food_sales_labour_push: data.food_sales_labour_push || (data as any).food_sales_silverware || 0
         });
         setActiveSummaryId(id);
+        setHasUnsavedChanges(false);
       }
     } catch (error) {
       console.error('Error loading summary:', error);
@@ -573,6 +588,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
       setFormData({ ...blankFormData(), ...autofill });
       setActiveSummaryId(null);
       setMessage(null);
+      setHasUnsavedChanges(false);
     } else {
       loadSummary(value);
     }
@@ -580,10 +596,12 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
 
   const handleInputChange = (field: keyof WeeklySummaryData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    setHasUnsavedChanges(true);
   };
 
   const handleGuideFieldsChange = (updates: GuidedFieldUpdates) => {
     setFormData(prev => ({ ...prev, ...updates }));
+    setHasUnsavedChanges(true);
   };
 
   const addFeatureItem = () => {
@@ -591,6 +609,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
       ...prev,
       feature_items: [...prev.feature_items, { name: '', sold: 0, notes: '' }]
     }));
+    setHasUnsavedChanges(true);
   };
 
   const removeFeatureItem = (index: number) => {
@@ -598,6 +617,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
       ...prev,
       feature_items: prev.feature_items.filter((_, i) => i !== index)
     }));
+    setHasUnsavedChanges(true);
   };
 
   const updateFeatureItem = (index: number, field: keyof FeatureItem, value: any) => {
@@ -607,6 +627,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
         i === index ? { ...item, [field]: value } : item
       )
     }));
+    setHasUnsavedChanges(true);
   };
 
   const fetchPTDFromPL = async (): Promise<{
@@ -716,6 +737,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
 
       if (error) throw error;
 
+      setHasUnsavedChanges(false);
       setMessage({ type: 'success', text: 'Weekly summary saved successfully!' });
       await loadSavedSummaries();
     } catch (error) {
@@ -726,6 +748,13 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     } finally {
       setSaving(false);
     }
+  };
+
+  // Finishing the guided workflow saves the summary automatically — chefs
+  // were completing the guide and forgetting to hit Save afterwards.
+  const handleGuideFinish = async () => {
+    setShowGuide(false);
+    await handleSave();
   };
 
   const handleDelete = async () => {
@@ -742,6 +771,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
       setShowDeleteConfirm(false);
       setActiveSummaryId(null);
       setFormData(blankFormData());
+      setHasUnsavedChanges(false);
       setMessage({ type: 'success', text: 'Summary deleted successfully.' });
       await loadSavedSummaries();
     } catch (error) {
@@ -1049,6 +1079,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
               }}
               onFieldsChange={handleGuideFieldsChange}
               onClose={() => setShowGuide(false)}
+              onFinish={handleGuideFinish}
               locationId={locationId}
               locationName={locationName}
               fiscalYear={formData.fiscal_year}
@@ -1670,6 +1701,12 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
           </div>
 
           <div className="flex items-center justify-end gap-3">
+            {hasUnsavedChanges && !saving && (
+              <span className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-amber-800 bg-amber-50 border border-amber-300 rounded-lg">
+                <AlertTriangle className="w-4 h-4" />
+                Unsaved changes — remember to save
+              </span>
+            )}
             <button
               onClick={handleExportExcel}
               className="flex items-center gap-2 px-6 py-3 bg-emerald-700 text-white rounded-lg hover:bg-emerald-600 transition-colors"
@@ -1687,7 +1724,9 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex items-center gap-2 px-6 py-3 bg-slate-800 text-white rounded-lg hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className={`flex items-center gap-2 px-6 py-3 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${
+                hasUnsavedChanges ? 'bg-amber-600 hover:bg-amber-500 ring-2 ring-amber-300' : 'bg-slate-800 hover:bg-slate-700'
+              }`}
             >
               <Save className="w-5 h-5" />
               {saving ? 'Saving...' : 'Save Weekly Summary'}

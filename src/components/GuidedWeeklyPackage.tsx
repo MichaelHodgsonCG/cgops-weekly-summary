@@ -1079,6 +1079,10 @@ interface GuidedWeeklyPackageProps {
   initialValues?: GuidedFieldUpdates;
   onFieldsChange?: (updates: GuidedFieldUpdates) => void;
   onClose?: () => void;
+  /** Called when the chef clicks Finish on the final recap step (after the
+   *  week-ahead actions are saved). Hosts use this to auto-save the summary
+   *  so finishing the guide never leaves work unsaved. Falls back to onClose. */
+  onFinish?: () => void;
   locationId?: string;
   locationName?: string;
   fiscalYear?: number;
@@ -1090,6 +1094,7 @@ export function GuidedWeeklyPackage({
   initialValues,
   onFieldsChange,
   onClose,
+  onFinish,
   locationId,
   locationName = '',
   fiscalYear,
@@ -2016,7 +2021,7 @@ export function GuidedWeeklyPackage({
         foodCostSummary={foodCostSummary}
         isPeriodEnd={isPeriodEnd}
         onBack={() => setStep('audit')}
-        onFinish={() => onClose?.()}
+        onFinish={() => (onFinish ?? onClose)?.()}
       />
     );
   } else {
