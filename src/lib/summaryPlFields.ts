@@ -201,6 +201,118 @@ export async function computePlDrivenSummaryFields(
   };
 }
 
+export type TrueUpLine = {
+  metric: 'Sales' | 'COGs' | 'Labour';
+  estimate: number;
+  sage: number;
+  variance: number; // estimate - sage (positive = chef estimate was higher)
+  estimatePct: number | null; // % of that side's sales; null for the Sales row
+  sagePct: number | null;
+};
+
+export type LocationTrueUp = {
+  locationId: string;
+  locationName: string;
+  weekEndingDate: string;
+  weekNumber: number;
+  period: number;
+  salesIsPushBasis: boolean; // Sales compares Push (chef) vs Sage — different bases
+  lines: TrueUpLine[];
+};
+
+/**
+ * Compare the chef's estimate for a week against the reconciled Sage figures
+ * just uploaded, for Sales / COGs / Labour. Used to show a per-location
+ * true-up variance right after a Sage P&L upload.
+ *
+ * The Sage weekly value is derived as this week's period-to-date actual minus
+ * the prior week's (P&L current_actual is cumulative within the period). The
+ * chef estimate is the saved weekly summary (Push sales, recomputed usage,
+ * post-transfer labour). Sales necessarily compares Push vs Sage — different
+ * source systems — so that row is flagged.
+ *
+ * Returns null when there's no chef summary for the week (nothing to true up)
+ * or the week's own upload can't be found.
+ */
+export async function computeSageTrueUpVariance(
+  locationId: string,
+  locationName: string,
+  fiscalYear: number,
+  period: number,
+  weekEndingDate: string
+): Promise<LocationTrueUp | null> {
+  const { data: cal } = await supabase
+    .from('fiscal_calendar')
+    .select('week, end_date')
+    .eq('fiscal_year', fiscalYear)
+    .eq('period', period)
+    .order('week', { ascending: true });
+  if (!cal || cal.length === 0) return null;
+
+  const thisCal = cal.find((c) => c.end_date === weekEndingDate);
+  if (!thisCal) return null;
+  const weekNumber = thisCal.week;
+
+  const { data: summary } = await supabase
+    .from('weekly_chef_summary')
+    .select('food_sales_labour_push, usage_amount, labour_spent')
+    .eq('location_id', locationId)
+    .eq('fiscal_year', fiscalYear)
+    .eq('period_number', period)
+    .eq('week_number', weekNumber)
+    .maybeSingle();
+  if (!summary) return null;
+
+  const periodEndDates = cal.filter((c) => c.end_date <= weekEndingDate).map((c) => c.end_date);
+  const { data: uploads } = await supabase
+    .from('pl_uploads')
+    .select('id, week_ending_date')
+    .eq('location_id', locationId)
+    .in('week_ending_date', periodEndDates)
+    .order('week_ending_date', { ascending: true });
+  if (!uploads || uploads.length === 0) return null;
+
+  const thisUpload = uploads.find((u) => u.week_ending_date === weekEndingDate);
+  if (!thisUpload) return null;
+  const priorUploads = uploads.filter((u) => u.week_ending_date < weekEndingDate);
+  const priorUpload = priorUploads.length ? priorUploads[priorUploads.length - 1] : null;
+
+  const ids = [thisUpload.id, ...(priorUpload ? [priorUpload.id] : [])];
+  const { data: items } = await supabase
+    .from('pl_line_items')
+    .select('upload_id, line_item_name, current_actual')
+    .in('upload_id', ids)
+    .in('line_item_name', ['Food Sales', 'Cost of Sales (Food)', 'Kitchen Labour']);
+
+  const val = (uploadId: string, name: string) =>
+    items?.find((i) => i.upload_id === uploadId && i.line_item_name === name)?.current_actual || 0;
+  const sageWeek = (name: string) => val(thisUpload.id, name) - (priorUpload ? val(priorUpload.id, name) : 0);
+
+  const sageSales = sageWeek('Food Sales');
+  const sageCogs = sageWeek('Cost of Sales (Food)');
+  const sageLabour = sageWeek('Kitchen Labour');
+
+  const estSales = summary.food_sales_labour_push || 0;
+  const estCogs = summary.usage_amount || 0;
+  const estLabour = summary.labour_spent || 0;
+
+  const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : null);
+
+  return {
+    locationId,
+    locationName,
+    weekEndingDate,
+    weekNumber,
+    period,
+    salesIsPushBasis: true,
+    lines: [
+      { metric: 'Sales', estimate: estSales, sage: sageSales, variance: estSales - sageSales, estimatePct: null, sagePct: null },
+      { metric: 'COGs', estimate: estCogs, sage: sageCogs, variance: estCogs - sageCogs, estimatePct: pct(estCogs, estSales), sagePct: pct(sageCogs, sageSales) },
+      { metric: 'Labour', estimate: estLabour, sage: sageLabour, variance: estLabour - sageLabour, estimatePct: pct(estLabour, estSales), sagePct: pct(sageLabour, sageSales) },
+    ],
+  };
+}
+
 /**
  * Refresh the stored P&L-driven fields on every saved summary for a location in
  * a given period. Called after a P&L upload so the period budget, QTD and PTD

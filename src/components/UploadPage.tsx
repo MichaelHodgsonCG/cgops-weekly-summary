@@ -4,7 +4,7 @@ import { supabase, Location } from '../lib/supabase';
 import { parseCSV, ParsedLineItem } from '../lib/csvParser';
 import { parseExcel, WeekData } from '../lib/excelParser';
 import { computeQtdForUpload } from '../lib/needToSave';
-import { refreshSummaryPlFieldsForPeriod } from '../lib/summaryPlFields';
+import { refreshSummaryPlFieldsForPeriod, computeSageTrueUpVariance, LocationTrueUp } from '../lib/summaryPlFields';
 
 export default function UploadPage() {
   const [locations, setLocations] = useState<Location[]>([]);
@@ -14,6 +14,7 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{ total: number; completed: number; current: string }>({ total: 0, completed: 0, current: '' });
+  const [trueUps, setTrueUps] = useState<LocationTrueUp[]>([]);
 
   useEffect(() => {
     loadLocations();
@@ -162,6 +163,11 @@ export default function UploadPage() {
     // (location, fiscal year, period) combinations whose P&L changed, so we can
     // refresh the stored P&L-driven fields on their saved summaries afterwards.
     const affectedPeriods = new Set<string>();
+    // Individual (location, week) uploads, so we can true up each week's chef
+    // estimate against the reconciled Sage numbers we just loaded.
+    const affectedWeeks = new Map<string, { locationId: string; locationName: string; fiscalYear: number; period: number; weekEndingDate: string }>();
+
+    setTrueUps([]);
 
     try {
       for (let i = 0; i < files.length; i++) {
@@ -276,6 +282,14 @@ export default function UploadPage() {
               results.errors.push(`${file.name} (Week ${week.weekEndingDate}): ${itemsError.message}`);
             } else if (calWeek) {
               affectedPeriods.add(`${locationId}|${calWeek.fiscal_year}|${calWeek.period}`);
+              const resolvedName = locations.find((l) => l.id === locationId)?.name || result.locationName || 'Location';
+              affectedWeeks.set(`${locationId}|${week.weekEndingDate}`, {
+                locationId,
+                locationName: resolvedName,
+                fiscalYear: calWeek.fiscal_year,
+                period: calWeek.period,
+                weekEndingDate: week.weekEndingDate,
+              });
             }
           }
 
@@ -300,6 +314,23 @@ export default function UploadPage() {
             console.error('Failed to refresh summary P&L fields for', key, e);
           }
         }
+      }
+
+      // True up each uploaded week's chef estimate against the reconciled Sage
+      // numbers, for the per-location variance panel. Best-effort.
+      if (affectedWeeks.size > 0) {
+        setUploadProgress({ total: files.length, completed: files.length, current: 'Building variance report...' });
+        const variances: LocationTrueUp[] = [];
+        for (const w of affectedWeeks.values()) {
+          try {
+            const v = await computeSageTrueUpVariance(w.locationId, w.locationName, w.fiscalYear, w.period, w.weekEndingDate);
+            if (v) variances.push(v);
+          } catch (e) {
+            console.error('Failed to compute true-up variance for', w, e);
+          }
+        }
+        variances.sort((a, b) => a.locationName.localeCompare(b.locationName));
+        setTrueUps(variances);
       }
 
       setUploadProgress({ total: files.length, completed: files.length, current: '' });
@@ -454,6 +485,71 @@ export default function UploadPage() {
             </button>
           </div>
         </div>
+
+        {trueUps.length > 0 && <TrueUpVariancePanel trueUps={trueUps} />}
+      </div>
+    </div>
+  );
+}
+
+function TrueUpVariancePanel({ trueUps }: { trueUps: LocationTrueUp[] }) {
+  const money = (v: number) =>
+    `${v < 0 ? '-' : ''}$${Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const pct = (v: number | null) => (v === null ? '—' : `${v.toFixed(2)}%`);
+
+  return (
+    <div className="mt-6 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="bg-slate-100 px-6 py-4 border-b border-slate-200">
+        <h2 className="text-lg font-semibold text-slate-800">Estimate vs Sage — True-Up Variance</h2>
+        <p className="text-xs text-slate-500 mt-1">
+          How each location's chef estimate compared to the reconciled Sage numbers you just uploaded.
+          Variance = estimate − Sage; a positive COGs/Labour variance means the estimate ran higher than actual.
+        </p>
+      </div>
+      <div className="p-6 space-y-6">
+        {trueUps.map((t) => (
+          <div key={`${t.locationId}-${t.weekEndingDate}`} className="border border-slate-200 rounded-lg overflow-hidden">
+            <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
+              <span className="text-sm font-semibold text-slate-800">{t.locationName}</span>
+              <span className="text-xs text-slate-500">P{t.period} W{t.weekNumber} · WE {t.weekEndingDate}</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-white">
+                  <tr className="text-slate-500">
+                    <th className="px-4 py-2 text-left font-medium"></th>
+                    <th className="px-4 py-2 text-right font-medium">Estimate</th>
+                    <th className="px-4 py-2 text-right font-medium">Sage</th>
+                    <th className="px-4 py-2 text-right font-medium">Variance</th>
+                    <th className="px-4 py-2 text-right font-medium">Est %</th>
+                    <th className="px-4 py-2 text-right font-medium">Sage %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {t.lines.map((l) => (
+                    <tr key={l.metric} className="border-t border-slate-100">
+                      <td className="px-4 py-2 text-slate-700 font-medium">
+                        {l.metric}
+                        {l.metric === 'Sales' && t.salesIsPushBasis && (
+                          <span className="ml-1 text-xs text-amber-600" title="Estimate is Push POS sales; Sage is the Food Sales line — different source systems.">
+                            (Push vs Sage)
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-right text-slate-700">{money(l.estimate)}</td>
+                      <td className="px-4 py-2 text-right text-slate-700">{money(l.sage)}</td>
+                      <td className={`px-4 py-2 text-right font-semibold ${Math.abs(l.variance) < 1 ? 'text-slate-400' : l.variance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        {l.variance > 0 ? '+' : ''}{money(l.variance)}
+                      </td>
+                      <td className="px-4 py-2 text-right text-slate-500">{pct(l.estimatePct)}</td>
+                      <td className="px-4 py-2 text-right text-slate-500">{pct(l.sagePct)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
