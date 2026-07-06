@@ -176,6 +176,9 @@ type ProfitCenterParseResult = {
   overtimeTotal: number;
   doubletimeDaily: number[];
   doubletimeTotal: number;
+  // Statutory holiday pay, when the BOH sheet breaks it out as its own row
+  // (e.g. Canada Day weeks). 0 when the report has no such row.
+  statHolidayTotal: number;
 };
 
 const DISCOUNT_REASON_CATEGORIES = [
@@ -205,11 +208,12 @@ type DiscountsParseResult = {
   categories: DiscountCategoryResult[];
 };
 
-type TransferDestination = 'vacation' | 'management' | 'other';
+type TransferDestination = 'vacation' | 'management' | 'statHoliday' | 'other';
 
 const TRANSFER_DESTINATIONS: { value: TransferDestination; label: string }[] = [
   { value: 'vacation', label: 'Transfer to Vacation' },
   { value: 'management', label: 'Transfer to Management Labour' },
+  { value: 'statHoliday', label: 'Transfer to Stat Holiday Pay' },
   { value: 'other', label: 'Transfer to Other' },
 ];
 
@@ -269,6 +273,15 @@ function parseProfitCenterReport(buffer: ArrayBuffer): ProfitCenterParseResult {
   const labourRow = findRow(rows, ['Labor Total', 'Labour Total']);
   const overtimeRow = findRow(rows, 'Overtime');
   const doubletimeRow = findRow(rows, 'Doubletime');
+  const statHolidayRow = findRow(rows, [
+    'Statutory Holiday',
+    'Statutory Holiday Pay',
+    'Stat Holiday',
+    'Stat Holiday Pay',
+    'Stat Pay',
+    'Holiday Pay',
+    'Holiday',
+  ]);
 
   if (!salesRow || !labourRow) {
     throw new Error('Could not find "Sales Total" or "Labor Total" rows on the BOH sheet.');
@@ -286,6 +299,7 @@ function parseProfitCenterReport(buffer: ArrayBuffer): ProfitCenterParseResult {
     overtimeTotal: overtimeRow ? parseFloat(String(overtimeRow[8] ?? 0)) || 0 : 0,
     doubletimeDaily: doubletimeRow ? toNumbers(doubletimeRow) : [0, 0, 0, 0, 0, 0, 0],
     doubletimeTotal: doubletimeRow ? parseFloat(String(doubletimeRow[8] ?? 0)) || 0 : 0,
+    statHolidayTotal: statHolidayRow ? parseFloat(String(statHolidayRow[8] ?? 0)) || 0 : 0,
   };
 }
 
@@ -812,7 +826,10 @@ function buildFoodCostSummary(
 
   const categories = rows.map((row) => {
     const glPurchases = glPurchasesByCategory[FOOD_COST_TO_PURCHASE_CATEGORY[row.category]] ?? 0;
-    const actualUsage = row.opening + glPurchases - row.closing - row.waste;
+    // Usage = Opening Inventory + GL Purchases - Closing Inventory. Waste is
+    // reported alongside but NOT subtracted — it is already part of what was
+    // consumed, so removing it would understate usage.
+    const actualUsage = row.opening + glPurchases - row.closing;
     const variance = actualUsage - row.idealUsage;
     return {
       category: row.category,
@@ -923,7 +940,7 @@ function calculateTransferAmount(entry: TransferEntry): { dayWage: number; amoun
 }
 
 function summarizeTransfers(entries: TransferEntry[]) {
-  const totals: Record<TransferDestination, number> = { vacation: 0, management: 0, other: 0 };
+  const totals: Record<TransferDestination, number> = { vacation: 0, management: 0, statHoliday: 0, other: 0 };
   const noteLines: string[] = [];
 
   entries.forEach((entry) => {
@@ -944,6 +961,7 @@ function summarizeTransfers(entries: TransferEntry[]) {
   return {
     vacation: totals.vacation,
     management: totals.management,
+    statHoliday: totals.statHoliday,
     other: totals.other,
     notes: noteLines.join('\n'),
   };
@@ -969,8 +987,10 @@ export type GuidedFieldUpdates = {
   boh_promo_amount?: number;
   labour_transfer_vacation?: number;
   labour_transfer_management?: number;
+  labour_transfer_stat_holiday?: number;
   labour_transfer_other?: number;
   labour_transfer_notes?: string;
+  labour_transfer_entries?: string;
   labour_review_action_plan?: string;
   discount_review_notes?: string;
   speed_of_service_notes?: string;
@@ -1116,7 +1136,19 @@ export function GuidedWeeklyPackage({
   const [salesFile, setSalesFile] = useState<File | null>(null);
   const [salesResult, setSalesResult] = useState<ProfitCenterParseResult | null>(null);
   const [salesError, setSalesError] = useState('');
-  const [transferEntries, setTransferEntries] = useState<TransferEntry[]>([createBlankTransferEntry()]);
+  // Restore the individual transfer rows from the saved summary so a
+  // reopened guide shows them editable instead of a blank list.
+  const [transferEntries, setTransferEntries] = useState<TransferEntry[]>(() => {
+    if (initialValues?.labour_transfer_entries) {
+      try {
+        const parsed = JSON.parse(initialValues.labour_transfer_entries) as TransferEntry[];
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {
+        // Fall through to a blank entry on malformed data.
+      }
+    }
+    return [createBlankTransferEntry()];
+  });
   const [overtimeNotes, setOvertimeNotes] = useState(initialValues?.overtime_notes ?? '');
   const [labourReviewActionPlan, setLabourReviewActionPlan] = useState(
     initialValues?.labour_review_action_plan ?? ''
@@ -1142,7 +1174,20 @@ export function GuidedWeeklyPackage({
     initialValues?.purchases_invoices_confirmed ?? false
   );
   const [purchasesFile, setPurchasesFile] = useState<File | null>(null);
-  const [purchasesResult, setPurchasesResult] = useState<PurchasesParseResult | null>(null);
+  // Seed from previously saved amounts so reopening a saved summary shows
+  // the GL table (editable) instead of an empty upload zone.
+  const [purchasesResult, setPurchasesResult] = useState<PurchasesParseResult | null>(() => {
+    const saved: Record<PurchaseCategory, number> = {
+      Bakery: initialValues?.purchases_bakery_amount ?? 0,
+      Dairy: initialValues?.purchases_dairy_amount ?? 0,
+      'Meat And Seafood': initialValues?.purchases_meat_seafood_amount ?? 0,
+      'Other Food': initialValues?.purchases_other_food_amount ?? 0,
+      Produce: initialValues?.purchases_produce_amount ?? 0,
+    };
+    const categories = PURCHASE_CATEGORIES.map((name) => ({ name, amount: saved[name] }));
+    const total = categories.reduce((sum, c) => sum + c.amount, 0);
+    return total !== 0 ? { categories, total } : null;
+  });
   const [purchasesError, setPurchasesError] = useState('');
   const [usageWeekFile, setUsageWeekFile] = useState<File | null>(null);
   const [usageWeekRows, setUsageWeekRows] = useState<UsageReportRow[] | null>(null);
@@ -1292,7 +1337,7 @@ export function GuidedWeeklyPackage({
       const totals = summarizeTransfers(transferEntries);
       onFieldsChange?.({
         food_sales_labour_push: result.salesTotal,
-        labour_spent: result.labourTotal - totals.vacation - totals.management - totals.other,
+        labour_spent: result.labourTotal - totals.vacation - totals.management - totals.statHoliday - totals.other,
         overtime_amount: result.overtimeTotal,
       });
     } catch (err) {
@@ -1317,11 +1362,16 @@ export function GuidedWeeklyPackage({
     onFieldsChange?.({
       labour_transfer_vacation: summary.vacation,
       labour_transfer_management: summary.management,
+      labour_transfer_stat_holiday: summary.statHoliday,
       labour_transfer_other: summary.other,
       labour_transfer_notes: summary.notes,
+      labour_transfer_entries: JSON.stringify(entries),
       sous_vac_days: sousVacDays,
       ...(salesResult
-        ? { labour_spent: salesResult.labourTotal - summary.vacation - summary.management - summary.other }
+        ? {
+            labour_spent:
+              salesResult.labourTotal - summary.vacation - summary.management - summary.statHoliday - summary.other,
+          }
         : {}),
     });
   };
@@ -1753,6 +1803,15 @@ export function GuidedWeeklyPackage({
         error={salesError}
         onFileSelect={handleSalesFileSelect}
         onSalesDailyChange={handleSalesDailyChange}
+        savedTotals={
+          (initialValues?.food_sales_labour_push ?? 0) > 0
+            ? {
+                sales: initialValues?.food_sales_labour_push ?? 0,
+                labour: initialValues?.labour_spent ?? 0,
+                overtime: initialValues?.overtime_amount ?? 0,
+              }
+            : null
+        }
         onBack={() => setStep('start')}
         onNext={() => setStep('transfers')}
       />
@@ -1783,7 +1842,11 @@ export function GuidedWeeklyPackage({
         wtdSales={salesResult?.salesTotal ?? initialValues?.food_sales_labour_push ?? 0}
         wtdLabour={
           salesResult
-            ? salesResult.labourTotal - transferTotals.vacation - transferTotals.management - transferTotals.other
+            ? salesResult.labourTotal -
+              transferTotals.vacation -
+              transferTotals.management -
+              transferTotals.statHoliday -
+              transferTotals.other
             : initialValues?.labour_spent ?? 0
         }
         wtdBudgetPct={parseFloat(labourBudgetPct) || 0}
@@ -1809,6 +1872,7 @@ export function GuidedWeeklyPackage({
         onNotesChange={handleDiscountReviewNotesChange}
         ignoredItems={ignoredDiscountItems}
         onToggleIgnore={handleToggleIgnoreDiscount}
+        savedPromoAmount={initialValues?.boh_promo_amount ?? 0}
         onBack={() => setStep('review')}
         onNext={() => setStep('speedOfService')}
       />
@@ -1822,6 +1886,8 @@ export function GuidedWeeklyPackage({
         onFileSelect={handleSpeedFileSelect}
         notes={speedOfServiceNotes}
         onNotesChange={handleSpeedOfServiceNotesChange}
+        savedExpoTime={initialValues?.qsr_expo_time ?? ''}
+        savedWindowTime={initialValues?.window_time ?? ''}
         onBack={() => setStep('discounts')}
         onNext={() => setStep('salesRecap')}
       />
@@ -2056,6 +2122,20 @@ export function GuidedWeeklyPackage({
   );
 }
 
+// Shown above a disabled Next button: tells the chef what the step still
+// needs before they can move on.
+function StepGateHint({ ready, hint }: { ready: boolean; hint: string }) {
+  if (ready) return null;
+  return (
+    <p className="mt-6 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+      {hint}
+    </p>
+  );
+}
+
+const GATED_NEXT_CLASS =
+  'px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+
 function StepProgressHeader({ meta }: { meta: StepMeta }) {
   const pct = Math.round((meta.overallIndex / TOTAL_STEPS) * 100);
 
@@ -2280,6 +2360,7 @@ function GuidedSalesStep({
   error,
   onFileSelect,
   onSalesDailyChange,
+  savedTotals,
   onBack,
   onNext,
 }: {
@@ -2292,6 +2373,7 @@ function GuidedSalesStep({
   error: string;
   onFileSelect: (file: File) => void;
   onSalesDailyChange: (dayIndex: number, value: string) => void;
+  savedTotals?: { sales: number; labour: number; overtime: number } | null;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -2318,6 +2400,9 @@ function GuidedSalesStep({
 
   const formatCurrency = (value: number) =>
     value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const salesStepReady =
+    (result !== null || !!savedTotals) && (parseFloat(salesBudget) || 0) > 0 && (parseFloat(labourBudgetPct) || 0) > 0;
 
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
@@ -2497,7 +2582,20 @@ function GuidedSalesStep({
             </div>
           </div>
         )}
+
+        {!result && savedTotals && (
+          <p className="mt-4 text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+            Previously saved: Sales {`$${formatCurrency(savedTotals.sales)}`} • Labour{' '}
+            {`$${formatCurrency(savedTotals.labour)}`} • Overtime {`$${formatCurrency(savedTotals.overtime)}`}. Upload
+            a new report only if these need to change.
+          </p>
+        )}
       </div>
+
+      <StepGateHint
+        ready={salesStepReady}
+        hint="Enter the sales budget and labour budget %, and upload the Profit Center report to continue."
+      />
 
       <div className="mt-8 flex justify-between">
         <button
@@ -2508,7 +2606,8 @@ function GuidedSalesStep({
         </button>
         <button
           onClick={onNext}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          disabled={!salesStepReady}
+          className={GATED_NEXT_CLASS}
         >
           Next
         </button>
@@ -2546,8 +2645,13 @@ function GuidedTransfersStep({
   };
 
   const totals = summarizeTransfers(entries);
-  const totalTransferred = totals.vacation + totals.management + totals.other;
+  const totalTransferred = totals.vacation + totals.management + totals.statHoliday + totals.other;
   const netLabour = salesResult ? salesResult.labourTotal - totalTransferred : 0;
+
+  const detectedStatPay = salesResult?.statHolidayTotal ?? 0;
+  const hasStatTransfer = entries.some(
+    (entry) => entry.destination === 'statHoliday' && calculateTransferAmount(entry).amount > 0
+  );
 
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
@@ -2558,6 +2662,13 @@ function GuidedTransfersStep({
         a $52,000 annual wage ÷ 52 weeks ÷ 5 days = $200/day. If 3 days need to move to Management
         Labour because the chef was on holidays and the sous covered, enter that below.
       </p>
+
+      {detectedStatPay > 0 && !hasStatTransfer && (
+        <p className="mt-4 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+          This week's report includes ${detectedStatPay.toFixed(2)} of statutory holiday pay. Add a transfer with
+          "Transfer to Stat Holiday Pay" as the destination so it comes off your weekly labour percentage.
+        </p>
+      )}
 
       <div className="mt-6 space-y-4">
         {entries.map((entry, index) => {
@@ -2644,7 +2755,7 @@ function GuidedTransfersStep({
         </button>
       </div>
 
-      <div className="mt-6 grid grid-cols-3 gap-4">
+      <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
         {TRANSFER_DESTINATIONS.map((d) => (
           <div key={d.value} className="bg-slate-50 rounded-lg p-4">
             <p className="text-xs font-medium text-slate-500 uppercase">{d.label}</p>
@@ -3038,6 +3149,7 @@ function GuidedDiscountsStep({
   onNotesChange,
   ignoredItems,
   onToggleIgnore,
+  savedPromoAmount,
   onBack,
   onNext,
 }: {
@@ -3049,6 +3161,7 @@ function GuidedDiscountsStep({
   onNotesChange: (value: string) => void;
   ignoredItems: Set<string>;
   onToggleIgnore: (categoryLabel: string, itemDesc: string) => void;
+  savedPromoAmount?: number;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -3059,6 +3172,8 @@ function GuidedDiscountsStep({
       onFileSelect(files[0]);
     }
   };
+
+  const discountsStepReady = result !== null || (savedPromoAmount ?? 0) > 0;
 
   const grossDiscountsTotal = result ? result.categories.reduce((s, c) => s + c.totalAmount, 0) : 0;
   const adjustedDiscountsTotal = effectiveDiscountsTotal(result, ignoredItems);
@@ -3225,7 +3340,16 @@ function GuidedDiscountsStep({
             />
           </div>
         )}
+
+        {!result && (savedPromoAmount ?? 0) > 0 && (
+          <p className="mt-4 text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+            Previously saved: BOH promo total ${(savedPromoAmount ?? 0).toFixed(2)}. Upload a new report only if it
+            needs to change.
+          </p>
+        )}
       </div>
+
+      <StepGateHint ready={discountsStepReady} hint="Upload the Discounts report to continue." />
 
       <div className="mt-8 flex justify-between">
         <button
@@ -3236,7 +3360,8 @@ function GuidedDiscountsStep({
         </button>
         <button
           onClick={onNext}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          disabled={!discountsStepReady}
+          className={GATED_NEXT_CLASS}
         >
           Next
         </button>
@@ -3513,6 +3638,8 @@ function GuidedCogsStep({
     '5. Internal Transfers': [internalTransfers, onInternalTransfersChange],
   };
 
+  const cogsStepReady = confirmSales && brownieOnUs && recordingWaste && internalTransfers;
+
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
       <StepProgressHeader meta={STEP_META.cogs} />
@@ -3558,6 +3685,11 @@ function GuidedCogsStep({
         ))}
       </div>
 
+      <StepGateHint
+        ready={cogsStepReady}
+        hint="Mark every checklist task as done to continue."
+      />
+
       <div className="mt-8 flex justify-between">
         <button
           onClick={onBack}
@@ -3567,7 +3699,8 @@ function GuidedCogsStep({
         </button>
         <button
           onClick={onNext}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          disabled={!cogsStepReady}
+          className={GATED_NEXT_CLASS}
         >
           Next
         </button>
@@ -3583,6 +3716,8 @@ function GuidedSpeedOfServiceStep({
   onFileSelect,
   notes,
   onNotesChange,
+  savedExpoTime,
+  savedWindowTime,
   onBack,
   onNext,
 }: {
@@ -3592,6 +3727,8 @@ function GuidedSpeedOfServiceStep({
   onFileSelect: (file: File) => void;
   notes: string;
   onNotesChange: (value: string) => void;
+  savedExpoTime?: string;
+  savedWindowTime?: string;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -3602,6 +3739,8 @@ function GuidedSpeedOfServiceStep({
       onFileSelect(files[0]);
     }
   };
+
+  const speedStepReady = result !== null || !!savedExpoTime;
 
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
@@ -3712,7 +3851,17 @@ function GuidedSpeedOfServiceStep({
             />
           </div>
         )}
+
+        {!result && savedExpoTime && (
+          <p className="mt-4 text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+            Previously saved: Expo time {savedExpoTime}
+            {savedWindowTime ? ` • Window time ${savedWindowTime}` : ''}. Upload a new report only if these need to
+            change.
+          </p>
+        )}
       </div>
+
+      <StepGateHint ready={speedStepReady} hint="Upload the Speed of Service Summary report to continue." />
 
       <div className="mt-8 flex justify-between">
         <button
@@ -3723,7 +3872,8 @@ function GuidedSpeedOfServiceStep({
         </button>
         <button
           onClick={onNext}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          disabled={!speedStepReady}
+          className={GATED_NEXT_CLASS}
         >
           Next
         </button>
@@ -3905,6 +4055,11 @@ function GuidedPurchasesStep({
         )}
       </div>
 
+      <StepGateHint
+        ready={invoicesConfirmed && result !== null}
+        hint="Confirm the invoices and upload the GL report (or enter the amounts manually) to continue."
+      />
+
       <div className="mt-8 flex justify-between">
         <button
           onClick={onBack}
@@ -3914,7 +4069,8 @@ function GuidedPurchasesStep({
         </button>
         <button
           onClick={onNext}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          disabled={!(invoicesConfirmed && result !== null)}
+          className={GATED_NEXT_CLASS}
         >
           Next
         </button>
@@ -4026,6 +4182,9 @@ function GuidedUsageReviewStep({
       maximumFractionDigits: 2,
     })}`;
 
+  // Fresh uploads this session, or flagged items restored from a saved summary.
+  const usageStepReady = (weekRows !== null && fourWeekRows !== null) || flaggedItems.length > 0;
+
   const underItems = flaggedItems.filter((item) => item.direction === 'under');
   const overItems = flaggedItems.filter((item) => item.direction === 'over');
 
@@ -4121,6 +4280,11 @@ function GuidedUsageReviewStep({
         </div>
       )}
 
+      <StepGateHint
+        ready={usageStepReady}
+        hint="Upload both the reporting week and trailing 4-week Top 25 reports to continue."
+      />
+
       <div className="mt-8 flex justify-between">
         <button
           onClick={onBack}
@@ -4130,7 +4294,8 @@ function GuidedUsageReviewStep({
         </button>
         <button
           onClick={onFinish}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          disabled={!usageStepReady}
+          className={GATED_NEXT_CLASS}
         >
           Next
         </button>
@@ -4207,7 +4372,7 @@ function GuidedFinalFoodCostStep({
         <h3 className="text-base font-semibold text-slate-800">Run the Report</h3>
         <ul className="mt-2 space-y-1 list-disc list-inside text-sm text-slate-600">
           <li>OC &gt; Reports &gt; Usage Summary - Group Totals &gt; Select Date Range &gt; Category: Food &gt; Run Report &gt; Save to CSV.</li>
-          <li>Usage is recomputed using your GL purchase totals from the Purchases step, not this report's own purchase figures.</li>
+          <li>Usage is recomputed as Opening + GL Purchases (from the Purchases step) − Closing. Waste is shown for reference but is not subtracted from usage.</li>
         </ul>
       </div>
 
@@ -4344,6 +4509,11 @@ function GuidedFinalFoodCostStep({
 
       </div>
 
+      <StepGateHint
+        ready={summary !== null}
+        hint="Upload the Usage Summary - Group Totals report to continue."
+      />
+
       <div className="mt-8 flex justify-between">
         <button
           onClick={onBack}
@@ -4353,7 +4523,8 @@ function GuidedFinalFoodCostStep({
         </button>
         <button
           onClick={onFinish}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          disabled={summary === null}
+          className={GATED_NEXT_CLASS}
         >
           Next
         </button>

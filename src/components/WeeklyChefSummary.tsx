@@ -82,8 +82,10 @@ interface WeeklySummaryData {
   lab_qtd_var_amount: number;
   labour_transfer_vacation: number;
   labour_transfer_management: number;
+  labour_transfer_stat_holiday: number;
   labour_transfer_other: number;
   labour_transfer_notes: string;
+  labour_transfer_entries: string;
   ebidta_budget_period_pct: number;
   ebidta_ptd_pct: number;
   ebidta_variance_pct: number;
@@ -197,8 +199,10 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     lab_qtd_var_amount: 0,
     labour_transfer_vacation: 0,
     labour_transfer_management: 0,
+    labour_transfer_stat_holiday: 0,
     labour_transfer_other: 0,
     labour_transfer_notes: '',
+    labour_transfer_entries: '[]',
     ebidta_budget_period_pct: 0,
     ebidta_ptd_pct: 0,
     ebidta_variance_pct: 0,
@@ -538,8 +542,10 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     lab_qtd_var_amount: 0,
     labour_transfer_vacation: 0,
     labour_transfer_management: 0,
+    labour_transfer_stat_holiday: 0,
     labour_transfer_other: 0,
     labour_transfer_notes: '',
+    labour_transfer_entries: '[]',
     ebidta_budget_period_pct: 0,
     ebidta_ptd_pct: 0,
     ebidta_variance_pct: 0,
@@ -755,6 +761,15 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
   const handleGuideFinish = async () => {
     setShowGuide(false);
     await handleSave();
+  };
+
+  // Closing the guide part-way also saves whatever has been entered so far,
+  // so nothing is lost and the chef can pick up where they left off.
+  const handleGuideClose = async () => {
+    setShowGuide(false);
+    if (hasUnsavedChanges) {
+      await handleSave();
+    }
   };
 
   const handleDelete = async () => {
@@ -1032,8 +1047,10 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 boh_promo_amount: formData.boh_promo_amount,
                 labour_transfer_vacation: formData.labour_transfer_vacation,
                 labour_transfer_management: formData.labour_transfer_management,
+                labour_transfer_stat_holiday: formData.labour_transfer_stat_holiday,
                 labour_transfer_other: formData.labour_transfer_other,
                 labour_transfer_notes: formData.labour_transfer_notes,
+                labour_transfer_entries: formData.labour_transfer_entries,
                 labour_review_action_plan: formData.labour_review_action_plan,
                 discount_review_notes: formData.discount_review_notes,
                 speed_of_service_notes: formData.speed_of_service_notes,
@@ -1078,7 +1095,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 ai_summary: formData.ai_summary,
               }}
               onFieldsChange={handleGuideFieldsChange}
-              onClose={() => setShowGuide(false)}
+              onClose={handleGuideClose}
               onFinish={handleGuideFinish}
               locationId={locationId}
               locationName={locationName}
@@ -1346,6 +1363,12 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                 <label className="block text-sm font-medium text-slate-700 mb-2">Transfer to Management Labour <span className="text-xs text-slate-400">(from guide)</span></label>
                 <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
                   ${(formData.labour_transfer_management || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Transfer to Stat Holiday Pay <span className="text-xs text-slate-400">(from guide)</span></label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-medium">
+                  ${(formData.labour_transfer_stat_holiday || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </div>
               <div>
