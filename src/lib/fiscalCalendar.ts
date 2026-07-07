@@ -12,6 +12,23 @@ export interface FiscalWeek {
 
 export async function getCurrentFiscalPeriod(): Promise<FiscalWeek | null> {
   try {
+    // Resolve the current fiscal week from today's date against each week's
+    // date range. This is self-correcting; the is_current flag is maintained
+    // by hand (Fiscal Calendar admin) and goes stale, so it's only a fallback.
+    const now = new Date();
+    const localDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+      now.getDate()
+    ).padStart(2, '0')}`;
+
+    const { data: byDate } = await supabase
+      .from('fiscal_calendar')
+      .select('*')
+      .lte('start_date', localDateStr)
+      .gte('end_date', localDateStr)
+      .maybeSingle();
+
+    if (byDate) return byDate;
+
     const { data, error } = await supabase
       .from('fiscal_calendar')
       .select('*')

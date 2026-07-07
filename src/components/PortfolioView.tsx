@@ -282,6 +282,21 @@ export default function PortfolioView({ weekEndingDate }: PortfolioViewProps) {
     ? `${currentDate}   Period ${currentPeriod.period} Week ${currentPeriod.week}`
     : currentDate;
 
+  // Consistent good/bad highlighting: sales & EBITDA are good when at/over
+  // budget; food cost & labour are good when at/under budget (lower is better).
+  const cardTint = (good: boolean) =>
+    good ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200';
+  const varText = (good: boolean) => (good ? 'text-green-700' : 'text-red-700');
+
+  const ptdSalesGood = metrics.totalFoodSales - metrics.totalFoodSalesBudget >= 0;
+  const ptdFoodCostGood = metrics.totalFoodCost - metrics.totalFoodCostBudget <= 0;
+  const ptdLabourGood = metrics.totalLabour - metrics.totalLabourBudget <= 0;
+  const ptdEbitdaGood = metrics.totalEbitdaVar >= 0;
+  const ytdSalesGood = metrics.ytdFoodSales - metrics.ytdFoodSalesBudget >= 0;
+  const ytdFoodCostGood = metrics.ytdFoodCost - metrics.ytdFoodCostBudget <= 0;
+  const ytdLabourGood = metrics.ytdLabour - metrics.ytdLabourBudget <= 0;
+  const ytdEbitdaGood = metrics.ytdEbitda - metrics.ytdEbitdaBudget >= 0;
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg shadow-sm p-4 text-white">
@@ -311,83 +326,81 @@ export default function PortfolioView({ weekEndingDate }: PortfolioViewProps) {
       <div>
         <h3 className="text-lg font-semibold text-slate-800 mb-3">Period to Date (PTD)</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-slate-800 to-slate-700 rounded-lg shadow-sm p-6 text-white">
+          <div className={`rounded-lg shadow-sm p-6 ${cardTint(ptdSalesGood)}`}>
             <div className="flex items-center justify-between mb-3">
-              <div className="text-sm font-medium opacity-90">PTD Food Sales</div>
-              <DollarSign className="w-5 h-5 opacity-75" />
+              <div className="text-sm font-medium text-slate-600">PTD Food Sales</div>
+              <DollarSign className="w-5 h-5 text-slate-400" />
             </div>
-            <div className="text-3xl font-bold mb-1">{formatCurrency(metrics.totalFoodSales)}</div>
-            <div className="text-xs opacity-75">
-              Budget: {formatCurrency(metrics.totalFoodSalesBudget)}
-            </div>
-            <div className="text-xs mt-1 font-semibold">
+            <div className="text-3xl font-bold text-slate-800 mb-1">{formatCurrency(metrics.totalFoodSales)}</div>
+            <div className="text-xs text-slate-500">Budget: {formatCurrency(metrics.totalFoodSalesBudget)}</div>
+            <div className={`text-xs mt-1 font-semibold ${varText(ptdSalesGood)}`}>
               {metrics.totalFoodSales - metrics.totalFoodSalesBudget >= 0 ? '+' : ''}
-              {formatCurrency(metrics.totalFoodSales - metrics.totalFoodSalesBudget)}
+              {formatCurrency(metrics.totalFoodSales - metrics.totalFoodSalesBudget)} vs budget
             </div>
           </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-sm font-medium text-slate-600">PTD Food Cost</div>
-            <Percent className="w-5 h-5 text-slate-400" />
+          <div className={`rounded-lg shadow-sm p-6 ${cardTint(ptdFoodCostGood)}`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm font-medium text-slate-600">PTD Food Cost</div>
+              <Percent className="w-5 h-5 text-slate-400" />
+            </div>
+            <div className="text-3xl font-bold text-slate-800 mb-1">
+              {formatPercent((metrics.totalFoodCost / metrics.totalFoodSales) * 100)}
+            </div>
+            <div className="text-xs text-slate-500">
+              Budget: {formatPercent((metrics.totalFoodCostBudget / metrics.totalFoodSales) * 100)}
+            </div>
+            <div className={`text-xs mt-1 font-semibold ${varText(ptdFoodCostGood)}`}>
+              {metrics.totalFoodCost - metrics.totalFoodCostBudget >= 0 ? '+' : ''}
+              {formatCurrency(metrics.totalFoodCost - metrics.totalFoodCostBudget)} vs budget
+            </div>
           </div>
-          <div className="text-3xl font-bold text-slate-800 mb-1">
-            {formatPercent((metrics.totalFoodCost / metrics.totalFoodSales) * 100)}
-          </div>
-          <div className="text-xs text-slate-500">
-            Budget: {formatPercent((metrics.totalFoodCostBudget / metrics.totalFoodSales) * 100)} |
-            {metrics.totalFoodCost - metrics.totalFoodCostBudget >= 0 ? ' +' : ' '}
-            {formatCurrency(metrics.totalFoodCost - metrics.totalFoodCostBudget)}
-          </div>
-        </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-sm font-medium text-slate-600">PTD Labour</div>
-            <Percent className="w-5 h-5 text-slate-400" />
+          <div className={`rounded-lg shadow-sm p-6 ${cardTint(ptdLabourGood)}`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm font-medium text-slate-600">PTD Labour</div>
+              <Percent className="w-5 h-5 text-slate-400" />
+            </div>
+            <div className="text-3xl font-bold text-slate-800 mb-1">
+              {formatPercent((metrics.totalLabour / metrics.totalFoodSales) * 100)}
+            </div>
+            <div className="text-xs text-slate-500">
+              Budget: {formatPercent((metrics.totalLabourBudget / metrics.totalFoodSales) * 100)}
+            </div>
+            <div className={`text-xs mt-1 font-semibold ${varText(ptdLabourGood)}`}>
+              {metrics.totalLabour - metrics.totalLabourBudget >= 0 ? '+' : ''}
+              {formatCurrency(metrics.totalLabour - metrics.totalLabourBudget)} vs budget
+            </div>
           </div>
-          <div className="text-3xl font-bold text-slate-800 mb-1">
-            {formatPercent((metrics.totalLabour / metrics.totalFoodSales) * 100)}
-          </div>
-          <div className="text-xs text-slate-500">
-            Budget: {formatPercent((metrics.totalLabourBudget / metrics.totalFoodSales) * 100)} |
-            {metrics.totalLabour - metrics.totalLabourBudget >= 0 ? ' +' : ' '}
-            {formatCurrency(metrics.totalLabour - metrics.totalLabourBudget)}
-          </div>
-        </div>
 
-        <div className={`rounded-lg shadow-sm p-6 ${metrics.totalEbitdaVar >= 0 ? 'bg-gradient-to-br from-green-600 to-green-500' : 'bg-gradient-to-br from-red-600 to-red-500'} text-white`}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-sm font-medium opacity-90">PTD EBITDA vs Budget</div>
-            <Target className="w-5 h-5 opacity-75" />
+          <div className={`rounded-lg shadow-sm p-6 ${cardTint(ptdEbitdaGood)}`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm font-medium text-slate-600">PTD EBITDA vs Budget</div>
+              <Target className="w-5 h-5 text-slate-400" />
+            </div>
+            <div className={`text-3xl font-bold mb-1 ${varText(ptdEbitdaGood)}`}>{formatCurrency(metrics.totalEbitdaVar)}</div>
+            <div className="text-xs text-slate-500">{ptdEbitdaGood ? 'Above' : 'Below'} budget</div>
           </div>
-          <div className="text-3xl font-bold mb-1">{formatCurrency(metrics.totalEbitdaVar)}</div>
-          <div className="text-xs opacity-75">
-            {metrics.totalEbitdaVar >= 0 ? 'Above' : 'Below'} budget
-          </div>
-        </div>
         </div>
       </div>
 
       <div>
         <h3 className="text-lg font-semibold text-slate-800 mb-3">Year to Date (YTD)</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-lg shadow-sm border-2 border-slate-300 p-6">
+          <div className={`rounded-lg shadow-sm p-6 ${cardTint(ytdSalesGood)}`}>
             <div className="flex items-center justify-between mb-3">
               <div className="text-sm font-medium text-slate-600">YTD Food Sales</div>
               <DollarSign className="w-5 h-5 text-slate-400" />
             </div>
             <div className="text-3xl font-bold text-slate-800 mb-1">{formatCurrency(metrics.ytdFoodSales)}</div>
-            <div className="text-xs text-slate-500">
-              Budget: {formatCurrency(metrics.ytdFoodSalesBudget)}
-            </div>
-            <div className={`text-xs mt-1 font-semibold ${metrics.ytdFoodSales - metrics.ytdFoodSalesBudget >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <div className="text-xs text-slate-500">Budget: {formatCurrency(metrics.ytdFoodSalesBudget)}</div>
+            <div className={`text-xs mt-1 font-semibold ${varText(ytdSalesGood)}`}>
               {metrics.ytdFoodSales - metrics.ytdFoodSalesBudget >= 0 ? '+' : ''}
-              {formatCurrency(metrics.ytdFoodSales - metrics.ytdFoodSalesBudget)}
+              {formatCurrency(metrics.ytdFoodSales - metrics.ytdFoodSalesBudget)} vs budget
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border-2 border-slate-300 p-6">
+          <div className={`rounded-lg shadow-sm p-6 ${cardTint(ytdFoodCostGood)}`}>
             <div className="flex items-center justify-between mb-3">
               <div className="text-sm font-medium text-slate-600">YTD Food Cost</div>
               <Percent className="w-5 h-5 text-slate-400" />
@@ -398,13 +411,13 @@ export default function PortfolioView({ weekEndingDate }: PortfolioViewProps) {
             <div className="text-xs text-slate-500">
               Budget: {formatPercent((metrics.ytdFoodCostBudget / metrics.ytdFoodSales) * 100)}
             </div>
-            <div className={`text-xs mt-1 font-semibold ${metrics.ytdFoodCost - metrics.ytdFoodCostBudget >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+            <div className={`text-xs mt-1 font-semibold ${varText(ytdFoodCostGood)}`}>
               {metrics.ytdFoodCost - metrics.ytdFoodCostBudget >= 0 ? '+' : ''}
-              {formatCurrency(metrics.ytdFoodCost - metrics.ytdFoodCostBudget)}
+              {formatCurrency(metrics.ytdFoodCost - metrics.ytdFoodCostBudget)} vs budget
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border-2 border-slate-300 p-6">
+          <div className={`rounded-lg shadow-sm p-6 ${cardTint(ytdLabourGood)}`}>
             <div className="flex items-center justify-between mb-3">
               <div className="text-sm font-medium text-slate-600">YTD Labour</div>
               <Percent className="w-5 h-5 text-slate-400" />
@@ -415,24 +428,22 @@ export default function PortfolioView({ weekEndingDate }: PortfolioViewProps) {
             <div className="text-xs text-slate-500">
               Budget: {formatPercent((metrics.ytdLabourBudget / metrics.ytdFoodSales) * 100)}
             </div>
-            <div className={`text-xs mt-1 font-semibold ${metrics.ytdLabour - metrics.ytdLabourBudget >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+            <div className={`text-xs mt-1 font-semibold ${varText(ytdLabourGood)}`}>
               {metrics.ytdLabour - metrics.ytdLabourBudget >= 0 ? '+' : ''}
-              {formatCurrency(metrics.ytdLabour - metrics.ytdLabourBudget)}
+              {formatCurrency(metrics.ytdLabour - metrics.ytdLabourBudget)} vs budget
             </div>
           </div>
 
-          <div className={`rounded-lg shadow-sm border-2 p-6 ${metrics.ytdEbitda - metrics.ytdEbitdaBudget >= 0 ? 'border-green-600 bg-green-50' : 'border-red-600 bg-red-50'}`}>
+          <div className={`rounded-lg shadow-sm p-6 ${cardTint(ytdEbitdaGood)}`}>
             <div className="flex items-center justify-between mb-3">
               <div className="text-sm font-medium text-slate-600">YTD EBITDA</div>
               <Target className="w-5 h-5 text-slate-400" />
             </div>
-            <div className={`text-3xl font-bold mb-1 ${metrics.ytdEbitda - metrics.ytdEbitdaBudget >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+            <div className={`text-3xl font-bold mb-1 ${varText(ytdEbitdaGood)}`}>
               {formatCurrency(metrics.ytdEbitda)}
             </div>
-            <div className="text-xs text-slate-500">
-              Budget: {formatCurrency(metrics.ytdEbitdaBudget)}
-            </div>
-            <div className={`text-xs mt-1 font-semibold ${metrics.ytdEbitda - metrics.ytdEbitdaBudget >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+            <div className="text-xs text-slate-500">Budget: {formatCurrency(metrics.ytdEbitdaBudget)}</div>
+            <div className={`text-xs mt-1 font-semibold ${varText(ytdEbitdaGood)}`}>
               {metrics.ytdEbitda - metrics.ytdEbitdaBudget >= 0 ? '+' : ''}
               {formatCurrency(metrics.ytdEbitda - metrics.ytdEbitdaBudget)} vs budget
             </div>
