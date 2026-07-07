@@ -643,11 +643,18 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     budget_food_cost_qtd_pct: number;
     sage_labour_budget_qtd_pct: number;
   }> => {
+    // Feed this week's chef actuals so PTD estimates from prior-week P&L +
+    // this week when the current week's own Sage upload isn't in yet.
     const f = await computePlDrivenSummaryFields(
       locationId,
       formData.fiscal_year,
       formData.period_number,
-      formData.week_number
+      formData.week_number,
+      {
+        salesPush: formData.food_sales_labour_push || 0,
+        usageAmount: formData.usage_amount || 0,
+        labourSpent: formData.labour_spent || 0,
+      }
     );
     return {
       food_cost_ptd_pct: f?.food_cost_ptd_pct ?? 0,
