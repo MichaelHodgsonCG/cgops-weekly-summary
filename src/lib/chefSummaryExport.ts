@@ -495,7 +495,9 @@ export function exportChefSummaryToPdf(
   };
 
   renderNoteBlock('Sales Action Plan', data.sales_action_plan || data.action_plan_summary || '');
-  renderNoteBlock('Labour Summary', data.labour_summary || '');
+  // The chef's labour action plan is saved as labour_review_action_plan; the
+  // legacy labour_summary column is never populated on save, so read the former.
+  renderNoteBlock('Labour Action Plan', data.labour_review_action_plan || data.labour_summary || '');
 
   // COGS / category breakdown
   if (foodCostCategories && foodCostCategories.length > 0) {
@@ -522,27 +524,27 @@ export function exportChefSummaryToPdf(
 
     autoTable(doc, {
       startY: y + 6,
-      head: [['Category', 'Opening', 'GL Purchases', 'Closing', 'Waste', 'Actual Usage', 'Ideal Usage', 'Variance']],
+      head: [['Category', 'Opening', 'GL Purchases', 'Closing', 'Actual Usage', 'Ideal Usage', 'Variance', 'Waste']],
       body: [
         ...foodCostCategories.map((c) => [
           c.category,
           currency(c.opening),
           currency(c.glPurchases),
           currency(c.closing),
-          `${currency(c.waste)}${pctOf(c.waste)}`,
           `${currency(c.actualUsage)}${pctOf(c.actualUsage)}`,
           `${currency(c.idealUsage)}${pctOf(c.idealUsage)}`,
           `${currency(c.variance)}${pctOf(c.variance)}`,
+          `${currency(c.waste)}${pctOf(c.waste)}`,
         ]),
         [
           { content: 'Total', styles: { fontStyle: 'bold' as const } },
           { content: currency(totals.opening), styles: { fontStyle: 'bold' as const } },
           { content: currency(totals.glPurchases), styles: { fontStyle: 'bold' as const } },
           { content: currency(totals.closing), styles: { fontStyle: 'bold' as const } },
-          { content: `${currency(totals.waste)}${pctOf(totals.waste)}`, styles: { fontStyle: 'bold' as const } },
           { content: `${currency(totals.actualUsage)}${pctOf(totals.actualUsage)}`, styles: { fontStyle: 'bold' as const } },
           { content: `${currency(totals.idealUsage)}${pctOf(totals.idealUsage)}`, styles: { fontStyle: 'bold' as const } },
           { content: `${currency(totals.variance)}${pctOf(totals.variance)}`, styles: { fontStyle: 'bold' as const } },
+          { content: `${currency(totals.waste)}${pctOf(totals.waste)}`, styles: { fontStyle: 'bold' as const } },
         ],
       ],
       styles: { fontSize: 6.5, cellPadding: 2.5, halign: 'center' },
