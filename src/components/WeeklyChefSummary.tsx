@@ -951,25 +951,30 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
           </div>
         </div>
 
-        {/* Save + export actions kept at the top so they're reachable without
-            scrolling to the end of a long form. Exports reflect saved data. */}
-        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 mb-6 flex flex-wrap items-center justify-end gap-3">
+        {/* Save + export actions kept at the top, and sticky so they stay
+            reachable while scrolling a long form. Exports reflect saved data,
+            so they're disabled until pending changes are saved. */}
+        <div className="sticky top-0 z-20 bg-white rounded-lg shadow-sm border border-slate-200 p-4 mb-6 flex flex-wrap items-center justify-end gap-3">
           {hasUnsavedChanges && !saving && (
             <span className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-amber-800 bg-amber-50 border border-amber-300 rounded-lg mr-auto">
               <AlertTriangle className="w-4 h-4" />
-              Unsaved changes — remember to save
+              Unsaved changes — save before exporting
             </span>
           )}
           <button
             onClick={handleExportExcel}
-            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-700 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+            disabled={hasUnsavedChanges || saving}
+            title={hasUnsavedChanges ? 'Save your changes first — exports reflect saved data' : 'Export to Excel'}
+            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-700 text-white rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Download className="w-5 h-5" />
             Export to Excel
           </button>
           <button
             onClick={handleExportPdf}
-            className="flex items-center gap-2 px-5 py-2.5 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+            disabled={hasUnsavedChanges || saving}
+            title={hasUnsavedChanges ? 'Save your changes first — exports reflect saved data' : 'Export to PDF'}
+            className="flex items-center gap-2 px-5 py-2.5 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Download className="w-5 h-5" />
             Export to PDF
