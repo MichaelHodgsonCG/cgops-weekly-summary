@@ -5,7 +5,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { supabase } from '../lib/supabase';
 import { fetchLabourPlBaseline, fetchSalesPlBaseline, fetchFoodCostPlBaseline, getWeeksRemainingInYear, LabourPlBaseline, SalesPlBaseline, FoodCostPlBaseline } from '../lib/needToSave';
-import { exportChefSummaryToPdf, FcapRow, NextPeriodFcap } from '../lib/chefSummaryExport';
+import { NextPeriodFcap } from '../lib/chefSummaryExport';
 
 type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs' | 'purchases' | 'usageReview' | 'finalFoodCost' | 'finalFoodCostRecap' | 'nextPeriodFcap' | 'team' | 'facilities' | 'features' | 'audit' | 'recap';
 
@@ -2084,8 +2084,6 @@ export function GuidedWeeklyPackage({
         generating={generatingSummary}
         error={summaryError}
         recapMetrics={recapMetrics}
-        foodCostSummary={foodCostSummary}
-        isPeriodEnd={isPeriodEnd}
         onBack={() => setStep('audit')}
         onFinish={() => (onFinish ?? onClose)?.()}
       />
@@ -3434,12 +3432,19 @@ function GuidedSalesRecapStep({
   const weekBudget = periodBudgetFull / 4;
   const weekOfPeriod = weekNumber ?? 1;
   const ptdSalesBudget = weekBudget * weekOfPeriod;
-  const ytdSalesBudget = (baseline?.ytdSalesBudget ?? 0) + ptdSalesBudget;
 
   const ptdSales = baseline ? (baseline.isCurrentWeek ? baseline.periodSalesActual : baseline.periodSalesActual + wtdSales) : 0;
   const ptdVariance = ptdSales - ptdSalesBudget;
 
+  // YTD mirrors the P&L: use its ytd_actual / ytd_budget directly, and only
+  // add this week's increment when the latest P&L upload lags the reporting
+  // week. Previously the budget added the entire period-to-date budget on top
+  // of the P&L's ytd_budget, double-counting it and flipping the variance
+  // negative (a location up YTD would show as down).
   const ytdSales = baseline ? (baseline.isCurrentWeek ? baseline.ytdSalesActual : baseline.ytdSalesActual + wtdSales) : 0;
+  const ytdSalesBudget = baseline
+    ? (baseline.isCurrentWeek ? baseline.ytdSalesBudget : baseline.ytdSalesBudget + weekBudget)
+    : 0;
   const ytdVariance = ytdSales - ytdSalesBudget;
 
   const wtdVariance = wtdSales - weekBudget;
@@ -6085,8 +6090,6 @@ function GuidedRecapStep({
   generating,
   error,
   recapMetrics,
-  foodCostSummary,
-  isPeriodEnd,
   onBack,
   onFinish,
 }: {
@@ -6113,14 +6116,9 @@ function GuidedRecapStep({
   generating: boolean;
   error: string;
   recapMetrics: GuidedFieldUpdates;
-  foodCostSummary: FoodCostSummary | null;
-  isPeriodEnd?: boolean;
   onBack: () => void;
   onFinish: () => void;
 }) {
-  const [exportingPdf, setExportingPdf] = useState(false);
-  const [pdfError, setPdfError] = useState('');
-
   // Actions for the Week Ahead — committed forward actions, persisted to weekly_actions.
   const [weekAheadActions, setWeekAheadActions] = useState<EditableAction[]>([]);
   const [actionsLoading, setActionsLoading] = useState(false);
@@ -6128,11 +6126,6 @@ function GuidedRecapStep({
   const [actionsError, setActionsError] = useState('');
   const [savingActions, setSavingActions] = useState(false);
   const [actionsSavedAt, setActionsSavedAt] = useState<string | null>(null);
-
-  // Food Cost Action Plan items, loaded so they can be folded into the PDF export.
-  const [fcapItems, setFcapItems] = useState<FcapRow[]>([]);
-  // At period end, next period's freshly created FCAP is exported alongside it.
-  const [nextPeriodFcap, setNextPeriodFcap] = useState<NextPeriodFcap | null>(null);
 
   // Load any actions already committed for this week (so the step is resumable).
   useEffect(() => {
@@ -6175,60 +6168,6 @@ function GuidedRecapStep({
       cancelled = true;
     };
   }, [locationId, fiscalYear, periodNumber, weekNumber]);
-
-  // Load the shared Food Cost Action Plan (per location/period) for the PDF export.
-  useEffect(() => {
-    if (!locationId || !fiscalYear || !periodNumber) return;
-
-    let cancelled = false;
-    supabase
-      .from('food_cost_action_plans')
-      .select('items')
-      .eq('location_id', locationId)
-      .eq('fiscal_year', fiscalYear)
-      .eq('period_number', periodNumber)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (cancelled || !data) return;
-        setFcapItems(Array.isArray(data.items) ? (data.items as FcapRow[]) : []);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [locationId, fiscalYear, periodNumber]);
-
-  // At period end, also load next period's plan (created in Section 6 step 3)
-  // so the PDF includes both the completed and the new FCAP.
-  useEffect(() => {
-    if (!isPeriodEnd || !locationId || !fiscalYear || !periodNumber) {
-      setNextPeriodFcap(null);
-      return;
-    }
-
-    const nextFiscalYear = periodNumber === 13 ? fiscalYear + 1 : fiscalYear;
-    const nextPeriodNumber = periodNumber === 13 ? 1 : periodNumber + 1;
-
-    let cancelled = false;
-    supabase
-      .from('food_cost_action_plans')
-      .select('items')
-      .eq('location_id', locationId)
-      .eq('fiscal_year', nextFiscalYear)
-      .eq('period_number', nextPeriodNumber)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (cancelled || !data) return;
-        const items = Array.isArray(data.items) ? (data.items as FcapRow[]) : [];
-        if (items.length > 0) {
-          setNextPeriodFcap({ items, fiscalYear: nextFiscalYear, periodNumber: nextPeriodNumber });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isPeriodEnd, locationId, fiscalYear, periodNumber]);
 
   const handleAddAction = () => {
     setWeekAheadActions((prev) => [...prev, createBlankAction()]);
@@ -6376,216 +6315,6 @@ function GuidedRecapStep({
     await saveWeekAheadActions();
     onFinish();
   };
-
-  const handleExportFullSummaryPdf = async () => {
-    setExportingPdf(true);
-    setPdfError('');
-    try {
-      const chefNotes = [
-        formatRecapMetricsForPrompt(recapMetrics),
-        foodCostComments && `Food Cost Action Plan: ${foodCostComments}`,
-        labourReviewActionPlan && `Labour Action Plan: ${labourReviewActionPlan}`,
-        salesActionPlan && `Sales Action Plan: ${salesActionPlan}`,
-        hiringNotes && `Hiring: ${hiringNotes}`,
-        tmMotsOfNote && `Team Members of Note: ${tmMotsOfNote}`,
-        developmentPathUpdates && `Development Path: ${developmentPathUpdates}`,
-        rmIssues && `R&M Issues: ${rmIssues}`,
-        cleaningFocus && `Cleaning Focus: ${cleaningFocus}`,
-        featuresNotes && `Features: ${featuresNotes}`,
-        auditScoreComment && `Audit: ${auditScoreComment}`,
-      ].filter(Boolean).join('\n');
-
-      let narrative = aiSummary;
-      if (chefNotes.trim()) {
-        try {
-          const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-chef-summary`;
-          const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              voice: 'chef',
-              summaries: [
-                {
-                  id: 'current',
-                  location_name: locationName ?? '',
-                  food_cost_summary: foodCostComments,
-                  labour_summary: labourReviewActionPlan,
-                  boh_promo_summary: salesActionPlan,
-                  notes: chefNotes,
-                  action_plan_summary: salesActionPlan,
-                  hiring_notes: hiringNotes,
-                  tm_mots_of_note: tmMotsOfNote,
-                  development_path_updates: developmentPathUpdates,
-                  rm_issues: rmIssues,
-                  cleaning_focus: cleaningFocus,
-                  features_notes: featuresNotes,
-                  audit_score_comment: auditScoreComment,
-                },
-              ],
-            }),
-          });
-          if (response.ok) {
-            const { results } = await response.json();
-            narrative = results?.[0]?.ai_summary ?? aiSummary;
-          }
-        } catch {
-          // fall back to the existing summary if the chef-voice rewrite fails
-        }
-      }
-
-      const m = recapMetrics;
-      const foodSalesPush = m.food_sales_labour_push ?? m.recap_sales_wtd_actual ?? 0;
-      const foodSalesOC = m.food_sales_oc ?? 0;
-      const labourSpent = m.labour_spent ?? 0;
-      const usageAmount = m.usage_amount ?? 0;
-      const idealUsageAmount = m.ideal_usage_amount ?? 0;
-      // Source the food-cost and labour budget %s from the P&L baseline — the same
-      // place the guided final-food-cost step reads them. Without this the export
-      // would show a 0% budget and a meaningless +0.00pt variance.
-      let budgetFoodCostPct = 0;
-      let labourBudgetPct = m.labour_budget_pct ?? 0;
-      let baselineWeekEndingDate: string | undefined;
-      if (locationId && fiscalYear && periodNumber && weekNumber) {
-        try {
-          const [fcBaseline, labourBaseline] = await Promise.all([
-            fetchFoodCostPlBaseline(locationId, fiscalYear, periodNumber, weekNumber),
-            fetchLabourPlBaseline(locationId, fiscalYear, periodNumber, weekNumber),
-          ]);
-          budgetFoodCostPct = fcBaseline?.periodBudgetPct ?? 0;
-          baselineWeekEndingDate = fcBaseline?.weekEndingDate;
-          // Fall back to the labour baseline only when the chef left the field blank.
-          if (!labourBudgetPct) labourBudgetPct = labourBaseline?.periodBudgetPct ?? 0;
-        } catch {
-          // Keep the chef-entered / zero defaults if the baseline can't be loaded.
-        }
-      }
-      const budgetFoodSalesPeriod = m.budget_food_sales_period ?? 0;
-      const weekBudget = budgetFoodSalesPeriod > 0 ? budgetFoodSalesPeriod / 4 : 0;
-      const actualFoodCostPct = foodSalesPush > 0 ? (usageAmount / foodSalesPush) * 100 : 0;
-      const fcVariance = actualFoodCostPct - budgetFoodCostPct;
-      const theoreticalFoodCostPct = foodSalesPush > 0 ? (idealUsageAmount / foodSalesPush) * 100 : 0;
-      const theoreticalVariance = actualFoodCostPct - theoreticalFoodCostPct;
-      const labourCostPct = foodSalesPush > 0 ? (labourSpent / foodSalesPush) * 100 : 0;
-      const lcVariance = labourCostPct - labourBudgetPct;
-
-      const exportData = {
-        location_id: '',
-        week_number: weekNumber ?? 0,
-        period_number: periodNumber ?? 0,
-        fiscal_year: fiscalYear ?? 0,
-        budget_food_cost_pct: budgetFoodCostPct,
-        on_hand_amount: m.on_hand_amount ?? 0,
-        sage_food_sales_qtd: m.recap_sales_ytd_actual ?? 0,
-        sage_fcost_qtd_pct: m.recap_fc_ytd_pct ?? 0,
-        food_cost_ptd_pct: m.recap_fc_ptd_pct ?? 0,
-        sage_sales_budget_qtd: m.recap_sales_ytd_budget ?? 0,
-        sales_ptd_actual: 0,
-        fc_qtd_pct: m.recap_fc_ytd_pct ?? 0,
-        qtd_variance_pct: 0,
-        usage_amount: usageAmount,
-        ideal_usage_amount: idealUsageAmount,
-        theoretical_fc_ptd_pct: theoreticalFoodCostPct,
-        theoretical_fc_qtd_pct: theoreticalFoodCostPct,
-        budget_food_cost_qtd_pct: m.recap_fc_ytd_budget_pct ?? 0,
-        cogs_qtd: 0,
-        food_sales_labour_push: foodSalesPush,
-        food_sales_oc: foodSalesOC,
-        week_variance_amount: foodSalesPush - foodSalesOC,
-        budget_food_sales_period: budgetFoodSalesPeriod,
-        qtd_variance_amount: (m.recap_sales_ytd_actual ?? 0) - (m.recap_sales_ytd_budget ?? 0),
-        labour_budget_pct: labourBudgetPct,
-        sage_labour_budget_qtd_pct: m.recap_labour_ytd_budget_pct ?? 0,
-        sage_lcost_qtd_pct: m.recap_labour_ytd_pct ?? 0,
-        labour_cost_ptd_pct: m.recap_labour_ptd_pct ?? 0,
-        labour_qtd_pct: m.recap_labour_ytd_pct ?? 0,
-        lab_ptd_var_amount: 0,
-        qtd_labour_variance_pct: 0,
-        labour_spent: labourSpent,
-        overtime_amount: m.overtime_amount ?? 0,
-        lab_qtd_var_amount: m.recap_labour_ytd_variance_amount ?? 0,
-        ebidta_budget_period_pct: 0,
-        ebidta_ptd_pct: 0,
-        ebidta_variance_pct: 0,
-        qsr_weekend_lunch_time: '',
-        qsr_expo_time: m.qsr_expo_time ?? '',
-        window_time: m.window_time,
-        teamshare_amount: 0,
-        petty_cash: m.cogs_petty_cash_amount ?? 0,
-        waste_amount: m.waste_amount ?? 0,
-        last_audit_score_pct: auditScore ? parseFloat(auditScore) || 0 : 0,
-        boh_promo_amount: m.boh_promo_amount ?? 0,
-        promo_ptd: 0,
-        promo_qtd: 0,
-        sous_vac_days: m.sous_vac_days ?? 0,
-        food_cost_summary: foodCostComments,
-        labour_summary: labourReviewActionPlan,
-        boh_promo_summary: salesActionPlan,
-        notes: '',
-        action_plan_summary: salesActionPlan,
-        sales_action_plan: salesActionPlan,
-        rm_issues_cleaning_focus: [rmIssues, cleaningFocus].filter(Boolean).join('\n\n'),
-        rm_issues: rmIssues,
-        cleaning_focus: cleaningFocus,
-        audit_score_comment: auditScoreComment,
-        ideal_cooks: m.ideal_cooks ?? 0,
-        current_cooks: m.current_cooks ?? 0,
-        ideal_prep: m.ideal_prep ?? 0,
-        current_prep: m.current_prep ?? 0,
-        ideal_dish: m.ideal_dish ?? 0,
-        current_dish: m.current_dish ?? 0,
-        ideal_other: m.ideal_other ?? 0,
-        current_other: m.current_other ?? 0,
-        hiring_notes: hiringNotes,
-        tm_mots_of_note: tmMotsOfNote,
-        development_path_updates: developmentPathUpdates,
-        feature_items: featureItems,
-        ai_summary: narrative,
-      };
-
-      const foodCostCategories = foodCostSummary?.categories.map((c) => ({
-        category: c.category,
-        opening: c.opening,
-        glPurchases: c.glPurchases,
-        closing: c.closing,
-        waste: c.waste,
-        actualUsage: c.actualUsage,
-        idealUsage: c.idealUsage,
-        variance: c.variance,
-      }));
-
-      exportChefSummaryToPdf(
-        exportData,
-        locationName ?? '',
-        weekBudget,
-        actualFoodCostPct,
-        fcVariance,
-        theoreticalFoodCostPct,
-        theoreticalVariance,
-        labourCostPct,
-        lcVariance,
-        undefined,
-        baselineWeekEndingDate,
-        m.recap_sales_wtd_actual,
-        m.recap_sales_wtd_budget,
-        m.recap_fc_wtd_pct,
-        m.recap_labour_wtd_pct,
-        foodCostCategories,
-        weekAheadActions
-          .filter((a) => a.action_text.trim())
-          .map((a) => ({ action_text: a.action_text, owner: a.owner, due_by: a.due_by })),
-        fcapItems,
-        'save',
-        nextPeriodFcap ?? undefined
-      );
-    } catch (err) {
-      setPdfError(err instanceof Error ? err.message : 'Failed to export PDF.');
-    } finally {
-      setExportingPdf(false);
-    }
-  };
   const recapSections: { label: string; value: string }[] = [
     { label: 'Sales Action Plan', value: salesActionPlan },
     { label: 'Food Cost Action Plan', value: foodCostComments },
@@ -6723,21 +6452,6 @@ function GuidedRecapStep({
           rows={6}
           className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
         />
-      </div>
-
-      <div className="mt-6">
-        <p className="text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-3">
-          Save the summary before exporting or running reports — exports and dashboards reflect your last
-          saved data, not unsaved changes.
-        </p>
-        {pdfError && <p className="text-sm text-red-600 mb-2">{pdfError}</p>}
-        <button
-          onClick={handleExportFullSummaryPdf}
-          disabled={exportingPdf}
-          className="w-full px-4 py-2 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors disabled:opacity-50"
-        >
-          {exportingPdf ? 'Preparing PDF...' : 'Export Full Chef Summary (PDF)'}
-        </button>
       </div>
 
       <div className="mt-8 flex justify-between">

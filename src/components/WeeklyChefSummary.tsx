@@ -951,6 +951,41 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
           </div>
         </div>
 
+        {/* Save + export actions kept at the top so they're reachable without
+            scrolling to the end of a long form. Exports reflect saved data. */}
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 mb-6 flex flex-wrap items-center justify-end gap-3">
+          {hasUnsavedChanges && !saving && (
+            <span className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-amber-800 bg-amber-50 border border-amber-300 rounded-lg mr-auto">
+              <AlertTriangle className="w-4 h-4" />
+              Unsaved changes — remember to save
+            </span>
+          )}
+          <button
+            onClick={handleExportExcel}
+            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-700 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+          >
+            <Download className="w-5 h-5" />
+            Export to Excel
+          </button>
+          <button
+            onClick={handleExportPdf}
+            className="flex items-center gap-2 px-5 py-2.5 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+          >
+            <Download className="w-5 h-5" />
+            Export to PDF
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className={`flex items-center gap-2 px-5 py-2.5 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${
+              hasUnsavedChanges ? 'bg-amber-600 hover:bg-amber-500 ring-2 ring-amber-300' : 'bg-slate-800 hover:bg-slate-700'
+            }`}
+          >
+            <Save className="w-5 h-5" />
+            {saving ? 'Saving...' : 'Save Weekly Summary'}
+          </button>
+        </div>
+
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 mb-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <div className="flex items-center gap-2 text-sm font-medium text-slate-700 shrink-0">
@@ -1730,38 +1765,6 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-3">
-            {hasUnsavedChanges && !saving && (
-              <span className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-amber-800 bg-amber-50 border border-amber-300 rounded-lg">
-                <AlertTriangle className="w-4 h-4" />
-                Unsaved changes — remember to save
-              </span>
-            )}
-            <button
-              onClick={handleExportExcel}
-              className="flex items-center gap-2 px-6 py-3 bg-emerald-700 text-white rounded-lg hover:bg-emerald-600 transition-colors"
-            >
-              <Download className="w-5 h-5" />
-              Export to Excel
-            </button>
-            <button
-              onClick={handleExportPdf}
-              className="flex items-center gap-2 px-6 py-3 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
-            >
-              <Download className="w-5 h-5" />
-              Export to PDF
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className={`flex items-center gap-2 px-6 py-3 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${
-                hasUnsavedChanges ? 'bg-amber-600 hover:bg-amber-500 ring-2 ring-amber-300' : 'bg-slate-800 hover:bg-slate-700'
-              }`}
-            >
-              <Save className="w-5 h-5" />
-              {saving ? 'Saving...' : 'Save Weekly Summary'}
-            </button>
-          </div>
         </div>
       </div>
     </div>
