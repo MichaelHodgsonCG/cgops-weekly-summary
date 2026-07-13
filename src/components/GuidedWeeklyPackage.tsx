@@ -4251,7 +4251,7 @@ function GuidedUsageReviewStep({
         <h3 className="text-base font-semibold text-slate-800">Run the Reports</h3>
         <ul className="mt-2 space-y-1 list-disc list-inside text-sm text-slate-600">
           <li>OC &gt; Reports &gt; Usage Summary - Top 25 / Bottom 10 &gt; Select Date Range &gt; Category: Food &gt; Run Report &gt; Save to CSV.</li>
-          <li>Run it twice: once for the reporting week, once for the trailing 4 weeks.</li>
+          <li>Run it twice: once for the reporting week, once for the trailing 4 weeks (the current reporting week plus the 3 previous weeks).</li>
         </ul>
       </div>
 
@@ -4265,8 +4265,8 @@ function GuidedUsageReviewStep({
       />
 
       <UsageReportUploadZone
-        title="2. Upload Trailing 4-Week Report"
-        instructions="Select a date range covering the trailing 4 weeks, including the reporting week, then upload the saved CSV."
+        title="2. Upload Trailing 4-Week Report (Current Week + 3 Previous)"
+        instructions="Select a date range covering the trailing 4 weeks — the current reporting week plus the 3 previous weeks — then upload the saved CSV."
         file={fourWeekFile}
         rowCount={fourWeekRows ? fourWeekRows.length : null}
         error={fourWeekError}
@@ -5303,10 +5303,14 @@ function GuidedFinalFoodCostRecapStep({
           Back
         </button>
         <button
-          onClick={onFinish}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          onClick={async () => {
+            if (fcapItems.length > 0) await handleSaveFcap();
+            onFinish();
+          }}
+          disabled={fcapSaving}
+          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors disabled:opacity-50"
         >
-          Next
+          {fcapSaving ? 'Saving...' : 'Save Plan & Next'}
         </button>
       </div>
     </div>
