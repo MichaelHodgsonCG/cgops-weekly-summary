@@ -10,11 +10,19 @@ const corsHeaders = {
 interface ChefSummaryInput {
   id: string;
   location_name: string;
+  // Pre-formatted "Key Numbers:" block (sales/food cost/labour vs budget). Sent
+  // as its own field so it is not duplicated inside a combined notes blob.
+  key_numbers?: string;
   food_cost_summary: string;
   labour_summary: string;
-  boh_promo_summary: string;
-  notes: string;
+  // Retained for the executive-report caller, which sends a real BOH/promo note.
+  boh_promo_summary?: string;
+  // Retained for callers that still send a pre-combined notes blob.
+  notes?: string;
   action_plan_summary: string;
+  discount_review_notes?: string;
+  speed_of_service_notes?: string;
+  overtime_notes?: string;
   hiring_notes: string;
   tm_mots_of_note: string;
   development_path_updates?: string;
@@ -70,11 +78,15 @@ Deno.serve(async (req: Request) => {
 
     for (const summary of summaries) {
       const chefNotes = [
+        summary.key_numbers && summary.key_numbers,
         summary.food_cost_summary && `Food Cost: ${summary.food_cost_summary}`,
         summary.labour_summary && `Labour: ${summary.labour_summary}`,
         summary.boh_promo_summary && `BOH/Promo: ${summary.boh_promo_summary}`,
+        summary.action_plan_summary && `Sales Action Plan: ${summary.action_plan_summary}`,
+        summary.discount_review_notes && `Discounts: ${summary.discount_review_notes}`,
+        summary.speed_of_service_notes && `Speed of Service: ${summary.speed_of_service_notes}`,
+        summary.overtime_notes && `Overtime: ${summary.overtime_notes}`,
         summary.notes && `Notes: ${summary.notes}`,
-        summary.action_plan_summary && `Action Plan: ${summary.action_plan_summary}`,
         summary.hiring_notes && `Hiring: ${summary.hiring_notes}`,
         summary.tm_mots_of_note && `Team Members of Note: ${summary.tm_mots_of_note}`,
         summary.development_path_updates && `Development Path: ${summary.development_path_updates}`,

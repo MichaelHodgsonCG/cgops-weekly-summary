@@ -1069,6 +1069,59 @@ function formatRecapMetricsForPrompt(m: GuidedFieldUpdates): string {
   return lines.length ? `Key Numbers:\n${lines.join('\n')}` : '';
 }
 
+// Fields the generate-chef-summary edge function accepts for one location. Every
+// note is sent exactly ONCE as its own labelled field; the edge function does
+// the labelling and concatenation. Do not also send a pre-combined `notes` blob
+// alongside these - that fed each section to the model two or three times and
+// worked against the prompt's "weigh sales, food cost and labour equally"
+// instruction.
+type ChefSummaryPayloadFields = {
+  locationName?: string;
+  recapMetrics: GuidedFieldUpdates;
+  foodCostComments?: string;
+  labourReviewActionPlan?: string;
+  salesActionPlan?: string;
+  discountReviewNotes?: string;
+  speedOfServiceNotes?: string;
+  overtimeNotes?: string;
+  hiringNotes?: string;
+  tmMotsOfNote?: string;
+  developmentPathUpdates?: string;
+  rmIssues?: string;
+  cleaningFocus?: string;
+  featuresNotes?: string;
+  auditScoreComment?: string;
+};
+
+function buildChefSummaryInput(fields: ChefSummaryPayloadFields) {
+  return {
+    id: 'current',
+    location_name: fields.locationName ?? '',
+    key_numbers: formatRecapMetricsForPrompt(fields.recapMetrics),
+    food_cost_summary: fields.foodCostComments ?? '',
+    labour_summary: fields.labourReviewActionPlan ?? '',
+    action_plan_summary: fields.salesActionPlan ?? '',
+    discount_review_notes: fields.discountReviewNotes ?? '',
+    speed_of_service_notes: fields.speedOfServiceNotes ?? '',
+    overtime_notes: fields.overtimeNotes ?? '',
+    hiring_notes: fields.hiringNotes ?? '',
+    tm_mots_of_note: fields.tmMotsOfNote ?? '',
+    development_path_updates: fields.developmentPathUpdates ?? '',
+    rm_issues: fields.rmIssues ?? '',
+    cleaning_focus: fields.cleaningFocus ?? '',
+    features_notes: fields.featuresNotes ?? '',
+    audit_score_comment: fields.auditScoreComment ?? '',
+  };
+}
+
+// True when a built payload carries at least one non-empty note, so callers can
+// skip the API round-trip when the chef has not entered anything yet.
+function chefSummaryInputHasContent(input: ReturnType<typeof buildChefSummaryInput>): boolean {
+  return Object.entries(input).some(
+    ([key, value]) => key !== 'id' && key !== 'location_name' && typeof value === 'string' && value.trim() !== ''
+  );
+}
+
 export type FeatureItem = {
   name: string;
   sold: number;
@@ -1725,19 +1778,23 @@ export function GuidedWeeklyPackage({
     setGeneratingSummary(true);
     setSummaryError('');
     try {
-      const chefNotes = [
-        formatRecapMetricsForPrompt(recapMetrics),
-        foodCostComments && `Food Cost Action Plan: ${foodCostComments}`,
-        labourReviewActionPlan && `Labour Action Plan: ${labourReviewActionPlan}`,
-        salesActionPlan && `Sales Action Plan: ${salesActionPlan}`,
-        hiringNotes && `Hiring: ${hiringNotes}`,
-        tmMotsOfNote && `Team Members of Note: ${tmMotsOfNote}`,
-        developmentPathUpdates && `Development Path: ${developmentPathUpdates}`,
-        rmIssues && `R&M Issues: ${rmIssues}`,
-        cleaningFocus && `Cleaning Focus: ${cleaningFocus}`,
-        featuresNotes && `Features: ${featuresNotes}`,
-        auditScoreComment && `Audit: ${auditScoreComment}`,
-      ].filter(Boolean).join('\n');
+      const summaryInput = buildChefSummaryInput({
+        locationName,
+        recapMetrics,
+        foodCostComments,
+        labourReviewActionPlan,
+        salesActionPlan,
+        discountReviewNotes,
+        speedOfServiceNotes,
+        overtimeNotes,
+        hiringNotes,
+        tmMotsOfNote,
+        developmentPathUpdates,
+        rmIssues,
+        cleaningFocus,
+        featuresNotes,
+        auditScoreComment,
+      });
 
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-chef-summary`;
       const response = await fetch(apiUrl, {
@@ -1747,24 +1804,8 @@ export function GuidedWeeklyPackage({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          summaries: [
-            {
-              id: 'current',
-              location_name: locationName,
-              food_cost_summary: foodCostComments,
-              labour_summary: labourReviewActionPlan,
-              boh_promo_summary: salesActionPlan,
-              notes: chefNotes,
-              action_plan_summary: salesActionPlan,
-              hiring_notes: hiringNotes,
-              tm_mots_of_note: tmMotsOfNote,
-              development_path_updates: developmentPathUpdates,
-              rm_issues: rmIssues,
-              cleaning_focus: cleaningFocus,
-              features_notes: featuresNotes,
-              audit_score_comment: auditScoreComment,
-            },
-          ],
+          voice: 'chef',
+          summaries: [summaryInput],
         }),
       });
 
@@ -2069,6 +2110,9 @@ export function GuidedWeeklyPackage({
         foodCostComments={foodCostComments}
         labourReviewActionPlan={labourReviewActionPlan}
         salesActionPlan={salesActionPlan}
+        discountReviewNotes={discountReviewNotes}
+        speedOfServiceNotes={speedOfServiceNotes}
+        overtimeNotes={overtimeNotes}
         hiringNotes={hiringNotes}
         tmMotsOfNote={tmMotsOfNote}
         developmentPathUpdates={developmentPathUpdates}
@@ -6079,6 +6123,9 @@ function GuidedRecapStep({
   foodCostComments,
   labourReviewActionPlan,
   salesActionPlan,
+  discountReviewNotes,
+  speedOfServiceNotes,
+  overtimeNotes,
   hiringNotes,
   tmMotsOfNote,
   developmentPathUpdates,
@@ -6105,6 +6152,9 @@ function GuidedRecapStep({
   foodCostComments: string;
   labourReviewActionPlan: string;
   salesActionPlan: string;
+  discountReviewNotes: string;
+  speedOfServiceNotes: string;
+  overtimeNotes: string;
   hiringNotes: string;
   tmMotsOfNote: string;
   developmentPathUpdates: string;
@@ -6191,21 +6241,25 @@ function GuidedRecapStep({
     setDraftingActions(true);
     setActionsError('');
     try {
-      const chefNotes = [
-        formatRecapMetricsForPrompt(recapMetrics),
-        foodCostComments && `Food Cost Action Plan: ${foodCostComments}`,
-        labourReviewActionPlan && `Labour Action Plan: ${labourReviewActionPlan}`,
-        salesActionPlan && `Sales Action Plan: ${salesActionPlan}`,
-        hiringNotes && `Hiring: ${hiringNotes}`,
-        tmMotsOfNote && `Team Members of Note: ${tmMotsOfNote}`,
-        developmentPathUpdates && `Development Path: ${developmentPathUpdates}`,
-        rmIssues && `R&M Issues: ${rmIssues}`,
-        cleaningFocus && `Cleaning Focus: ${cleaningFocus}`,
-        featuresNotes && `Features: ${featuresNotes}`,
-        auditScoreComment && `Audit: ${auditScoreComment}`,
-      ].filter(Boolean).join('\n');
+      const summaryInput = buildChefSummaryInput({
+        locationName,
+        recapMetrics,
+        foodCostComments,
+        labourReviewActionPlan,
+        salesActionPlan,
+        discountReviewNotes,
+        speedOfServiceNotes,
+        overtimeNotes,
+        hiringNotes,
+        tmMotsOfNote,
+        developmentPathUpdates,
+        rmIssues,
+        cleaningFocus,
+        featuresNotes,
+        auditScoreComment,
+      });
 
-      if (!chefNotes.trim()) {
+      if (!chefSummaryInputHasContent(summaryInput)) {
         setActionsError('Add some notes in the earlier steps first, then draft actions.');
         return;
       }
@@ -6219,24 +6273,7 @@ function GuidedRecapStep({
         },
         body: JSON.stringify({
           voice: 'actions',
-          summaries: [
-            {
-              id: 'current',
-              location_name: locationName ?? '',
-              food_cost_summary: foodCostComments,
-              labour_summary: labourReviewActionPlan,
-              boh_promo_summary: salesActionPlan,
-              notes: chefNotes,
-              action_plan_summary: salesActionPlan,
-              hiring_notes: hiringNotes,
-              tm_mots_of_note: tmMotsOfNote,
-              development_path_updates: developmentPathUpdates,
-              rm_issues: rmIssues,
-              cleaning_focus: cleaningFocus,
-              features_notes: featuresNotes,
-              audit_score_comment: auditScoreComment,
-            },
-          ],
+          summaries: [summaryInput],
         }),
       });
 
