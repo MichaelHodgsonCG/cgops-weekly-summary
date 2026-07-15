@@ -36,9 +36,9 @@ export function UsersManager() {
     setLoading(true);
     try {
       const [usersResult, locationsResult, rolesResult] = await Promise.all([
-        supabase.from('users').select('*').order('created_at', { ascending: false }),
+        supabase.from('weekly_summary_users').select('*').order('created_at', { ascending: false }),
         supabase.from('locations').select('name').order('name'),
-        supabase.from('roles').select('name').order('name')
+        supabase.from('weekly_summary_roles').select('name').order('name')
       ]);
 
       if (usersResult.error) throw usersResult.error;
@@ -61,7 +61,7 @@ export function UsersManager() {
 
   const handleAddUser = async () => {
     try {
-      const { error } = await supabase.from('users').insert([{
+      const { error } = await supabase.from('weekly_summary_users').insert([{
         name: formData.name || null,
         restaurant: formData.restaurant || null,
         pin: formData.pin,
@@ -82,7 +82,7 @@ export function UsersManager() {
   const handleUpdateUser = async (userId: string, updates: Partial<User>) => {
     try {
       const { error } = await supabase
-        .from('users')
+        .from('weekly_summary_users')
         .update(updates)
         .eq('id', userId);
 
@@ -100,7 +100,7 @@ export function UsersManager() {
     if (!confirm('Are you sure you want to delete this user?')) return;
 
     try {
-      const { error } = await supabase.from('users').delete().eq('id', userId);
+      const { error } = await supabase.from('weekly_summary_users').delete().eq('id', userId);
 
       if (error) throw error;
 

@@ -102,7 +102,7 @@ export default function Dashboard({
     }
 
     const { data: lineItems, error: itemsError } = await supabase
-      .from('pl_line_items')
+      .from('weekly_summary_pl_line_items')
       .select('*')
       .eq('week_ending_date', weekEndingDate);
 
@@ -128,7 +128,7 @@ export default function Dashboard({
     setLoadingComparison(true);
 
     const { data: lineItems, error } = await supabase
-      .from('pl_line_items')
+      .from('weekly_summary_pl_line_items')
       .select('*')
       .eq('week_ending_date', selectedWeek)
       .in('location_id', selectedLocationIds);
@@ -256,7 +256,7 @@ export default function Dashboard({
       const { lineItems } = result;
 
       const { data: existingUpload } = await supabase
-        .from('pl_uploads')
+        .from('weekly_summary_pl_uploads')
         .select('id')
         .eq('location_id', selectedLocation)
         .eq('week_ending_date', weekEndingDate)
@@ -264,18 +264,18 @@ export default function Dashboard({
 
       if (existingUpload) {
         await supabase
-          .from('pl_line_items')
+          .from('weekly_summary_pl_line_items')
           .delete()
           .eq('upload_id', existingUpload.id);
 
         await supabase
-          .from('pl_uploads')
+          .from('weekly_summary_pl_uploads')
           .delete()
           .eq('id', existingUpload.id);
       }
 
       const { data: upload, error: uploadError } = await supabase
-        .from('pl_uploads')
+        .from('weekly_summary_pl_uploads')
         .insert({
           location_id: selectedLocation,
           week_ending_date: weekEndingDate,
@@ -295,7 +295,7 @@ export default function Dashboard({
       }));
 
       const { error: itemsError } = await supabase
-        .from('pl_line_items')
+        .from('weekly_summary_pl_line_items')
         .insert(lineItemsToInsert);
 
       if (itemsError) throw itemsError;

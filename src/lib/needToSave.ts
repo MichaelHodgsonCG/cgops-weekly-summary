@@ -232,7 +232,7 @@ async function getMostRecentPLWeek(
   periodNumber: number
 ): Promise<{ lineItems: LineItemRow[] } | null> {
   const { data: uploads } = await supabase
-    .from('pl_uploads')
+    .from('weekly_summary_pl_uploads')
     .select('id, week_ending_date')
     .eq('location_id', locationId)
     .order('week_ending_date', { ascending: false })
@@ -243,7 +243,7 @@ async function getMostRecentPLWeek(
   const uploadId = uploads[0].id;
 
   const { data: items } = await supabase
-    .from('pl_line_items')
+    .from('weekly_summary_pl_line_items')
     .select(
       'line_item_name, current_actual, current_actual_pct, current_budget, current_budget_pct, ytd_actual, ytd_actual_pct, ytd_budget, ytd_budget_pct, qtd_actual, qtd_actual_pct, qtd_budget, qtd_budget_pct'
     )
@@ -273,7 +273,7 @@ export async function fetchLabourPlBaseline(
   weekNumber: number
 ): Promise<LabourPlBaseline | null> {
   const { data: uploads } = await supabase
-    .from('pl_uploads')
+    .from('weekly_summary_pl_uploads')
     .select('id, week_ending_date')
     .eq('location_id', locationId)
     .order('week_ending_date', { ascending: false })
@@ -284,7 +284,7 @@ export async function fetchLabourPlBaseline(
   const upload = uploads[0];
 
   const { data: items } = await supabase
-    .from('pl_line_items')
+    .from('weekly_summary_pl_line_items')
     .select('line_item_name, current_actual, current_budget_pct, ytd_actual, ytd_budget_pct')
     .eq('upload_id', upload.id)
     .in('line_item_name', ['Food Sales', 'Kitchen Labour']);
@@ -332,7 +332,7 @@ export async function fetchFoodCostPlBaseline(
   weekNumber: number
 ): Promise<FoodCostPlBaseline | null> {
   const { data: uploads } = await supabase
-    .from('pl_uploads')
+    .from('weekly_summary_pl_uploads')
     .select('id, week_ending_date')
     .eq('location_id', locationId)
     .order('week_ending_date', { ascending: false })
@@ -343,7 +343,7 @@ export async function fetchFoodCostPlBaseline(
   const upload = uploads[0];
 
   const { data: items } = await supabase
-    .from('pl_line_items')
+    .from('weekly_summary_pl_line_items')
     .select('line_item_name, current_actual, current_budget_pct, ytd_actual, ytd_budget_pct')
     .eq('upload_id', upload.id)
     .in('line_item_name', ['Food Sales', 'Cost of Sales (Food)']);
@@ -389,7 +389,7 @@ export async function fetchSalesPlBaseline(
   weekNumber: number
 ): Promise<SalesPlBaseline | null> {
   const { data: uploads } = await supabase
-    .from('pl_uploads')
+    .from('weekly_summary_pl_uploads')
     .select('id, week_ending_date')
     .eq('location_id', locationId)
     .order('week_ending_date', { ascending: false })
@@ -400,7 +400,7 @@ export async function fetchSalesPlBaseline(
   const upload = uploads[0];
 
   const { data: items } = await supabase
-    .from('pl_line_items')
+    .from('weekly_summary_pl_line_items')
     .select('line_item_name, current_actual, current_budget, ytd_actual, ytd_budget')
     .eq('upload_id', upload.id)
     .eq('line_item_name', 'Food Sales');
@@ -457,7 +457,7 @@ export async function computeQtdForUpload(
       const lastPriorPeriodEndDate = calWeeks[0].end_date;
 
       const { data: uploads } = await supabase
-        .from('pl_uploads')
+        .from('weekly_summary_pl_uploads')
         .select('id')
         .eq('location_id', locationId)
         .eq('week_ending_date', lastPriorPeriodEndDate)
@@ -465,7 +465,7 @@ export async function computeQtdForUpload(
 
       if (uploads && uploads.length > 0) {
         const { data: items } = await supabase
-          .from('pl_line_items')
+          .from('weekly_summary_pl_line_items')
           .select('line_item_name, current_actual, current_budget, ytd_actual, ytd_budget')
           .eq('upload_id', uploads[0].id)
           .in('line_item_name', lineItemNames);

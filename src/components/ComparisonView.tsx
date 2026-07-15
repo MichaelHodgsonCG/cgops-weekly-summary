@@ -46,7 +46,7 @@ export default function ComparisonView({ weekEndingDate }: ComparisonViewProps) 
     setLoading(true);
 
     const { data: lineItems, error } = await supabase
-      .from('pl_line_items')
+      .from('weekly_summary_pl_line_items')
       .select('*')
       .eq('week_ending_date', weekEndingDate)
       .in('location_id', selectedLocationIds);

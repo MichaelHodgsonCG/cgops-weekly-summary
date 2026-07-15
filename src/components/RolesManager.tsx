@@ -23,14 +23,14 @@ export function RolesManager() {
       setLoading(true);
 
       const { data: rolesData, error: rolesError } = await supabase
-        .from('roles')
+        .from('weekly_summary_roles')
         .select('*')
         .order('name');
 
       if (rolesError) throw rolesError;
 
       const { data: usersData, error: usersError } = await supabase
-        .from('users')
+        .from('weekly_summary_users')
         .select('role');
 
       if (usersError) throw usersError;
@@ -68,7 +68,7 @@ export function RolesManager() {
 
     try {
       const { data, error } = await supabase
-        .from('roles')
+        .from('weekly_summary_roles')
         .insert({ name: newRole.trim() })
         .select()
         .single();
@@ -90,12 +90,12 @@ export function RolesManager() {
 
     try {
       await supabase
-        .from('users')
+        .from('weekly_summary_users')
         .update({ role: null })
         .eq('role', roleName);
 
       const { error } = await supabase
-        .from('roles')
+        .from('weekly_summary_roles')
         .delete()
         .eq('id', roleId);
 

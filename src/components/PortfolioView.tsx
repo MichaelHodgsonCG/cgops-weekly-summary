@@ -67,7 +67,7 @@ export default function PortfolioView({ weekEndingDate }: PortfolioViewProps) {
       : locations;
 
     const { data: lineItems, error: itemsError } = await supabase
-      .from('pl_line_items')
+      .from('weekly_summary_pl_line_items')
       .select('*')
       .eq('week_ending_date', weekEndingDate);
 

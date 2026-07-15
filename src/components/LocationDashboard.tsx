@@ -28,7 +28,7 @@ export function LocationDashboard() {
       setLoading(true);
 
       const { data: userData, error: userError } = await supabase
-        .from('users')
+        .from('weekly_summary_users')
         .select('restaurant')
         .eq('id', user.id)
         .maybeSingle();

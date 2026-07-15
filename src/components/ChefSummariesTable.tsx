@@ -84,7 +84,7 @@ export function ChefSummariesTable({ fiscalYear, period, week }: ChefSummariesTa
     setLoading(true);
 
     const { data, error } = await supabase
-      .from('weekly_chef_summary')
+      .from('weekly_summary_chef_summary')
       .select('*, locations!inner(name, code)')
       .eq('fiscal_year', fiscalYear)
       .eq('period_number', period)

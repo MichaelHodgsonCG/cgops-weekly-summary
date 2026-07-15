@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from './supabase';
 
 interface User {
   id: string;
@@ -38,8 +39,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
+    // Office cohort signed in via the CGOPS handoff: end that Supabase session
+    // and return to CGOPS rather than dropping them on a PIN screen they can't
+    // use. Chefs (PIN login) just clear their local session.
+    const viaCgops = localStorage.getItem('auth_via') === 'cgops';
     setUser(null);
     localStorage.removeItem('user');
+    localStorage.removeItem('auth_via');
+    if (viaCgops) {
+      void supabase.auth.signOut();
+      const cgopsUrl = import.meta.env.VITE_CGOPS_URL as string | undefined;
+      if (cgopsUrl) window.location.replace(cgopsUrl);
+    }
   };
 
   const normalizedRole = (user?.role || '').toLowerCase().trim();

@@ -28,9 +28,9 @@ export default function PermissionsManager() {
   const loadData = async () => {
     setLoading(true);
     const [rolesResult, permissionsResult, rolePermissionsResult] = await Promise.all([
-      supabase.from('roles').select('*').order('name'),
-      supabase.from('permissions').select('*').order('category, name'),
-      supabase.from('role_permissions').select('*')
+      supabase.from('weekly_summary_roles').select('*').order('name'),
+      supabase.from('weekly_summary_permissions').select('*').order('category, name'),
+      supabase.from('weekly_summary_role_permissions').select('*')
     ]);
 
     if (rolesResult.data) setRoles(rolesResult.data);
@@ -62,7 +62,7 @@ export default function PermissionsManager() {
 
       if (existing) {
         const { error } = await supabase
-          .from('role_permissions')
+          .from('weekly_summary_role_permissions')
           .delete()
           .eq('id', existing.id);
 
@@ -75,7 +75,7 @@ export default function PermissionsManager() {
         }
       } else {
         const { error } = await supabase
-          .from('role_permissions')
+          .from('weekly_summary_role_permissions')
           .insert({ role_id: roleId, permission_id: permissionId });
 
         if (error) {
