@@ -57,7 +57,7 @@ export function ChefSummaryDashboard() {
 
     try {
       const { data: summaries, error } = await supabase
-        .from('weekly_chef_summary')
+        .from('weekly_summary_chef_summary')
         .select('id, location_id')
         .eq('fiscal_year', selectedYear)
         .eq('period_number', period)

@@ -72,7 +72,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
     const ptdWeeks = weeks.filter(w => w.period === currentPeriod.period && w.week <= currentPeriod.week);
 
     const { data: allSummaries } = await supabase
-      .from('weekly_chef_summary')
+      .from('weekly_summary_chef_summary')
       .select('*, locations!inner(*)')
       .eq('fiscal_year', currentPeriod.fiscal_year)
       .eq('locations.exclude_from_reporting', false);
@@ -132,7 +132,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
     setLoading(true);
 
     const { data: existingReport } = await supabase
-      .from('weekly_executive_reports')
+      .from('weekly_summary_executive_reports')
       .select('*')
       .eq('fiscal_year', currentPeriod.fiscal_year)
       .eq('period_number', currentPeriod.period)
@@ -144,7 +144,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
     } else {
       const metrics = await calculateConsolidatedMetricsRef.current();
       const { data: newReport, error } = await supabase
-        .from('weekly_executive_reports')
+        .from('weekly_summary_executive_reports')
         .insert({
           fiscal_year: currentPeriod.fiscal_year,
           period_number: currentPeriod.period,
@@ -180,7 +180,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
 
     setSaving(true);
     const { error } = await supabase
-      .from('weekly_executive_reports')
+      .from('weekly_summary_executive_reports')
       .update({ [field]: value, updated_at: new Date().toISOString() })
       .eq('id', report.id);
 
@@ -271,7 +271,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
 
       if (Object.keys(updates).length > 0) {
         const { error } = await supabase
-          .from('weekly_executive_reports')
+          .from('weekly_summary_executive_reports')
           .update({ ...updates, updated_at: new Date().toISOString() })
           .eq('id', report.id);
 
@@ -345,7 +345,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
 
       // Fetch P&L data
       const { data: plData } = weekEndingDate ? await supabase
-        .from('pl_line_items')
+        .from('weekly_summary_pl_line_items')
         .select('*, locations!inner(*)')
         .eq('week_ending_date', weekEndingDate)
         .eq('locations.exclude_from_reporting', false)
@@ -353,7 +353,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
 
       // Fetch weekly chef summaries
       const { data: currentWeekData } = await supabase
-        .from('weekly_chef_summary')
+        .from('weekly_summary_chef_summary')
         .select('*, locations!inner(*)')
         .eq('fiscal_year', fiscalYear)
         .eq('period_number', period)
@@ -363,7 +363,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
 
       // Fetch QTD P&L sales
       const { data: qtdPLDataRaw } = qtdEndDates.length > 0 ? await supabase
-        .from('pl_line_items')
+        .from('weekly_summary_pl_line_items')
         .select('location_id, line_item_name, current_actual, current_budget, week_ending_date')
         .in('week_ending_date', qtdEndDates)
         .eq('line_item_name', 'Food Sales')
@@ -399,7 +399,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
 
       // Period-to-date promos: accumulate the weekly BOH promo across this period's weeks.
       const { data: periodPromoRows } = await supabase
-        .from('weekly_chef_summary')
+        .from('weekly_summary_chef_summary')
         .select('location_id, boh_promo_amount, locations!inner(exclude_from_reporting)')
         .eq('fiscal_year', fiscalYear)
         .eq('period_number', period)
@@ -908,7 +908,7 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
     setReportError('');
     try {
       const { data: row } = await supabase
-        .from('weekly_chef_summary')
+        .from('weekly_summary_chef_summary')
         .select('*')
         .eq('location_id', locationId)
         .eq('fiscal_year', fiscalYear)
@@ -959,7 +959,7 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
       }
 
       const { data: actionRows } = await supabase
-        .from('weekly_actions')
+        .from('weekly_summary_actions')
         .select('action_text, owner, due_by, sort_order')
         .eq('location_id', locationId)
         .eq('fiscal_year', fiscalYear)
@@ -971,7 +971,7 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
         .map(a => ({ action_text: a.action_text, owner: a.owner ?? '', due_by: a.due_by ?? '' }));
 
       const { data: fcapRow } = await supabase
-        .from('food_cost_action_plans')
+        .from('weekly_summary_food_cost_action_plans')
         .select('items')
         .eq('location_id', locationId)
         .eq('fiscal_year', fiscalYear)
@@ -992,7 +992,7 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
         const nextFiscalYear = period === 13 ? fiscalYear + 1 : fiscalYear;
         const nextPeriodNumber = period === 13 ? 1 : period + 1;
         const { data: nextFcapRow } = await supabase
-          .from('food_cost_action_plans')
+          .from('weekly_summary_food_cost_action_plans')
           .select('items')
           .eq('location_id', locationId)
           .eq('fiscal_year', nextFiscalYear)
@@ -1061,7 +1061,7 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
       .map(w => w.end_date);
 
     const { data: currentWeekData } = await supabase
-      .from('weekly_chef_summary')
+      .from('weekly_summary_chef_summary')
       .select('*, locations!inner(*)')
       .eq('fiscal_year', fiscalYear)
       .eq('period_number', period)
@@ -1070,14 +1070,14 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
       .order('locations(code)');
 
     const { data: plData } = weekEndingDate ? await supabase
-      .from('pl_line_items')
+      .from('weekly_summary_pl_line_items')
       .select('*, locations!inner(*)')
       .eq('week_ending_date', weekEndingDate)
       .eq('locations.exclude_from_reporting', false)
       : { data: null };
 
     const { data: qtdPLDataRaw } = qtdEndDates.length > 0 ? await supabase
-      .from('pl_line_items')
+      .from('weekly_summary_pl_line_items')
       .select('location_id, line_item_name, current_actual, current_budget, week_ending_date')
       .in('week_ending_date', qtdEndDates)
       .eq('line_item_name', 'Food Sales')
@@ -1119,7 +1119,7 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
 
     // Period-to-date promos: accumulate the weekly BOH promo across this period's weeks.
     const { data: periodPromoRows } = await supabase
-      .from('weekly_chef_summary')
+      .from('weekly_summary_chef_summary')
       .select('location_id, boh_promo_amount, locations!inner(exclude_from_reporting)')
       .eq('fiscal_year', fiscalYear)
       .eq('period_number', period)
@@ -1578,7 +1578,7 @@ function ConsolidatedSummaries({ fiscalYear, period, week }: { fiscalYear: numbe
     const weekEndingDate = fiscalData.end_date;
 
     const { data: plData } = await supabase
-      .from('pl_line_items')
+      .from('weekly_summary_pl_line_items')
       .select('*, locations!inner(*)')
       .eq('week_ending_date', weekEndingDate)
       .eq('locations.exclude_from_reporting', false);
@@ -1589,7 +1589,7 @@ function ConsolidatedSummaries({ fiscalYear, period, week }: { fiscalYear: numbe
     }
 
     const { data: chefSummaryData } = await supabase
-      .from('weekly_chef_summary')
+      .from('weekly_summary_chef_summary')
       .select('*, locations!inner(*)')
       .eq('fiscal_year', fiscalYear)
       .eq('period_number', period)
@@ -1763,7 +1763,7 @@ function JournalsTable({ fiscalYear, period, week }: { fiscalYear: number; perio
     setLoading(true);
 
     const { data, error } = await supabase
-      .from('weekly_chef_summary')
+      .from('weekly_summary_chef_summary')
       .select('id, locations!inner(name, code), notes, hiring_notes, tm_mots_of_note, food_cost_summary, labour_summary, boh_promo_summary, action_plan_summary, ai_summary')
       .eq('fiscal_year', fiscalYear)
       .eq('period_number', period)
@@ -1838,7 +1838,7 @@ function JournalsTable({ fiscalYear, period, week }: { fiscalYear: number; perio
 
       for (const result of results) {
         await supabase
-          .from('weekly_chef_summary')
+          .from('weekly_summary_chef_summary')
           .update({ ai_summary: result.ai_summary })
           .eq('id', result.id);
       }

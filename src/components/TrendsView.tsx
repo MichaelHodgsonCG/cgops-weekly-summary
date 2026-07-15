@@ -65,7 +65,7 @@ export default function TrendsView({ weekEndingDate }: TrendsViewProps) {
     setLoading(true);
 
     const { data: allWeeks, error: weeksError } = await supabase
-      .from('pl_line_items')
+      .from('weekly_summary_pl_line_items')
       .select('week_ending_date')
       .lte('week_ending_date', weekEndingDate)
       .in('location_id', selectedLocationIds)
@@ -80,7 +80,7 @@ export default function TrendsView({ weekEndingDate }: TrendsViewProps) {
     const weekDates = uniqueDates.reverse();
 
     const { data: lineItems, error } = await supabase
-      .from('pl_line_items')
+      .from('weekly_summary_pl_line_items')
       .select('*')
       .in('week_ending_date', weekDates)
       .in('location_id', selectedLocationIds);

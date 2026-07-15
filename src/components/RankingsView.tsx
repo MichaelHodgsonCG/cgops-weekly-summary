@@ -60,7 +60,7 @@ export default function RankingsView({ weekEndingDate }: RankingsViewProps) {
   useEffect(() => {
     const loadWeeks = async () => {
       const { data } = await supabase
-        .from('pl_uploads')
+        .from('weekly_summary_pl_uploads')
         .select('week_ending_date')
         .order('week_ending_date', { ascending: false });
       if (data) {
@@ -100,7 +100,7 @@ export default function RankingsView({ weekEndingDate }: RankingsViewProps) {
     }
 
     const { data: lineItems, error: itemsError } = await supabase
-      .from('pl_line_items')
+      .from('weekly_summary_pl_line_items')
       .select('*')
       .eq('week_ending_date', activeDate);
 
@@ -252,7 +252,7 @@ export default function RankingsView({ weekEndingDate }: RankingsViewProps) {
       let totalYtdBudgetCost = 0;
 
       const { data: lineItems } = await supabase
-        .from('pl_line_items')
+        .from('weekly_summary_pl_line_items')
         .select('*')
         .eq('week_ending_date', activeDate);
 

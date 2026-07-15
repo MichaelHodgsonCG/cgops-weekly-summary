@@ -28,7 +28,7 @@ export function useLocationFilter(storageKey: string) {
     if (!user) return;
     setLoading(true);
     const { data, error } = await supabase
-      .from('user_location_preferences')
+      .from('weekly_summary_user_location_preferences')
       .select('location_name')
       .eq('user_id', user.id);
 

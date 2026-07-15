@@ -30,7 +30,7 @@ export function ChefConsolidationView() {
 
   const loadLastWeekWithData = async () => {
     const { data } = await supabase
-      .from('weekly_chef_summary')
+      .from('weekly_summary_chef_summary')
       .select('fiscal_year, period_number, week_number')
       .order('fiscal_year', { ascending: false })
       .order('period_number', { ascending: false })

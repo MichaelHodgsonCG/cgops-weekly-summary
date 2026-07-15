@@ -38,7 +38,7 @@ function AppContent() {
 
   const loadAvailableWeeks = async () => {
     const { data, error } = await supabase
-      .from('pl_uploads')
+      .from('weekly_summary_pl_uploads')
       .select('week_ending_date')
       .order('week_ending_date', { ascending: false });
 

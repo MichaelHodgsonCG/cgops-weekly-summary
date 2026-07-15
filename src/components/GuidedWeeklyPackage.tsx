@@ -1283,7 +1283,7 @@ export function GuidedWeeklyPackage({
     setLoadingAuditScore(true);
 
     supabase
-      .from('weekly_chef_summary')
+      .from('weekly_summary_chef_summary')
       .select('fiscal_year, period_number, week_number, last_audit_score_pct')
       .eq('location_id', locationId)
       .order('fiscal_year', { ascending: false })
@@ -2199,7 +2199,7 @@ function GuidedPackageStart({
       (r.fiscal_year === fiscalYear && r.period_number === periodNumber && r.week_number < weekNumber);
 
     supabase
-      .from('weekly_actions')
+      .from('weekly_summary_actions')
       .select('id, action_text, owner, due_by, status, fiscal_year, period_number, week_number, sort_order')
       .eq('location_id', locationId)
       .in('status', ['open', 'carried'])
@@ -2233,7 +2233,7 @@ function GuidedPackageStart({
   const updatePriorStatus = async (id: string, status: 'done' | 'carried' | 'dropped') => {
     setPriorActions((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)));
     await supabase
-      .from('weekly_actions')
+      .from('weekly_summary_actions')
       .update({ status, updated_at: new Date().toISOString() })
       .eq('id', id);
   };
@@ -4672,7 +4672,7 @@ function GuidedFinalFoodCostRecapStep({
     setFcapLoading(true);
 
     supabase
-      .from('food_cost_action_plans')
+      .from('weekly_summary_food_cost_action_plans')
       .select('id, items, updated_at')
       .eq('location_id', locationId)
       .eq('fiscal_year', fiscalYear)
@@ -4704,7 +4704,7 @@ function GuidedFinalFoodCostRecapStep({
 
     let cancelled = false;
     supabase
-      .from('food_cost_action_plans')
+      .from('weekly_summary_food_cost_action_plans')
       .select('items')
       .eq('location_id', locationId)
       .eq('fiscal_year', nextFiscalYear)
@@ -4771,7 +4771,7 @@ function GuidedFinalFoodCostRecapStep({
     setFcapSaving(true);
     try {
       const { data, error: saveError } = await supabase
-        .from('food_cost_action_plans')
+        .from('weekly_summary_food_cost_action_plans')
         .upsert(
           {
             id: fcapId ?? undefined,
@@ -5375,7 +5375,7 @@ function GuidedNextPeriodFcapStep({
     setFcapLoading(true);
 
     supabase
-      .from('food_cost_action_plans')
+      .from('weekly_summary_food_cost_action_plans')
       .select('id, items, updated_at')
       .eq('location_id', locationId)
       .eq('fiscal_year', nextFiscalYear)
@@ -5440,7 +5440,7 @@ function GuidedNextPeriodFcapStep({
     setFcapSaving(true);
     try {
       const { data, error: saveError } = await supabase
-        .from('food_cost_action_plans')
+        .from('weekly_summary_food_cost_action_plans')
         .upsert(
           {
             id: fcapId ?? undefined,
@@ -6139,7 +6139,7 @@ function GuidedRecapStep({
     setActionsLoading(true);
 
     supabase
-      .from('weekly_actions')
+      .from('weekly_summary_actions')
       .select('id, action_text, owner, due_by, source_section, sort_order, updated_at')
       .eq('location_id', locationId)
       .eq('fiscal_year', fiscalYear)
@@ -6284,7 +6284,7 @@ function GuidedRecapStep({
       }));
 
     const { error: deleteError } = await supabase
-      .from('weekly_actions')
+      .from('weekly_summary_actions')
       .delete()
       .eq('location_id', locationId)
       .eq('fiscal_year', fiscalYear)
@@ -6293,7 +6293,7 @@ function GuidedRecapStep({
     if (deleteError) return false;
 
     if (rows.length > 0) {
-      const { error: insertError } = await supabase.from('weekly_actions').insert(rows);
+      const { error: insertError } = await supabase.from('weekly_summary_actions').insert(rows);
       if (insertError) return false;
     }
     return true;

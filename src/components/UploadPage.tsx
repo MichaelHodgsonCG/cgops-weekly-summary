@@ -208,7 +208,7 @@ export default function UploadPage() {
 
           for (const week of weeksToProcess) {
             const { data: existingUpload } = await supabase
-              .from('pl_uploads')
+              .from('weekly_summary_pl_uploads')
               .select('id')
               .eq('location_id', locationId)
               .eq('week_ending_date', week.weekEndingDate)
@@ -216,18 +216,18 @@ export default function UploadPage() {
 
             if (existingUpload) {
               await supabase
-                .from('pl_line_items')
+                .from('weekly_summary_pl_line_items')
                 .delete()
                 .eq('upload_id', existingUpload.id);
 
               await supabase
-                .from('pl_uploads')
+                .from('weekly_summary_pl_uploads')
                 .delete()
                 .eq('id', existingUpload.id);
             }
 
             const { data: upload, error: uploadError } = await supabase
-              .from('pl_uploads')
+              .from('weekly_summary_pl_uploads')
               .insert({
                 location_id: locationId,
                 week_ending_date: week.weekEndingDate,
@@ -274,7 +274,7 @@ export default function UploadPage() {
             });
 
             const { error: itemsError } = await supabase
-              .from('pl_line_items')
+              .from('weekly_summary_pl_line_items')
               .insert(lineItemsToInsert);
 
             if (itemsError) {

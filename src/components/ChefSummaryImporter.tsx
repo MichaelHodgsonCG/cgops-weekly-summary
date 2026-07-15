@@ -145,7 +145,7 @@ export function ChefSummaryImporter() {
       };
 
       const { error: upsertError } = await supabase
-        .from('weekly_chef_summary')
+        .from('weekly_summary_chef_summary')
         .upsert(summaryData, {
           onConflict: 'location_id,fiscal_year,period_number,week_number'
         });

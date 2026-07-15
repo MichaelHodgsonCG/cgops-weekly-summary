@@ -297,7 +297,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
   const loadSavedSummaries = async () => {
     try {
       const { data, error } = await supabase
-        .from('weekly_chef_summary')
+        .from('weekly_summary_chef_summary')
         .select('id, fiscal_year, period_number, week_number')
         .eq('location_id', locationId)
         .order('fiscal_year', { ascending: false })
@@ -315,7 +315,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('weekly_chef_summary')
+        .from('weekly_summary_chef_summary')
         .select('*')
         .eq('id', id)
         .maybeSingle();
@@ -378,7 +378,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
   const buildAutofillData = async (): Promise<Partial<WeeklySummaryData>> => {
     try {
       const { data: prev, error } = await supabase
-        .from('weekly_chef_summary')
+        .from('weekly_summary_chef_summary')
         .select('*')
         .eq('location_id', locationId)
         .order('fiscal_year', { ascending: false })
@@ -670,14 +670,14 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
       const quarterPeriods = getQuarterPeriods(formData.period_number);
 
       const { data: periodWeeks } = await supabase
-        .from('weekly_chef_summary')
+        .from('weekly_summary_chef_summary')
         .select('id, ideal_usage_amount, food_sales_labour_push')
         .eq('location_id', locationId)
         .eq('fiscal_year', formData.fiscal_year)
         .eq('period_number', formData.period_number);
 
       const { data: quarterWeeks } = await supabase
-        .from('weekly_chef_summary')
+        .from('weekly_summary_chef_summary')
         .select('id, ideal_usage_amount, food_sales_labour_push')
         .eq('location_id', locationId)
         .eq('fiscal_year', formData.fiscal_year)
@@ -739,11 +739,11 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
 
       const { error } = activeSummaryId
         ? await supabase
-            .from('weekly_chef_summary')
+            .from('weekly_summary_chef_summary')
             .update(payload)
             .eq('id', activeSummaryId)
         : await supabase
-            .from('weekly_chef_summary')
+            .from('weekly_summary_chef_summary')
             .upsert(payload, {
               onConflict: 'location_id,fiscal_year,period_number,week_number'
             });
@@ -784,7 +784,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     try {
       setDeleting(true);
       const { error } = await supabase
-        .from('weekly_chef_summary')
+        .from('weekly_summary_chef_summary')
         .delete()
         .eq('id', activeSummaryId);
 
@@ -841,7 +841,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     let nextPeriodFcap: NextPeriodFcap | undefined;
     try {
       const { data: fcapRow } = await supabase
-        .from('food_cost_action_plans')
+        .from('weekly_summary_food_cost_action_plans')
         .select('items')
         .eq('location_id', locationId)
         .eq('fiscal_year', formData.fiscal_year)
@@ -860,7 +860,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
         const nextFiscalYear = formData.period_number === 13 ? formData.fiscal_year + 1 : formData.fiscal_year;
         const nextPeriodNumber = formData.period_number === 13 ? 1 : formData.period_number + 1;
         const { data: nextFcapRow } = await supabase
-          .from('food_cost_action_plans')
+          .from('weekly_summary_food_cost_action_plans')
           .select('items')
           .eq('location_id', locationId)
           .eq('fiscal_year', nextFiscalYear)

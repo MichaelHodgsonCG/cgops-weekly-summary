@@ -56,7 +56,7 @@ export function ChefSummariesManager() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('weekly_chef_summary')
+        .from('weekly_summary_chef_summary')
         .select('id, location_id, week_number, period_number, fiscal_year, created_at')
         .eq('location_id', locationId)
         .order('fiscal_year', { ascending: false })

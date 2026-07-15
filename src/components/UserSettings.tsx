@@ -26,7 +26,7 @@ export default function UserSettings() {
   const loadUserData = async () => {
     setLoading(true);
     const { data, error } = await supabase
-      .from('users')
+      .from('weekly_summary_users')
       .select('name, pin')
       .eq('id', user?.id)
       .maybeSingle();
@@ -58,7 +58,7 @@ export default function UserSettings() {
 
     if (user) {
       const { data: prefData } = await supabase
-        .from('user_location_preferences')
+        .from('weekly_summary_user_location_preferences')
         .select('location_name')
         .eq('user_id', user.id);
 
@@ -93,7 +93,7 @@ export default function UserSettings() {
     if (pin) updates.pin = pin;
 
     const { error } = await supabase
-      .from('users')
+      .from('weekly_summary_users')
       .update(updates)
       .eq('id', user?.id);
 
@@ -125,7 +125,7 @@ export default function UserSettings() {
     setLocationMessage(null);
 
     await supabase
-      .from('user_location_preferences')
+      .from('weekly_summary_user_location_preferences')
       .delete()
       .eq('user_id', user.id);
 
@@ -135,7 +135,7 @@ export default function UserSettings() {
         location_name: loc,
       }));
       const { error } = await supabase
-        .from('user_location_preferences')
+        .from('weekly_summary_user_location_preferences')
         .insert(inserts);
 
       if (error) {

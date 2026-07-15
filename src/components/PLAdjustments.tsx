@@ -71,7 +71,7 @@ export function PLAdjustments() {
     setLoading(true);
 
     const { data } = await supabase
-      .from('pl_line_items')
+      .from('weekly_summary_pl_line_items')
       .select(`
         id,
         upload_id,
@@ -127,7 +127,7 @@ export function PLAdjustments() {
     setLoading(true);
 
     const { data: lineItem } = await supabase
-      .from('pl_line_items')
+      .from('weekly_summary_pl_line_items')
       .select('upload_id')
       .eq('id', lineItemId)
       .single();
@@ -139,7 +139,7 @@ export function PLAdjustments() {
     }
 
     const { data: foodSales } = await supabase
-      .from('pl_line_items')
+      .from('weekly_summary_pl_line_items')
       .select('current_actual')
       .eq('upload_id', lineItem.upload_id)
       .eq('line_item_name', config.salesLineItemName)
@@ -149,7 +149,7 @@ export function PLAdjustments() {
     const newPercentage = salesActual > 0 ? (newValue / salesActual) * 100 : null;
 
     const { error } = await supabase
-      .from('pl_line_items')
+      .from('weekly_summary_pl_line_items')
       .update({
         current_actual: newValue,
         current_actual_pct: newPercentage,
@@ -182,7 +182,7 @@ export function PLAdjustments() {
     if (!fiscalPeriod) return;
 
     const { data: weeksInPeriod } = await supabase
-      .from('pl_uploads')
+      .from('weekly_summary_pl_uploads')
       .select('id, week_ending_date')
       .eq('location_id', selectedLocation)
       .gte('week_ending_date', fiscalPeriod.period_start)
@@ -194,13 +194,13 @@ export function PLAdjustments() {
     const uploadIds = weeksInPeriod.map(w => w.id);
 
     const { data: costItems } = await supabase
-      .from('pl_line_items')
+      .from('weekly_summary_pl_line_items')
       .select('current_actual, upload_id')
       .eq('line_item_name', config.lineItemName)
       .in('upload_id', uploadIds);
 
     const { data: salesItems } = await supabase
-      .from('pl_line_items')
+      .from('weekly_summary_pl_line_items')
       .select('current_actual, upload_id')
       .eq('line_item_name', config.salesLineItemName)
       .in('upload_id', uploadIds);
@@ -220,7 +220,7 @@ export function PLAdjustments() {
       const ytdPercentage = runningSalesTotal > 0 ? (runningCostTotal / runningSalesTotal) * 100 : null;
 
       await supabase
-        .from('pl_line_items')
+        .from('weekly_summary_pl_line_items')
         .update({ ytd_actual: runningCostTotal, ytd_actual_pct: ytdPercentage })
         .eq('line_item_name', config.lineItemName)
         .eq('upload_id', week.id);

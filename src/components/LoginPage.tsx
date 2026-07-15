@@ -55,7 +55,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const selectedLocationName = selectedLocation === 'hq' ? 'HQ' : (locations.find(l => l.id === selectedLocation)?.name || '');
 
       const { data: user, error: dbError } = await supabase
-        .from('users')
+        .from('weekly_summary_users')
         .select('*')
         .eq('pin', pin)
         .maybeSingle();

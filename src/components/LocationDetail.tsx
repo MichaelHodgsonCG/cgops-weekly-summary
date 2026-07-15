@@ -34,7 +34,7 @@ export default function LocationDetail({ locationId, weekEndingDate: initialWeek
     if (locData) setLocation(locData);
 
     const { data: uploads } = await supabase
-      .from('pl_uploads')
+      .from('weekly_summary_pl_uploads')
       .select('week_ending_date')
       .eq('location_id', locationId)
       .order('week_ending_date', { ascending: false });
@@ -50,7 +50,7 @@ export default function LocationDetail({ locationId, weekEndingDate: initialWeek
     setLoading(true);
 
     const { data: itemsData } = await supabase
-      .from('pl_line_items')
+      .from('weekly_summary_pl_line_items')
       .select('*')
       .eq('location_id', locationId)
       .eq('week_ending_date', selectedWeek);

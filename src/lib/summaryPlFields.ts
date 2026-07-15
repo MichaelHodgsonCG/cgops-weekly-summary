@@ -89,7 +89,7 @@ export async function computePlDrivenSummaryFields(
 
   const quarterEndDates = calWeeks.map((w) => w.end_date);
   const { data: uploads } = await supabase
-    .from('pl_uploads')
+    .from('weekly_summary_pl_uploads')
     .select('id, week_ending_date')
     .eq('location_id', locationId)
     .in('week_ending_date', quarterEndDates)
@@ -98,7 +98,7 @@ export async function computePlDrivenSummaryFields(
 
   const uploadIds = uploads.map((u) => u.id);
   const { data: lineItems } = await supabase
-    .from('pl_line_items')
+    .from('weekly_summary_pl_line_items')
     .select('upload_id, line_item_name, current_actual, current_budget, current_actual_pct, current_budget_pct')
     .in('upload_id', uploadIds)
     .in('line_item_name', ['Food Sales', 'Cost of Sales (Food)', 'Kitchen Labour']);
@@ -254,7 +254,7 @@ export async function computeSageTrueUpVariance(
   const weekNumber = thisCal.week;
 
   const { data: summary } = await supabase
-    .from('weekly_chef_summary')
+    .from('weekly_summary_chef_summary')
     .select('food_sales_labour_push, usage_amount, labour_spent')
     .eq('location_id', locationId)
     .eq('fiscal_year', fiscalYear)
@@ -265,7 +265,7 @@ export async function computeSageTrueUpVariance(
 
   const periodEndDates = cal.filter((c) => c.end_date <= weekEndingDate).map((c) => c.end_date);
   const { data: uploads } = await supabase
-    .from('pl_uploads')
+    .from('weekly_summary_pl_uploads')
     .select('id, week_ending_date')
     .eq('location_id', locationId)
     .in('week_ending_date', periodEndDates)
@@ -279,7 +279,7 @@ export async function computeSageTrueUpVariance(
 
   const ids = [thisUpload.id, ...(priorUpload ? [priorUpload.id] : [])];
   const { data: items } = await supabase
-    .from('pl_line_items')
+    .from('weekly_summary_pl_line_items')
     .select('upload_id, line_item_name, current_actual')
     .in('upload_id', ids)
     .in('line_item_name', ['Food Sales', 'Cost of Sales (Food)', 'Kitchen Labour']);
@@ -325,7 +325,7 @@ export async function refreshSummaryPlFieldsForPeriod(
   period: number
 ): Promise<number> {
   const { data: summaries } = await supabase
-    .from('weekly_chef_summary')
+    .from('weekly_summary_chef_summary')
     .select('id, week_number, food_sales_labour_push, usage_amount, labour_spent')
     .eq('location_id', locationId)
     .eq('fiscal_year', fiscalYear)
@@ -344,7 +344,7 @@ export async function refreshSummaryPlFieldsForPeriod(
     });
     if (!fields) continue;
     const { error } = await supabase
-      .from('weekly_chef_summary')
+      .from('weekly_summary_chef_summary')
       .update({ ...fields, updated_at: new Date().toISOString() })
       .eq('id', s.id);
     if (!error) updated++;
