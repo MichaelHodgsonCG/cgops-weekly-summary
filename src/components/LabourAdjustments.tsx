@@ -55,7 +55,7 @@ export function LabourAdjustments() {
         id,
         upload_id,
         current_actual,
-        pl_uploads!inner(
+        pl_uploads:weekly_summary_pl_uploads!inner(
           week_ending_date,
           location_id,
           locations!inner(name)
