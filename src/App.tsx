@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, BarChart3, Trophy, TrendingUp, Menu, X, LogOut, Settings, User, Book, ClipboardCheck, FileText, Upload } from 'lucide-react';
+import { LayoutDashboard, BarChart3, Trophy, TrendingUp, Menu, X, LogOut, Settings, User, Book, ClipboardCheck, FileText, Upload, PanelLeft } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import LocationDetail from './components/LocationDetail';
 import UploadPage from './components/UploadPage';
@@ -20,6 +20,33 @@ import { supabase } from './lib/supabase';
 
 type View = 'dashboard' | 'upload' | 'detail' | 'portfolio' | 'compare' | 'rankings' | 'trends' | 'admin' | 'settings' | 'chef-summary' | 'chef' | 'guided-package' | 'variance-report';
 
+// The boxed "CG" lockup — Georgia serif per the CGOPS brand (the only serif use).
+function BrandMark({ size = 30 }: { size?: number }) {
+  return (
+    <span
+      className="flex items-center justify-center border-2 border-cg-text rounded flex-none"
+      style={{ width: size, height: Math.round(size * 0.78), fontFamily: 'Georgia, "Times New Roman", serif' }}
+    >
+      <span className="font-bold italic leading-none" style={{ fontSize: Math.round(size * 0.4), letterSpacing: '-0.5px' }}>CG</span>
+    </span>
+  );
+}
+
+const VIEW_TITLES: Record<string, string> = {
+  portfolio: 'Home',
+  rankings: 'Leaderboard',
+  dashboard: 'P&L',
+  detail: 'P&L',
+  upload: 'Upload',
+  trends: 'Trends',
+  chef: 'Chef',
+  'chef-summary': 'Chef',
+  'variance-report': 'Variance',
+  'guided-package': 'Guided Package',
+  settings: 'Settings',
+  admin: 'Admin',
+  compare: 'Compare',
+};
 
 function AppContent() {
   const { user, logout, isAdmin, isHQ, isExecChef } = useAuth();
@@ -28,6 +55,9 @@ function AppContent() {
   const [selectedWeek, setSelectedWeek] = useState<string>('');
   const [availableWeeks, setAvailableWeeks] = useState<string[]>([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // Sidebar starts collapsed (icon rail); a button toggles it open — matches the
+  // standard CGOPS shell.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   const hasHQAccess = isAdmin || isHQ || isExecChef;
 
@@ -84,98 +114,94 @@ function AppContent() {
     { id: 'guided-package' as View, label: 'Guided Package', icon: ClipboardCheck, mobile: false },
   ];
 
+  const isItemActive = (id: View) => view === id || (view === 'detail' && id === 'dashboard');
+
+  // A sidebar row (nav item or a bottom action). Collapsed = icon only + tooltip.
+  const railRow = (
+    key: string,
+    label: string,
+    Icon: typeof BarChart3,
+    active: boolean,
+    onClick: () => void,
+  ) => (
+    <button
+      key={key}
+      onClick={onClick}
+      title={sidebarCollapsed ? label : undefined}
+      className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+        active ? 'bg-cg-accentSoft text-cg-accent' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+      }`}
+    >
+      <Icon className="w-5 h-5 flex-none" />
+      {!sidebarCollapsed && <span className="truncate">{label}</span>}
+    </button>
+  );
+
+  const currentTitle = VIEW_TITLES[view] || 'Weekly Summary';
+
   return (
-    <div className="min-h-screen bg-slate-50 pb-20 md:pb-0">
-      <nav className="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm">
-        <div className="hidden md:block bg-slate-50 border-b border-slate-200">
-          <div className="max-w-7xl mx-auto px-6">
-            <div className="flex items-center justify-between h-12">
-              <h1 className="text-lg font-bold text-slate-800">Restaurant Analytics</h1>
-
-              {user && (
-                <div className="text-sm text-slate-600">
-                  Welcome, <span className="font-medium">{user.name}</span>
-                </div>
-              )}
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleViewChange('settings')}
-                  className="flex items-center gap-2 px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium transition-colors"
-                  title="Settings"
-                >
-                  <User className="w-4 h-4" />
-                  <span>Settings</span>
-                </button>
-
-                {isAdmin && (
-                  <button
-                    onClick={() => handleViewChange('admin')}
-                    className="flex items-center gap-2 px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium transition-colors"
-                    title="Admin Panel"
-                  >
-                    <Settings className="w-4 h-4" />
-                    <span>Admin</span>
-                  </button>
-                )}
-
-                {view !== 'admin' && view !== 'settings' && (
-                  <button
-                    onClick={logout}
-                    className="flex items-center gap-2 px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium transition-colors"
-                    title="Sign Out"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span>Sign Out</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
+    <div className="min-h-screen bg-cg-bg flex">
+      {/* Desktop left sidebar — collapsed icon rail by default, toggles open. */}
+      <aside
+        className="hidden md:flex flex-col bg-white border-r border-slate-200 shrink-0 sticky top-0 h-screen transition-[width] duration-200"
+        style={{ width: sidebarCollapsed ? 64 : 240 }}
+      >
+        <div className={`h-16 flex items-center border-b border-slate-200 flex-none ${sidebarCollapsed ? 'justify-center' : 'gap-2 px-4'}`}>
+          <BrandMark size={30} />
+          {!sidebarCollapsed && <span className="font-bold text-sm text-cg-text truncate">Weekly Summary</span>}
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="flex items-center justify-between h-16 md:h-14">
-            <div className="flex items-center gap-3 md:hidden">
-              <h1 className="text-base font-bold text-slate-800">Restaurant Analytics</h1>
-              {user && (
-                <span className="text-xs text-slate-600 hidden sm:inline">
-                  Welcome, {user.name}
-                </span>
-              )}
-            </div>
+        <nav className="flex-1 overflow-y-auto px-2 py-3 flex flex-col gap-1">
+          {navigationItems.map(item => railRow(item.id, item.label, item.icon, isItemActive(item.id), () => handleViewChange(item.id)))}
+        </nav>
 
-            <div className="hidden md:flex items-center justify-center gap-2 flex-1">
-              {navigationItems.map(item => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => handleViewChange(item.id)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                      view === item.id || (view === 'detail' && item.id === 'dashboard')
-                        ? 'bg-cg-accentSoft text-cg-accent'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
+        <div className="px-2 py-3 border-t border-slate-200 flex flex-col gap-1 flex-none">
+          {railRow('settings', 'Settings', User, view === 'settings', () => handleViewChange('settings'))}
+          {isAdmin && railRow('admin', 'Admin', Settings, view === 'admin', () => handleViewChange('admin'))}
+          {railRow('signout', 'Sign Out', LogOut, false, logout)}
+          <button
+            onClick={() => setSidebarCollapsed(v => !v)}
+            title={sidebarCollapsed ? 'Expand' : 'Collapse'}
+            className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors`}
+          >
+            <PanelLeft className="w-5 h-5 flex-none" />
+            {!sidebarCollapsed && <span className="truncate">Collapse</span>}
+          </button>
+        </div>
+      </aside>
 
+      {/* Main column */}
+      <div className="flex-1 min-w-0 flex flex-col pb-20 md:pb-0">
+        {/* Top bar */}
+        <header className="bg-white border-b border-slate-200 sticky top-0 z-20 h-16 md:h-14 flex items-center px-4 sm:px-6 gap-3">
+          <div className="flex items-center gap-2 md:hidden">
+            <BrandMark size={26} />
+            <h1 className="text-base font-bold text-cg-text">Weekly Summary</h1>
+          </div>
+
+          <div className="hidden md:flex items-baseline gap-3">
+            <span className="text-lg font-bold text-slate-900">{currentTitle}</span>
+            <span className="text-[11px] font-semibold tracking-[0.2em] uppercase text-slate-400">CG Platform — Charcoal Group</span>
+          </div>
+
+          <div className="ml-auto flex items-center gap-3">
+            {user && (
+              <span className="hidden sm:inline text-sm text-slate-600">
+                Welcome, <span className="font-medium">{user.name}</span>
+              </span>
+            )}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden ml-auto p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+              className="md:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
             >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </div>
-        </div>
+        </header>
 
+        {/* Mobile drawer */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-slate-200 bg-white">
+          <div className="md:hidden border-b border-slate-200 bg-white">
             <div className="px-4 py-3 space-y-1">
               {navigationItems.map(item => {
                 const Icon = item.icon;
@@ -184,7 +210,7 @@ function AppContent() {
                     key={item.id}
                     onClick={() => handleViewChange(item.id)}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                      view === item.id || (view === 'detail' && item.id === 'dashboard')
+                      isItemActive(item.id)
                         ? 'bg-cg-accentSoft text-cg-accent'
                         : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                     }`}
@@ -196,7 +222,7 @@ function AppContent() {
               })}
               <button
                 onClick={() => handleViewChange('settings')}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
               >
                 <User className="w-5 h-5" />
                 Settings
@@ -204,61 +230,61 @@ function AppContent() {
               {isAdmin && (
                 <button
                   onClick={() => handleViewChange('admin')}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
                 >
                   <Settings className="w-5 h-5" />
                   Admin Panel
                 </button>
               )}
-              {view !== 'admin' && view !== 'settings' && (
-                <button
-                  onClick={logout}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
-                >
-                  <LogOut className="w-5 h-5" />
-                  Sign Out
-                </button>
-              )}
+              <button
+                onClick={logout}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+              >
+                <LogOut className="w-5 h-5" />
+                Sign Out
+              </button>
             </div>
           </div>
         )}
-      </nav>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        {view === 'portfolio' && selectedWeek && <PortfolioView weekEndingDate={selectedWeek} />}
-        {view === 'compare' && selectedWeek && <ComparisonView weekEndingDate={selectedWeek} />}
-        {view === 'rankings' && selectedWeek && <RankingsView weekEndingDate={selectedWeek} />}
-        {view === 'trends' && selectedWeek && <TrendsView weekEndingDate={selectedWeek} />}
-        {view === 'chef' && <ChefConsolidationView />}
-        {view === 'chef-summary' && <ChefSummaryDashboard />}
-        {view === 'guided-package' && <GuidedWeeklyPackage />}
-        {view === 'variance-report' && <UsageVarianceReport />}
-        {view === 'dashboard' && (
-          <Dashboard
-            onLocationClick={handleLocationClick}
-            selectedWeek={selectedWeek}
-            setSelectedWeek={setSelectedWeek}
-            availableWeeks={availableWeeks}
-            onOpenBulkUpload={() => handleViewChange('upload')}
-          />
-        )}
-        {view === 'upload' && <UploadPage />}
-        {view === 'settings' && <UserSettings />}
-        {view === 'admin' && <AdminMenu onClose={() => handleViewChange('rankings')} />}
-        {view === 'detail' && (
-          <LocationDetail
-            locationId={selectedLocation}
-            weekEndingDate={selectedWeek}
-            onBack={handleBackToDashboard}
-          />
-        )}
+        {/* Content */}
+        <main className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 flex-1">
+          {view === 'portfolio' && selectedWeek && <PortfolioView weekEndingDate={selectedWeek} />}
+          {view === 'compare' && selectedWeek && <ComparisonView weekEndingDate={selectedWeek} />}
+          {view === 'rankings' && selectedWeek && <RankingsView weekEndingDate={selectedWeek} />}
+          {view === 'trends' && selectedWeek && <TrendsView weekEndingDate={selectedWeek} />}
+          {view === 'chef' && <ChefConsolidationView />}
+          {view === 'chef-summary' && <ChefSummaryDashboard />}
+          {view === 'guided-package' && <GuidedWeeklyPackage />}
+          {view === 'variance-report' && <UsageVarianceReport />}
+          {view === 'dashboard' && (
+            <Dashboard
+              onLocationClick={handleLocationClick}
+              selectedWeek={selectedWeek}
+              setSelectedWeek={setSelectedWeek}
+              availableWeeks={availableWeeks}
+              onOpenBulkUpload={() => handleViewChange('upload')}
+            />
+          )}
+          {view === 'upload' && <UploadPage />}
+          {view === 'settings' && <UserSettings />}
+          {view === 'admin' && <AdminMenu onClose={() => handleViewChange('rankings')} />}
+          {view === 'detail' && (
+            <LocationDetail
+              locationId={selectedLocation}
+              weekEndingDate={selectedWeek}
+              onBack={handleBackToDashboard}
+            />
+          )}
+        </main>
       </div>
 
+      {/* Mobile bottom tab bar */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-20">
         <div className="grid grid-cols-5 gap-1 p-2">
           {navigationItems.filter(item => item.mobile).map(item => {
             const Icon = item.icon;
-            const isActive = view === item.id || (view === 'detail' && item.id === 'dashboard');
+            const isActive = isItemActive(item.id);
             return (
               <button
                 key={item.id}
