@@ -1,16 +1,57 @@
-import { useState, useEffect } from 'react';
-import { Upload, AlertCircle, CheckCircle } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Upload, AlertCircle, CheckCircle, AlertTriangle, X } from 'lucide-react';
 import { supabase, Location } from '../lib/supabase';
 import { parseCSV, ParsedLineItem } from '../lib/csvParser';
 import { parseExcel, WeekData } from '../lib/excelParser';
 import { computeQtdForUpload } from '../lib/needToSave';
 import { refreshSummaryPlFieldsForPeriod, computeSageTrueUpVariance, LocationTrueUp } from '../lib/summaryPlFields';
 
+type ParseResult = {
+  lineItems: ParsedLineItem[];
+  errors: string[];
+  locationName?: string;
+  weekEndingDate?: string;
+  weeks?: WeekData[];
+};
+
+// A file we've parsed (client-side only, nothing written yet) held in memory so
+// the review table and the actual ingest use the exact same payload.
+type ParsedFile = {
+  file: File;
+  fileName: string;
+  result: ParseResult | null;
+  parseError?: string;
+};
+
+// One row of the pre-ingest review table (a file may contribute several weeks).
+type PreviewRow = {
+  key: string;
+  fileName: string;
+  locationName: string;
+  locationMatched: boolean;
+  willCreate: boolean;
+  weekEndingDate: string;
+  foodSales: number | null;
+  foodCost: number | null;
+  foodCostPct: number | null;
+  labour: number | null;
+  labourPct: number | null;
+  issues: string[];
+};
+
+// Food cost % this far outside a sane band almost always means a premature or
+// mis-parsed P&L (e.g. Wildcraft's 53%). Highlighted, never blocked.
+const FC_PCT_LOW = 10;
+const FC_PCT_HIGH = 45;
+const fcOutOfBand = (pct: number | null) => pct !== null && (pct < FC_PCT_LOW || pct > FC_PCT_HIGH);
+
 export default function UploadPage() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [selectedLocation, setSelectedLocation] = useState('');
   const [weekEndingDate, setWeekEndingDate] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  const [parsedFiles, setParsedFiles] = useState<ParsedFile[]>([]);
+  const [parsing, setParsing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{ total: number; completed: number; current: string }>({ total: 0, completed: 0, current: '' });
@@ -48,16 +89,17 @@ export default function UploadPage() {
       .replace(/[\u0300-\u036f]/g, '');
   };
 
-  const findOrCreateLocation = async (locationName: string): Promise<string | null> => {
+  // Read-only match against locations already in memory. Used for the preview so
+  // that reviewing files never creates anything.
+  const matchLocation = (locationName?: string): Location | null => {
+    if (!locationName) return null;
     const normalizedInput = normalizeText(locationName);
+    return locations.find(loc => normalizeText(loc.name) === normalizedInput) || null;
+  };
 
-    let matchedLocation = locations.find(
-      loc => normalizeText(loc.name) === normalizedInput
-    );
-
-    if (matchedLocation) {
-      return matchedLocation.id;
-    }
+  const findOrCreateLocation = async (locationName: string): Promise<string | null> => {
+    const matched = matchLocation(locationName);
+    if (matched) return matched.id;
 
     const code = locationName
       .toUpperCase()
@@ -79,36 +121,42 @@ export default function UploadPage() {
     return newLocation.id;
   };
 
+  // Parse every selected file up front (no DB writes) so we can show a review of
+  // exactly what will be ingested before anyone approves it.
   const processFiles = async (fileArray: File[]) => {
     setFiles(fileArray);
     setMessage(null);
+    setTrueUps([]);
+    setParsing(true);
 
-    if (fileArray.length === 1) {
-      const selectedFile = fileArray[0];
-      let result: { lineItems: ParsedLineItem[]; errors: string[]; locationName?: string; weekEndingDate?: string };
-
-      if (selectedFile.name.endsWith('.xlsx') || selectedFile.name.endsWith('.xls')) {
-        result = await parseExcel(selectedFile);
-      } else {
-        const text = await selectedFile.text();
-        result = parseCSV(text);
-      }
-
-      if (result.locationName) {
-        const locationId = await findOrCreateLocation(result.locationName);
-        if (locationId) {
-          setSelectedLocation(locationId);
+    const parsed: ParsedFile[] = [];
+    for (const file of fileArray) {
+      try {
+        let result: ParseResult;
+        if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+          result = await parseExcel(file);
+        } else {
+          const text = await file.text();
+          result = parseCSV(text);
         }
-      }
-
-      if (result.weekEndingDate) {
-        setWeekEndingDate(result.weekEndingDate);
-      }
-
-      if (result.errors.length > 0) {
-        setMessage({ type: 'error', text: result.errors.join(', ') });
+        parsed.push({ file, fileName: file.name, result });
+      } catch (e: any) {
+        parsed.push({ file, fileName: file.name, result: null, parseError: e?.message || 'Could not read file' });
       }
     }
+    setParsedFiles(parsed);
+
+    // Auto-fill the top selectors from a single file (unchanged behaviour).
+    if (fileArray.length === 1 && parsed[0]?.result) {
+      const r = parsed[0].result;
+      if (r.locationName) {
+        const matched = matchLocation(r.locationName);
+        if (matched) setSelectedLocation(matched.id);
+      }
+      if (r.weekEndingDate) setWeekEndingDate(r.weekEndingDate);
+    }
+
+    setParsing(false);
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -144,15 +192,91 @@ export default function UploadPage() {
     e.stopPropagation();
   };
 
+  const clearSelection = () => {
+    setFiles([]);
+    setParsedFiles([]);
+    setMessage(null);
+    const fileInput = document.getElementById('file-input') as HTMLInputElement;
+    if (fileInput) fileInput.value = '';
+  };
+
+  // Derived review rows — recomputed from the parsed files plus the current
+  // location/week selectors. Pure and synchronous: no DB access, no writes.
+  const previewRows = useMemo<PreviewRow[]>(() => {
+    const rows: PreviewRow[] = [];
+    for (const pf of parsedFiles) {
+      if (!pf.result) {
+        rows.push({
+          key: pf.fileName,
+          fileName: pf.fileName,
+          locationName: '—',
+          locationMatched: false,
+          willCreate: false,
+          weekEndingDate: '—',
+          foodSales: null,
+          foodCost: null,
+          foodCostPct: null,
+          labour: null,
+          labourPct: null,
+          issues: [pf.parseError || 'Could not parse this file'],
+        });
+        continue;
+      }
+
+      const r = pf.result;
+      const selected = selectedLocation ? locations.find(l => l.id === selectedLocation) || null : null;
+      const matched = selected || matchLocation(r.locationName);
+      const locationName = matched?.name || r.locationName || '(unresolved)';
+      const willCreate = !matched && !!r.locationName;
+
+      const weeks: WeekData[] = r.weeks && r.weeks.length > 0
+        ? r.weeks
+        : [{ weekEndingDate: r.weekEndingDate || weekEndingDate, lineItems: r.lineItems }];
+
+      for (const wk of weeks) {
+        const fs = wk.lineItems.find(li => li.line_item_name === 'Food Sales');
+        const fc = wk.lineItems.find(li => li.line_item_name === 'Cost of Sales (Food)');
+        const lab = wk.lineItems.find(li => li.line_item_name === 'Kitchen Labour');
+        const foodCostPct = fc?.current_actual_pct ?? null;
+
+        const issues: string[] = [];
+        if (r.errors && r.errors.length > 0) issues.push(...r.errors);
+        if (!matched && !r.locationName) issues.push('Location not determined — pick one above');
+        if (!wk.weekEndingDate) issues.push('No week ending date');
+        if (!fs) issues.push('Missing Food Sales line');
+        if (!fc) issues.push('Missing Cost of Sales (Food) line');
+        if (fcOutOfBand(foodCostPct)) issues.push(`Food cost ${foodCostPct?.toFixed(1)}% looks unusual — verify the source`);
+
+        rows.push({
+          key: `${pf.fileName}|${wk.weekEndingDate}`,
+          fileName: pf.fileName,
+          locationName,
+          locationMatched: !!matched,
+          willCreate,
+          weekEndingDate: wk.weekEndingDate || '—',
+          foodSales: fs?.current_actual ?? null,
+          foodCost: fc?.current_actual ?? null,
+          foodCostPct,
+          labour: lab?.current_actual ?? null,
+          labourPct: lab?.current_actual_pct ?? null,
+          issues,
+        });
+      }
+    }
+    return rows;
+  }, [parsedFiles, locations, selectedLocation, weekEndingDate]);
+
+  const flaggedCount = previewRows.filter(r => r.issues.length > 0).length;
+
   const handleUpload = async () => {
-    if (files.length === 0 || !weekEndingDate) {
+    if (parsedFiles.length === 0 || !weekEndingDate) {
       setMessage({ type: 'error', text: 'Please select at least one file and a week ending date' });
       return;
     }
 
     setUploading(true);
     setMessage(null);
-    setUploadProgress({ total: files.length, completed: 0, current: '' });
+    setUploadProgress({ total: parsedFiles.length, completed: 0, current: '' });
 
     const results = {
       successful: 0,
@@ -170,18 +294,20 @@ export default function UploadPage() {
     setTrueUps([]);
 
     try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        setUploadProgress({ total: files.length, completed: i, current: file.name });
+      // Ingest the payloads we already parsed for the review — no re-parsing, so
+      // what was approved is exactly what gets written.
+      for (let i = 0; i < parsedFiles.length; i++) {
+        const pf = parsedFiles[i];
+        const file = pf.file;
+        setUploadProgress({ total: parsedFiles.length, completed: i, current: file.name });
 
         try {
-          let result: { lineItems: ParsedLineItem[]; errors: string[]; locationName?: string; weekEndingDate?: string; weeks?: WeekData[] };
+          const result = pf.result;
 
-          if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-            result = await parseExcel(file);
-          } else {
-            const text = await file.text();
-            result = parseCSV(text);
+          if (!result) {
+            results.failed++;
+            results.errors.push(`${file.name}: ${pf.parseError || 'Could not parse file'}`);
+            continue;
           }
 
           if (result.errors.length > 0) {
@@ -305,7 +431,7 @@ export default function UploadPage() {
       // saved summaries for the periods we just uploaded P&L for, so reports and
       // dashboards reflect the new P&L without the chef re-saving. Best-effort.
       if (affectedPeriods.size > 0) {
-        setUploadProgress({ total: files.length, completed: files.length, current: 'Updating summaries...' });
+        setUploadProgress({ total: parsedFiles.length, completed: parsedFiles.length, current: 'Updating summaries...' });
         for (const key of affectedPeriods) {
           const [locId, fyStr, periodStr] = key.split('|');
           try {
@@ -319,7 +445,7 @@ export default function UploadPage() {
       // True up each uploaded week's chef estimate against the reconciled Sage
       // numbers, for the per-location variance panel. Best-effort.
       if (affectedWeeks.size > 0) {
-        setUploadProgress({ total: files.length, completed: files.length, current: 'Building variance report...' });
+        setUploadProgress({ total: parsedFiles.length, completed: parsedFiles.length, current: 'Building variance report...' });
         const variances: LocationTrueUp[] = [];
         for (const w of affectedWeeks.values()) {
           try {
@@ -333,7 +459,7 @@ export default function UploadPage() {
         setTrueUps(variances);
       }
 
-      setUploadProgress({ total: files.length, completed: files.length, current: '' });
+      setUploadProgress({ total: parsedFiles.length, completed: parsedFiles.length, current: '' });
 
       if (results.successful > 0 && results.failed === 0) {
         setMessage({
@@ -353,6 +479,7 @@ export default function UploadPage() {
       }
 
       setFiles([]);
+      setParsedFiles([]);
       const fileInput = document.getElementById('file-input') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
 
@@ -364,10 +491,12 @@ export default function UploadPage() {
     }
   };
 
+  const hasReview = parsedFiles.length > 0 && !uploading;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="max-w-5xl mx-auto space-y-6">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden max-w-2xl mx-auto w-full">
           <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-4">
             <h1 className="text-2xl font-semibold text-white flex items-center gap-2">
               <Upload className="w-6 h-6" />
@@ -386,6 +515,9 @@ export default function UploadPage() {
                 onChange={(e) => setWeekEndingDate(e.target.value)}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
               />
+              <p className="text-xs text-slate-500 mt-1">
+                Used only for files that don't carry their own week ending date.
+              </p>
             </div>
 
             <div>
@@ -423,26 +555,17 @@ export default function UploadPage() {
               </div>
             </div>
 
-            {files.length > 0 && (
-              <div className="bg-slate-50 rounded-lg p-4 max-h-60 overflow-y-auto">
-                <h3 className="text-sm font-medium text-slate-700 mb-2">
-                  Selected Files ({files.length}):
-                </h3>
-                <ul className="space-y-1">
-                  {files.map((file, index) => (
-                    <li key={index} className="text-sm text-slate-600 flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-600" />
-                      {file.name}
-                    </li>
-                  ))}
-                </ul>
+            {parsing && (
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 text-sm text-blue-800 flex items-center gap-2">
+                <Upload className="w-4 h-4 animate-pulse" />
+                Reading {files.length} file{files.length !== 1 ? 's' : ''}…
               </div>
             )}
 
             {uploading && uploadProgress.total > 0 && (
               <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
                 <div className="flex justify-between text-sm text-blue-900 mb-2">
-                  <span>Uploading files...</span>
+                  <span>Ingesting files...</span>
                   <span>{uploadProgress.completed} / {uploadProgress.total}</span>
                 </div>
                 <div className="w-full bg-blue-200 rounded-full h-2 mb-2">
@@ -475,18 +598,125 @@ export default function UploadPage() {
                 <span className="text-sm">{message.text}</span>
               </div>
             )}
-
-            <button
-              onClick={handleUpload}
-              disabled={uploading || files.length === 0 || !weekEndingDate}
-              className="w-full bg-slate-800 text-white py-3 rounded-lg font-medium hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
-            >
-              {uploading ? `Uploading ${uploadProgress.completed}/${uploadProgress.total}...` : `Upload ${files.length} File${files.length !== 1 ? 's' : ''}`}
-            </button>
           </div>
         </div>
 
+        {hasReview && (
+          <IngestReviewCard
+            rows={previewRows}
+            fileCount={parsedFiles.length}
+            flaggedCount={flaggedCount}
+            weekEndingDate={weekEndingDate}
+            onApprove={handleUpload}
+            onCancel={clearSelection}
+          />
+        )}
+
         {trueUps.length > 0 && <TrueUpVariancePanel trueUps={trueUps} />}
+      </div>
+    </div>
+  );
+}
+
+function IngestReviewCard({
+  rows,
+  fileCount,
+  flaggedCount,
+  weekEndingDate,
+  onApprove,
+  onCancel,
+}: {
+  rows: PreviewRow[];
+  fileCount: number;
+  flaggedCount: number;
+  weekEndingDate: string;
+  onApprove: () => void;
+  onCancel: () => void;
+}) {
+  const money = (v: number | null) =>
+    v === null ? '—' : `$${Math.round(v).toLocaleString('en-US')}`;
+  const pct = (v: number | null) => (v === null ? '—' : `${v.toFixed(1)}%`);
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="bg-slate-100 px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Review before ingesting</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            {rows.length} row{rows.length !== 1 ? 's' : ''} from {fileCount} file{fileCount !== 1 ? 's' : ''} ·{' '}
+            {flaggedCount > 0 ? (
+              <span className="text-amber-600 font-medium">{flaggedCount} flagged — double-check below</span>
+            ) : (
+              <span className="text-green-600 font-medium">nothing flagged</span>
+            )}
+            . Nothing is written until you approve.
+          </p>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-white">
+            <tr className="text-slate-500">
+              <th className="px-4 py-2 text-left font-medium">Location</th>
+              <th className="px-4 py-2 text-left font-medium">Week Ending</th>
+              <th className="px-4 py-2 text-right font-medium">Food Sales</th>
+              <th className="px-4 py-2 text-right font-medium">Cost of Sales</th>
+              <th className="px-4 py-2 text-right font-medium">FC %</th>
+              <th className="px-4 py-2 text-right font-medium">Kitchen Labour</th>
+              <th className="px-4 py-2 text-right font-medium">Lab %</th>
+              <th className="px-4 py-2 text-left font-medium">File</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const flagged = r.issues.length > 0;
+              const fcBad = fcOutOfBand(r.foodCostPct);
+              return (
+                <tr key={r.key} className={`border-t border-slate-100 ${flagged ? 'bg-amber-50' : ''}`}>
+                  <td className="px-4 py-2 text-slate-800 font-medium whitespace-nowrap">
+                    <span className="flex items-center gap-1">
+                      {flagged && <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />}
+                      {r.locationName}
+                      {r.willCreate && (
+                        <span className="ml-1 text-[10px] uppercase tracking-wide bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">new</span>
+                      )}
+                    </span>
+                    {flagged && (
+                      <span className="block text-xs text-amber-700 mt-0.5">{r.issues.join(' · ')}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-slate-600 whitespace-nowrap">{r.weekEndingDate}</td>
+                  <td className="px-4 py-2 text-right text-slate-700">{money(r.foodSales)}</td>
+                  <td className="px-4 py-2 text-right text-slate-700">{money(r.foodCost)}</td>
+                  <td className={`px-4 py-2 text-right font-semibold ${fcBad ? 'text-amber-700' : 'text-slate-700'}`}>
+                    {pct(r.foodCostPct)}
+                  </td>
+                  <td className="px-4 py-2 text-right text-slate-700">{money(r.labour)}</td>
+                  <td className="px-4 py-2 text-right text-slate-500">{pct(r.labourPct)}</td>
+                  <td className="px-4 py-2 text-left text-slate-400 text-xs truncate max-w-[180px]" title={r.fileName}>{r.fileName}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-3">
+        <button
+          onClick={onCancel}
+          className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium transition-colors"
+        >
+          <X className="w-4 h-4" />
+          Cancel
+        </button>
+        <button
+          onClick={onApprove}
+          disabled={!weekEndingDate}
+          className="bg-slate-800 text-white px-6 py-2 rounded-lg font-medium hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+        >
+          Approve &amp; Ingest {fileCount} File{fileCount !== 1 ? 's' : ''}
+        </button>
       </div>
     </div>
   );
