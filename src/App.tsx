@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, BarChart3, Trophy, TrendingUp, Menu, X, LogOut, Settings, User, Book, ClipboardCheck, FileText, Upload, PanelLeft } from 'lucide-react';
+import { LayoutDashboard, BarChart3, Trophy, TrendingUp, Menu, X, LogOut, Settings, User, Book, FileText, Upload, PanelLeft } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import LocationDetail from './components/LocationDetail';
 import UploadPage from './components/UploadPage';
@@ -13,7 +13,6 @@ import { LocationDashboard } from './components/LocationDashboard';
 import { ChefSummaryDashboard } from './components/ChefSummaryDashboard';
 import { ChefConsolidationView } from './components/ChefConsolidationView';
 import UserSettings from './components/UserSettings';
-import { GuidedWeeklyPackage } from './components/GuidedWeeklyPackage';
 import { UsageVarianceReport } from './components/UsageVarianceReport';
 import { useAuth } from './lib/auth';
 import { supabase } from './lib/supabase';
@@ -107,11 +106,11 @@ function AppContent() {
     { id: 'portfolio' as View, label: 'Home', icon: BarChart3, mobile: true },
     { id: 'rankings' as View, label: 'Leaderboard', icon: Trophy, mobile: true },
     { id: 'dashboard' as View, label: 'P&L', icon: LayoutDashboard, mobile: true },
-    { id: 'upload' as View, label: 'Upload', icon: Upload, mobile: false },
+    // Upload P&L is an admin-only function.
+    ...(isAdmin ? [{ id: 'upload' as View, label: 'Upload', icon: Upload, mobile: false }] : []),
     { id: 'trends' as View, label: 'Trends', icon: TrendingUp, mobile: true },
     { id: 'chef' as View, label: 'Chef', icon: Book, mobile: true },
     { id: 'variance-report' as View, label: 'Variance', icon: FileText, mobile: false },
-    { id: 'guided-package' as View, label: 'Guided Package', icon: ClipboardCheck, mobile: false },
   ];
 
   const isItemActive = (id: View) => view === id || (view === 'detail' && id === 'dashboard');
@@ -255,7 +254,6 @@ function AppContent() {
           {view === 'trends' && selectedWeek && <TrendsView weekEndingDate={selectedWeek} />}
           {view === 'chef' && <ChefConsolidationView />}
           {view === 'chef-summary' && <ChefSummaryDashboard />}
-          {view === 'guided-package' && <GuidedWeeklyPackage />}
           {view === 'variance-report' && <UsageVarianceReport />}
           {view === 'dashboard' && (
             <Dashboard
@@ -263,7 +261,7 @@ function AppContent() {
               selectedWeek={selectedWeek}
               setSelectedWeek={setSelectedWeek}
               availableWeeks={availableWeeks}
-              onOpenBulkUpload={() => handleViewChange('upload')}
+              onOpenBulkUpload={isAdmin ? () => handleViewChange('upload') : undefined}
             />
           )}
           {view === 'upload' && <UploadPage />}

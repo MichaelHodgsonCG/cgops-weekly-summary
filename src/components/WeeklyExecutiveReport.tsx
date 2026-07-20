@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { FileText, Loader2, Download, Sparkles, Calendar, ChevronRight, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useCurrentFiscalPeriod, useFiscalCalendar } from '../lib/useFiscalCalendar';
-import { ChefSummariesTable } from './ChefSummariesTable';
 import { buildChefSummaryReport } from '../lib/chefSummaryReport';
 
 type WeeklyReport = {
@@ -46,7 +45,6 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<'report' | 'summaries' | 'journals'>('report');
   const [generatingStatements, setGeneratingStatements] = useState(false);
 
   const isUsingProps = !!(propFiscalYear && propPeriod && propWeek);
@@ -793,44 +791,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
         </div>
       </div>
 
-      <div className="border-b border-slate-200">
-        <nav className="flex gap-1">
-          <button
-            onClick={() => setActiveTab('report')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'report'
-                ? 'border-cg-accent text-slate-800'
-                : 'border-transparent text-slate-600 hover:text-slate-800'
-            }`}
-          >
-            <FileText className="w-4 h-4 inline-block mr-2" />
-            Executive Report
-          </button>
-          <button
-            onClick={() => setActiveTab('summaries')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'summaries'
-                ? 'border-cg-accent text-slate-800'
-                : 'border-transparent text-slate-600 hover:text-slate-800'
-            }`}
-          >
-            Summaries Table
-          </button>
-          <button
-            onClick={() => setActiveTab('journals')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'journals'
-                ? 'border-cg-accent text-slate-800'
-                : 'border-transparent text-slate-600 hover:text-slate-800'
-            }`}
-          >
-            Journals
-          </button>
-        </nav>
-      </div>
-
-      {activeTab === 'report' && (
-        <div className="space-y-6">
+      <div className="space-y-6">
           {/* Opening Statement */}
           <div className="bg-white rounded-lg border border-slate-200 p-6">
             <div className="flex items-center justify-between mb-3">
@@ -876,15 +837,6 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
             )}
           </div>
         </div>
-      )}
-
-      {activeTab === 'summaries' && (
-        <ChefSummariesTable fiscalYear={currentPeriod!.fiscal_year} period={currentPeriod!.period} week={currentPeriod!.week} />
-      )}
-
-      {activeTab === 'journals' && (
-        <JournalsTable fiscalYear={currentPeriod!.fiscal_year} period={currentPeriod!.period} week={currentPeriod!.week} />
-      )}
     </div>
   );
 }
@@ -1647,243 +1599,6 @@ function ConsolidatedSummaries({ fiscalYear, period, week }: { fiscalYear: numbe
       <SummarySection title="CG Consolidated — All Restaurants" data={metrics.allRestaurants} bold />
       <SummarySection title="Beertown + Sociable" data={metrics.beertownSociable} bold />
       <SummarySection title="Trinity (WC/TBK/Sole)" data={metrics.trinity} />
-    </div>
-  );
-}
-
-function JournalsTable({ fiscalYear, period, week }: { fiscalYear: number; period: number; week: number }) {
-  const [journals, setJournals] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [generatingAll, setGeneratingAll] = useState(false);
-
-  useEffect(() => {
-    loadJournals();
-  }, [fiscalYear, period, week]);
-
-  const loadJournals = async () => {
-    setLoading(true);
-
-    const { data, error } = await supabase
-      .from('weekly_summary_chef_summary')
-      .select('id, locations!inner(name, code), notes, hiring_notes, tm_mots_of_note, food_cost_summary, labour_summary, boh_promo_summary, action_plan_summary, ai_summary')
-      .eq('fiscal_year', fiscalYear)
-      .eq('period_number', period)
-      .eq('week_number', week)
-      .eq('locations.exclude_from_reporting', false)
-      .order('locations(code)');
-
-    if (error) {
-      console.error('Error loading journals:', error);
-      setLoading(false);
-      return;
-    }
-
-    const transformedData = (data || []).map((item: any) => ({
-      id: item.id,
-      location_name: item.locations?.name || 'Unknown',
-      notes: item.notes,
-      hiring_notes: item.hiring_notes,
-      tm_mots_of_note: item.tm_mots_of_note,
-      food_cost_summary: item.food_cost_summary,
-      labour_summary: item.labour_summary,
-      boh_promo_summary: item.boh_promo_summary,
-      action_plan_summary: item.action_plan_summary,
-      ai_summary: item.ai_summary
-    }));
-
-    setJournals(transformedData);
-    setLoading(false);
-  };
-
-  const toggleRow = (id: string) => {
-    const newExpanded = new Set(expandedRows);
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id);
-    } else {
-      newExpanded.add(id);
-    }
-    setExpandedRows(newExpanded);
-  };
-
-  const generateAllSummaries = async () => {
-    setGeneratingAll(true);
-    try {
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-chef-summary`;
-
-      const summariesData = journals.map(j => ({
-        id: j.id,
-        location_name: j.location_name,
-        food_cost_summary: j.food_cost_summary,
-        labour_summary: j.labour_summary,
-        boh_promo_summary: j.boh_promo_summary,
-        notes: j.notes,
-        action_plan_summary: j.action_plan_summary,
-        hiring_notes: j.hiring_notes,
-        tm_mots_of_note: j.tm_mots_of_note
-      }));
-
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ summaries: summariesData })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to generate summaries');
-      }
-
-      const { results } = await response.json();
-
-      for (const result of results) {
-        await supabase
-          .from('weekly_summary_chef_summary')
-          .update({ ai_summary: result.ai_summary })
-          .eq('id', result.id);
-      }
-
-      await loadJournals();
-    } catch (error) {
-      console.error('Error generating summaries:', error);
-      alert('Failed to generate AI summaries. Please try again.');
-    } finally {
-      setGeneratingAll(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="bg-white rounded-lg border border-slate-200 p-12 text-center">
-        <Loader2 className="w-8 h-8 animate-spin text-slate-400 mx-auto mb-2" />
-        <p className="text-slate-600">Loading journals...</p>
-      </div>
-    );
-  }
-
-  if (journals.length === 0) {
-    return (
-      <div className="bg-white rounded-lg border border-slate-200 p-12 text-center">
-        <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-        <p className="text-slate-600">No journals found for this period.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <button
-          onClick={generateAllSummaries}
-          disabled={generatingAll || journals.length === 0}
-          className="flex items-center gap-2 px-4 py-2 bg-cg-accent text-white rounded-lg hover:bg-cg-accentHover disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
-        >
-          {generatingAll ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Generating AI Summaries...
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-4 h-4" />
-              Generate AI Summaries
-            </>
-          )}
-        </button>
-      </div>
-
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider w-12">
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                  Location
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                  AI Summary
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {journals.map((journal) => (
-                <>
-                  <tr key={journal.id} className="hover:bg-slate-50">
-                    <td className="px-6 py-4">
-                      <button
-                        onClick={() => toggleRow(journal.id)}
-                        className="text-slate-500 hover:text-slate-700 transition-colors"
-                      >
-                        <ChevronRight className={`w-5 h-5 transition-transform ${expandedRows.has(journal.id) ? 'rotate-90' : ''}`} />
-                      </button>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
-                      {journal.location_name}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-700">
-                      <div className="max-w-2xl">
-                        {journal.ai_summary ? (
-                          <p className="leading-relaxed">{journal.ai_summary}</p>
-                        ) : (
-                          <span className="text-slate-400 italic">No AI summary generated yet</span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                  {expandedRows.has(journal.id) && (
-                    <tr className="bg-slate-50">
-                      <td colSpan={3} className="px-6 py-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">Food Cost Summary</h4>
-                            <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                              {journal.food_cost_summary || <span className="text-slate-400">-</span>}
-                            </p>
-                          </div>
-                          <div>
-                            <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">Labour Summary</h4>
-                            <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                              {journal.labour_summary || <span className="text-slate-400">-</span>}
-                            </p>
-                          </div>
-                          <div>
-                            <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">BOH Promo Summary</h4>
-                            <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                              {journal.boh_promo_summary || <span className="text-slate-400">-</span>}
-                            </p>
-                          </div>
-                          <div>
-                            <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">Action Plan Summary</h4>
-                            <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                              {journal.action_plan_summary || <span className="text-slate-400">-</span>}
-                            </p>
-                          </div>
-                          <div>
-                            <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">Hiring Notes</h4>
-                            <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                              {journal.hiring_notes || <span className="text-slate-400">-</span>}
-                            </p>
-                          </div>
-                          <div className="md:col-span-2">
-                            <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">Team Member Notes</h4>
-                            <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                              {journal.tm_mots_of_note || <span className="text-slate-400">-</span>}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 }
