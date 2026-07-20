@@ -212,7 +212,7 @@ export default function LocationDetail({ locationId, weekEndingDate: initialWeek
                       className="appearance-none bg-transparent text-white text-sm font-medium pr-6 focus:outline-none cursor-pointer"
                     >
                       {availableWeeks.map(week => (
-                        <option key={week} value={week} className="bg-slate-800 text-white">
+                        <option key={week} value={week} className="bg-cg-accent text-white">
                           Week Ending {new Date(week + 'T00:00:00').toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' })}
                         </option>
                       ))}

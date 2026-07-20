@@ -143,7 +143,7 @@ export function ChefSummariesManager() {
           </div>
           <button
             onClick={() => setShowNewSummary(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-cg-accent text-white rounded-lg hover:bg-cg-accentHover transition-colors"
           >
             <ChefHat className="w-5 h-5" />
             New Summary
@@ -152,7 +152,7 @@ export function ChefSummariesManager() {
 
         {loading ? (
           <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-slate-800"></div>
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-cg-accent"></div>
             <p className="mt-2 text-slate-600">Loading summaries...</p>
           </div>
         ) : summaries.length === 0 ? (
@@ -162,7 +162,7 @@ export function ChefSummariesManager() {
             <p className="text-slate-600 mb-4">Create your first chef summary for this location</p>
             <button
               onClick={() => setShowNewSummary(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-cg-accent text-white rounded-lg hover:bg-cg-accentHover transition-colors"
             >
               <ChefHat className="w-5 h-5" />
               Create Summary
@@ -192,7 +192,7 @@ export function ChefSummariesManager() {
                 </div>
                 <button
                   onClick={() => setSelectedSummary(summary)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-cg-accent text-white rounded-lg hover:bg-cg-accentHover transition-colors"
                 >
                   <Edit2 className="w-4 h-4" />
                   Edit Summary
@@ -223,7 +223,7 @@ export function ChefSummariesManager() {
 
       {loading ? (
         <div className="text-center py-12">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-slate-800"></div>
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-cg-accent"></div>
           <p className="mt-2 text-slate-600">Loading locations...</p>
         </div>
       ) : locations.length === 0 ? (

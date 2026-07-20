@@ -176,7 +176,7 @@ export default function ComparisonView({ weekEndingDate }: ComparisonViewProps) 
                   key={location.id}
                   className={`flex items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
                     selectedLocationIds.includes(location.id)
-                      ? 'border-slate-800 bg-slate-50'
+                      ? 'border-cg-accent bg-slate-50'
                       : 'border-slate-200 hover:border-slate-300'
                   }`}
                 >
@@ -215,10 +215,10 @@ export default function ComparisonView({ weekEndingDate }: ComparisonViewProps) 
 
           return (
             <div key={location.id} className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-              <div className="bg-slate-800 px-4 py-3">
-                <h3 className="text-base font-semibold text-white truncate">{location.name}</h3>
+              <div className="bg-cg-surface2 px-4 py-3 border-b border-cg-border">
+                <h3 className="text-base font-semibold text-cg-text truncate">{location.name}</h3>
                 {location.region && (
-                  <span className="text-xs text-slate-300">{getRegionDisplayName(location.region)}</span>
+                  <span className="text-xs text-cg-muted">{getRegionDisplayName(location.region)}</span>
                 )}
               </div>
 
@@ -276,11 +276,11 @@ export default function ComparisonView({ weekEndingDate }: ComparisonViewProps) 
 
           return (
             <div key={location.id} className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-              <div className="bg-slate-800 px-4 py-3 flex items-center justify-between">
+              <div className="bg-cg-surface2 px-4 py-3 border-b border-cg-border flex items-center justify-between">
                 <div>
-                  <h3 className="text-base font-semibold text-white">{location.name}</h3>
+                  <h3 className="text-base font-semibold text-cg-text">{location.name}</h3>
                   {location.region && (
-                    <span className="text-xs text-slate-300">{getRegionDisplayName(location.region)}</span>
+                    <span className="text-xs text-cg-muted">{getRegionDisplayName(location.region)}</span>
                   )}
                 </div>
               </div>

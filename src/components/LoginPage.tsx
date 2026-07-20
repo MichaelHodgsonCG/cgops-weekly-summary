@@ -103,7 +103,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       <div className="w-full max-w-md">
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="flex flex-col items-center mb-8">
-            <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mb-4">
+            <div className="w-16 h-16 bg-cg-accent rounded-full flex items-center justify-center mb-4">
               <Lock className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-3xl font-bold text-gray-900">Welcome</h1>
@@ -129,7 +129,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                     value={selectedLocation}
                     onChange={(e) => setSelectedLocation(e.target.value)}
                     disabled={loading}
-                    className="w-full appearance-none px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-gray-800 cursor-pointer"
+                    className="w-full appearance-none px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 focus:border-transparent bg-white text-gray-800 cursor-pointer"
                   >
                     <option value="">Select your location...</option>
                     <option value="hq">HQ</option>
@@ -161,7 +161,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 value={pin}
                 onChange={handlePinChange}
                 placeholder="Enter PIN"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent text-center text-2xl tracking-widest"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 focus:border-transparent text-center text-2xl tracking-widest"
                 maxLength={8}
                 inputMode="numeric"
                 pattern="[0-9]*"
@@ -179,7 +179,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             <button
               type="submit"
               disabled={loading || pin.length < 4 || !selectedLocation}
-              className="w-full bg-slate-800 hover:bg-slate-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
+              className="w-full bg-cg-accent hover:bg-cg-accentHover disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>

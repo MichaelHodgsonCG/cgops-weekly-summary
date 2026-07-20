@@ -162,7 +162,7 @@ export function UsersManager() {
               setShowAddForm(true);
               setFormData({ name: '', restaurant: '', pin: generatePin(), role: '' });
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition-colors font-medium"
+            className="flex items-center gap-2 px-4 py-2 bg-cg-accent text-white rounded-lg hover:bg-cg-accentHover transition-colors font-medium"
           >
             <Plus className="w-4 h-4" />
             Add User
@@ -182,7 +182,7 @@ export function UsersManager() {
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 focus:border-transparent"
                 placeholder="Enter name"
               />
             </div>
@@ -193,7 +193,7 @@ export function UsersManager() {
               <select
                 value={formData.restaurant}
                 onChange={(e) => setFormData({ ...formData, restaurant: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 focus:border-transparent"
                 required
               >
                 <option value="">Select Restaurant</option>
@@ -213,7 +213,7 @@ export function UsersManager() {
                   type="text"
                   value={formData.pin}
                   onChange={(e) => setFormData({ ...formData, pin: e.target.value.replace(/\D/g, '').slice(0, 6) })}
-                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent font-mono"
+                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 focus:border-transparent font-mono"
                   placeholder="6-digit PIN"
                   maxLength={6}
                   required
@@ -234,7 +234,7 @@ export function UsersManager() {
               <select
                 value={formData.role}
                 onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 focus:border-transparent"
               >
                 <option value="">Select a role...</option>
                 {roles.map(role => (
@@ -256,7 +256,7 @@ export function UsersManager() {
             <button
               onClick={handleAddUser}
               disabled={!formData.pin || formData.pin.length !== 6 || !formData.restaurant}
-              className="px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors font-medium"
+              className="px-4 py-2 bg-cg-accent text-white rounded-lg hover:bg-cg-accentHover disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors font-medium"
             >
               Add User
             </button>

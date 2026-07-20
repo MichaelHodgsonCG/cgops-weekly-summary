@@ -249,7 +249,7 @@ export default function TrendsView({ weekEndingDate }: TrendsViewProps) {
                   key={location.id}
                   className={`flex items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
                     selectedLocationIds.includes(location.id)
-                      ? 'border-slate-800 bg-slate-50'
+                      ? 'border-cg-accent bg-slate-50'
                       : 'border-slate-200 hover:border-slate-300'
                   }`}
                 >
@@ -272,7 +272,7 @@ export default function TrendsView({ weekEndingDate }: TrendsViewProps) {
             <select
               value={selectedMetric}
               onChange={(e) => setSelectedMetric(e.target.value as MetricType)}
-              className="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-slate-800"
+              className="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-cg-accent/40"
             >
               {metrics.map(metric => (
                 <option key={metric.id} value={metric.id}>{metric.label}</option>
@@ -284,7 +284,7 @@ export default function TrendsView({ weekEndingDate }: TrendsViewProps) {
             <select
               value={weeks}
               onChange={(e) => setWeeks(Number(e.target.value))}
-              className="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-slate-800"
+              className="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-cg-accent/40"
             >
               <option value={4}>4 Weeks</option>
               <option value={8}>8 Weeks</option>
