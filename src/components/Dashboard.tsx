@@ -19,12 +19,14 @@ export default function Dashboard({
   onLocationClick,
   selectedWeek: parentSelectedWeek,
   setSelectedWeek: parentSetSelectedWeek,
-  availableWeeks: parentAvailableWeeks
+  availableWeeks: parentAvailableWeeks,
+  onOpenBulkUpload
 }: {
   onLocationClick: (locationId: string, weekEndingDate: string) => void;
   selectedWeek: string;
   setSelectedWeek: (week: string) => void;
   availableWeeks: string[];
+  onOpenBulkUpload?: () => void;
 }) {
   const [locationData, setLocationData] = useState<LocationData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -424,20 +426,30 @@ export default function Dashboard({
               <Upload className="w-5 h-5" />
               Upload P&L Data
             </h2>
-            <p className="mt-1 text-sm text-slate-500">Upload weekly P&L reports in CSV or Excel format</p>
+            <p className="mt-1 text-sm text-slate-500">Upload weekly P&amp;L reports in CSV or Excel format — do all locations at once with the blue button.</p>
           </div>
 
-          <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer transition-colors">
-            <Upload className="w-5 h-5" />
-            <span>{uploading ? 'Uploading...' : 'Upload P&L'}</span>
-            <input
-              type="file"
-              accept=".csv,.xlsx,.xls"
-              onChange={handleFileChange}
-              disabled={uploading}
-              className="hidden"
-            />
-          </label>
+          <div className="flex items-center gap-2">
+            {onOpenBulkUpload && (
+              <button
+                onClick={onOpenBulkUpload}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Upload className="w-5 h-5" />
+                <span>Upload P&amp;L (all at once)</span>
+              </button>
+            )}
+            <label className="flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors text-sm">
+              <span>{uploading ? 'Uploading…' : 'Single file'}</span>
+              <input
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={handleFileChange}
+                disabled={uploading}
+                className="hidden"
+              />
+            </label>
+          </div>
         </div>
 
         {file && (
