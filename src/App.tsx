@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, BarChart3, Trophy, TrendingUp, Menu, X, LogOut, Settings, User, Book, ClipboardCheck, FileText } from 'lucide-react';
+import { LayoutDashboard, BarChart3, Trophy, TrendingUp, Menu, X, LogOut, Settings, User, Book, ClipboardCheck, FileText, Upload } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import LocationDetail from './components/LocationDetail';
 import UploadPage from './components/UploadPage';
@@ -77,6 +77,7 @@ function AppContent() {
     { id: 'portfolio' as View, label: 'Home', icon: BarChart3, mobile: true },
     { id: 'rankings' as View, label: 'Leaderboard', icon: Trophy, mobile: true },
     { id: 'dashboard' as View, label: 'P&L', icon: LayoutDashboard, mobile: true },
+    { id: 'upload' as View, label: 'Upload', icon: Upload, mobile: false },
     { id: 'trends' as View, label: 'Trends', icon: TrendingUp, mobile: true },
     { id: 'chef' as View, label: 'Chef', icon: Book, mobile: true },
     { id: 'variance-report' as View, label: 'Variance', icon: FileText, mobile: false },
@@ -238,6 +239,7 @@ function AppContent() {
             selectedWeek={selectedWeek}
             setSelectedWeek={setSelectedWeek}
             availableWeeks={availableWeeks}
+            onOpenBulkUpload={() => handleViewChange('upload')}
           />
         )}
         {view === 'upload' && <UploadPage />}
