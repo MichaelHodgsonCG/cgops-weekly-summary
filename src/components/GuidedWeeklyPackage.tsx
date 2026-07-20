@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { ClipboardCheck, Upload, CheckCircle2, AlertCircle, X, Plus, Trash2, Pencil } from 'lucide-react';
+import { ClipboardCheck, Upload, CheckCircle2, AlertCircle, X, Plus, Trash2, Pencil, FileDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { supabase } from '../lib/supabase';
 import { fetchLabourPlBaseline, fetchSalesPlBaseline, fetchFoodCostPlBaseline, getWeeksRemainingInYear, LabourPlBaseline, SalesPlBaseline, FoodCostPlBaseline } from '../lib/needToSave';
 import { NextPeriodFcap } from '../lib/chefSummaryExport';
+import { buildChefSummaryReport } from '../lib/chefSummaryReport';
 
 type GuidedStep = 'start' | 'sales' | 'transfers' | 'overtime' | 'review' | 'discounts' | 'speedOfService' | 'salesRecap' | 'cogs' | 'purchases' | 'usageReview' | 'finalFoodCost' | 'finalFoodCostRecap' | 'nextPeriodFcap' | 'team' | 'facilities' | 'features' | 'audit' | 'recap';
 
@@ -6319,6 +6320,32 @@ function GuidedRecapStep({
     await saveWeekAheadActions();
     onFinish();
   };
+
+  // Regenerate the full Chef Summary PDF from the latest saved figures. Use this
+  // after correcting something (e.g. a re-uploaded GL) to get a fresh PDF without
+  // redoing the week — it pulls the same saved data the HQ report uses.
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfError, setPdfError] = useState('');
+  const handleDownloadPdf = async () => {
+    if (!locationId || !fiscalYear || !periodNumber || !weekNumber) {
+      setPdfError('Missing location or week — cannot build the report.');
+      return;
+    }
+    setPdfBusy(true);
+    setPdfError('');
+    try {
+      // Persist any just-committed actions first so they land in the PDF.
+      await saveWeekAheadActions();
+      const result = await buildChefSummaryReport(
+        locationId, locationName || 'Location', fiscalYear, periodNumber, weekNumber, 'save'
+      );
+      if (!result.ok) setPdfError(result.error);
+    } catch (e) {
+      setPdfError(e instanceof Error ? e.message : 'Failed to build the PDF.');
+    } finally {
+      setPdfBusy(false);
+    }
+  };
   const recapSections: { label: string; value: string }[] = [
     { label: 'Sales Action Plan', value: salesActionPlan },
     { label: 'Food Cost Action Plan', value: foodCostComments },
@@ -6458,19 +6485,32 @@ function GuidedRecapStep({
         />
       </div>
 
-      <div className="mt-8 flex justify-between">
+      {pdfError && <p className="mt-4 text-sm text-red-600">{pdfError}</p>}
+
+      <div className="mt-8 flex items-center justify-between gap-3">
         <button
           onClick={onBack}
           className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
         >
           Back
         </button>
-        <button
-          onClick={handleFinish}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
-        >
-          Finish
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleDownloadPdf}
+            disabled={pdfBusy}
+            title="Rebuild the Chef Summary PDF from the latest saved numbers"
+            className="flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-100 transition-colors disabled:opacity-50"
+          >
+            <FileDown className="w-4 h-4" />
+            {pdfBusy ? 'Building…' : 'Regenerate PDF'}
+          </button>
+          <button
+            onClick={handleFinish}
+            className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          >
+            Finish
+          </button>
+        </div>
       </div>
     </div>
   );

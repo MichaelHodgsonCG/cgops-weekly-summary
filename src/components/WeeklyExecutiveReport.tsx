@@ -3,7 +3,7 @@ import { FileText, Loader2, Download, Sparkles, Calendar, ChevronRight, Check } 
 import { supabase } from '../lib/supabase';
 import { useCurrentFiscalPeriod, useFiscalCalendar } from '../lib/useFiscalCalendar';
 import { ChefSummariesTable } from './ChefSummariesTable';
-import { exportChefSummaryToPdf, FoodCostCategoryRow, FcapRow, NextPeriodFcap, WeekAheadAction } from '../lib/chefSummaryExport';
+import { buildChefSummaryReport } from '../lib/chefSummaryReport';
 
 type WeeklyReport = {
   id: string;
@@ -901,118 +901,20 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
     loadRestaurantData();
   }, [fiscalYear, period, week]);
 
-  // Build a location's full chef-summary PDF and show it in-app (blob URL),
-  // reusing the same generator that produces the emailed report.
+  // Build a location's full chef-summary PDF and show it in-app (blob URL). The
+  // report is built from the saved chef_summary row by the shared builder, so it
+  // always reflects the latest numbers and matches the chef's own regenerated PDF.
   const openReport = async (locationId: string, name: string) => {
     setReportLoadingId(locationId);
     setReportError('');
     try {
-      const { data: row } = await supabase
-        .from('weekly_summary_chef_summary')
-        .select('*')
-        .eq('location_id', locationId)
-        .eq('fiscal_year', fiscalYear)
-        .eq('period_number', period)
-        .eq('week_number', week)
-        .maybeSingle();
-      if (!row) {
-        setReportError(`No saved summary for ${name} (FY${fiscalYear} P${period} W${week}).`);
+      const result = await buildChefSummaryReport(locationId, name, fiscalYear, period, week, 'bloburl');
+      if (!result.ok) {
+        setReportError(result.error);
         return;
       }
-
-      const { data: cal } = await supabase
-        .from('fiscal_calendar')
-        .select('end_date')
-        .eq('fiscal_year', fiscalYear)
-        .eq('period', period)
-        .eq('week', week)
-        .maybeSingle();
-      const weekEndingDate = cal?.end_date as string | undefined;
-
-      const sales = row.food_sales_labour_push || 0;
-      const actualFoodCostPct = sales > 0 ? (row.usage_amount / sales) * 100 : 0;
-      const fcVariance = actualFoodCostPct - (row.budget_food_cost_pct || 0);
-      const theoreticalFoodCostPct = sales > 0 ? (row.ideal_usage_amount / sales) * 100 : 0;
-      const theoreticalVariance = actualFoodCostPct - theoreticalFoodCostPct;
-      const labourCostPct = sales > 0 ? (row.labour_spent / sales) * 100 : 0;
-      const lcVariance = labourCostPct - (row.labour_budget_pct || 0);
-      const weekBudget = row.budget_food_sales_period > 0 ? row.budget_food_sales_period / 4 : (row.week_budget || 0);
-
-      let foodCostCategories: FoodCostCategoryRow[] | undefined;
-      try {
-        const parsed = JSON.parse(row.final_food_cost_items || '[]');
-        const categories = Array.isArray(parsed) ? parsed : parsed?.categories;
-        if (Array.isArray(categories) && categories.length > 0) {
-          foodCostCategories = categories.map((c: Record<string, unknown>) => ({
-            category: String(c.category ?? ''),
-            opening: Number(c.opening) || 0,
-            glPurchases: Number(c.glPurchases) || 0,
-            closing: Number(c.closing) || 0,
-            waste: Number(c.waste) || 0,
-            actualUsage: Number(c.actualUsage) || 0,
-            idealUsage: Number(c.idealUsage) || 0,
-            variance: Number(c.variance) || 0,
-          }));
-        }
-      } catch {
-        foodCostCategories = undefined;
-      }
-
-      const { data: actionRows } = await supabase
-        .from('weekly_summary_actions')
-        .select('action_text, owner, due_by, sort_order')
-        .eq('location_id', locationId)
-        .eq('fiscal_year', fiscalYear)
-        .eq('period_number', period)
-        .eq('week_number', week)
-        .order('sort_order', { ascending: true });
-      const weekAheadActions: WeekAheadAction[] = (actionRows || [])
-        .filter(a => a.action_text && a.action_text.trim())
-        .map(a => ({ action_text: a.action_text, owner: a.owner ?? '', due_by: a.due_by ?? '' }));
-
-      const { data: fcapRow } = await supabase
-        .from('weekly_summary_food_cost_action_plans')
-        .select('items')
-        .eq('location_id', locationId)
-        .eq('fiscal_year', fiscalYear)
-        .eq('period_number', period)
-        .maybeSingle();
-      const fcapItems: FcapRow[] = Array.isArray(fcapRow?.items) ? (fcapRow!.items as FcapRow[]) : [];
-
-      // If this is the period's last week, next period's FCAP (created in the
-      // guided workflow at period end) rides along in the same PDF.
-      let nextPeriodFcap: NextPeriodFcap | undefined;
-      const { data: periodWeeks } = await supabase
-        .from('fiscal_calendar')
-        .select('week')
-        .eq('fiscal_year', fiscalYear)
-        .eq('period', period);
-      const lastWeek = periodWeeks && periodWeeks.length > 0 ? Math.max(...periodWeeks.map((w) => w.week)) : 4;
-      if (week >= lastWeek) {
-        const nextFiscalYear = period === 13 ? fiscalYear + 1 : fiscalYear;
-        const nextPeriodNumber = period === 13 ? 1 : period + 1;
-        const { data: nextFcapRow } = await supabase
-          .from('weekly_summary_food_cost_action_plans')
-          .select('items')
-          .eq('location_id', locationId)
-          .eq('fiscal_year', nextFiscalYear)
-          .eq('period_number', nextPeriodNumber)
-          .maybeSingle();
-        const nextItems: FcapRow[] = Array.isArray(nextFcapRow?.items) ? (nextFcapRow!.items as FcapRow[]) : [];
-        if (nextItems.length > 0) {
-          nextPeriodFcap = { items: nextItems, fiscalYear: nextFiscalYear, periodNumber: nextPeriodNumber };
-        }
-      }
-
-      const url = exportChefSummaryToPdf(
-        row, name, weekBudget, actualFoodCostPct, fcVariance, theoreticalFoodCostPct,
-        theoreticalVariance, labourCostPct, lcVariance, undefined, weekEndingDate,
-        sales, weekBudget, actualFoodCostPct, labourCostPct,
-        foodCostCategories, weekAheadActions, fcapItems, 'bloburl', nextPeriodFcap
-      ) as string;
-
       setReportTitle(name);
-      setReportUrl(url);
+      setReportUrl(result.url ?? null);
     } catch (e) {
       setReportError(e instanceof Error ? e.message : 'Failed to build report.');
     } finally {
