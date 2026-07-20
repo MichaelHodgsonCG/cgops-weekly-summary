@@ -494,12 +494,12 @@ export default function UploadPage() {
   const hasReview = parsedFiles.length > 0 && !uploading;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
+    <div className="min-h-screen bg-cg-bg p-6">
       <div className="max-w-5xl mx-auto space-y-6">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden max-w-2xl mx-auto w-full">
-          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-4">
-            <h1 className="text-2xl font-semibold text-white flex items-center gap-2">
-              <Upload className="w-6 h-6" />
+        <div className="bg-cg-surface rounded-xl shadow-cg border border-cg-border overflow-hidden max-w-2xl mx-auto w-full">
+          <div className="bg-cg-surface px-6 py-4 border-b border-cg-border">
+            <h1 className="text-2xl font-semibold text-cg-text flex items-center gap-2">
+              <Upload className="w-6 h-6 text-cg-accent" />
               Upload P&L Data
             </h1>
           </div>
@@ -513,7 +513,7 @@ export default function UploadPage() {
                 type="date"
                 value={weekEndingDate}
                 onChange={(e) => setWeekEndingDate(e.target.value)}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
+                className="w-full px-4 py-2 border border-cg-border rounded-lg text-cg-text focus:outline-none focus:ring-2 focus:ring-cg-accent/40 focus:border-cg-accent"
               />
               <p className="text-xs text-slate-500 mt-1">
                 Used only for files that don't carry their own week ending date.
@@ -527,7 +527,7 @@ export default function UploadPage() {
               <div
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
-                className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:border-slate-400 transition-colors"
+                className="border-2 border-dashed border-cg-borderStrong rounded-lg p-8 text-center hover:border-cg-accent transition-colors"
               >
                 <input
                   id="file-input"
@@ -556,26 +556,26 @@ export default function UploadPage() {
             </div>
 
             {parsing && (
-              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 text-sm text-blue-800 flex items-center gap-2">
+              <div className="bg-cg-accentSoft rounded-lg p-4 border border-cg-accent/20 text-sm text-cg-accentHover flex items-center gap-2">
                 <Upload className="w-4 h-4 animate-pulse" />
                 Reading {files.length} file{files.length !== 1 ? 's' : ''}…
               </div>
             )}
 
             {uploading && uploadProgress.total > 0 && (
-              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                <div className="flex justify-between text-sm text-blue-900 mb-2">
+              <div className="bg-cg-accentSoft rounded-lg p-4 border border-cg-accent/20">
+                <div className="flex justify-between text-sm text-cg-text mb-2">
                   <span>Ingesting files...</span>
-                  <span>{uploadProgress.completed} / {uploadProgress.total}</span>
+                  <span className="tabular-nums">{uploadProgress.completed} / {uploadProgress.total}</span>
                 </div>
-                <div className="w-full bg-blue-200 rounded-full h-2 mb-2">
+                <div className="w-full bg-cg-surface3 rounded-full h-2 mb-2">
                   <div
-                    className="bg-blue-600 h-2 rounded-full transition-all"
+                    className="bg-cg-accent h-2 rounded-full transition-all"
                     style={{ width: `${(uploadProgress.completed / uploadProgress.total) * 100}%` }}
                   ></div>
                 </div>
                 {uploadProgress.current && (
-                  <p className="text-xs text-blue-700">
+                  <p className="text-xs text-cg-muted">
                     Processing: {uploadProgress.current}
                   </p>
                 )}
@@ -638,11 +638,11 @@ function IngestReviewCard({
   const pct = (v: number | null) => (v === null ? '—' : `${v.toFixed(1)}%`);
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-      <div className="bg-slate-100 px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-4">
+    <div className="bg-cg-surface rounded-xl shadow-cg border border-cg-border overflow-hidden">
+      <div className="bg-cg-surface2 px-6 py-4 border-b border-cg-border flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-slate-800">Review before ingesting</h2>
-          <p className="text-xs text-slate-500 mt-1">
+          <h2 className="text-lg font-semibold text-cg-text">Review before ingesting</h2>
+          <p className="text-xs text-cg-muted mt-1">
             {rows.length} row{rows.length !== 1 ? 's' : ''} from {fileCount} file{fileCount !== 1 ? 's' : ''} ·{' '}
             {flaggedCount > 0 ? (
               <span className="text-amber-600 font-medium">{flaggedCount} flagged — double-check below</span>
@@ -656,8 +656,8 @@ function IngestReviewCard({
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-white">
-            <tr className="text-slate-500">
+          <thead className="bg-cg-surface">
+            <tr className="text-cg-faint">
               <th className="px-4 py-2 text-left font-medium">Location</th>
               <th className="px-4 py-2 text-left font-medium">Week Ending</th>
               <th className="px-4 py-2 text-right font-medium">Food Sales</th>
@@ -673,8 +673,8 @@ function IngestReviewCard({
               const flagged = r.issues.length > 0;
               const fcBad = fcOutOfBand(r.foodCostPct);
               return (
-                <tr key={r.key} className={`border-t border-slate-100 ${flagged ? 'bg-amber-50' : ''}`}>
-                  <td className="px-4 py-2 text-slate-800 font-medium whitespace-nowrap">
+                <tr key={r.key} className={`border-t border-cg-border ${flagged ? 'bg-amber-50' : ''}`}>
+                  <td className="px-4 py-2 text-cg-text font-medium whitespace-nowrap">
                     <span className="flex items-center gap-1">
                       {flagged && <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />}
                       {r.locationName}
@@ -686,15 +686,15 @@ function IngestReviewCard({
                       <span className="block text-xs text-amber-700 mt-0.5">{r.issues.join(' · ')}</span>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-slate-600 whitespace-nowrap">{r.weekEndingDate}</td>
-                  <td className="px-4 py-2 text-right text-slate-700">{money(r.foodSales)}</td>
-                  <td className="px-4 py-2 text-right text-slate-700">{money(r.foodCost)}</td>
-                  <td className={`px-4 py-2 text-right font-semibold ${fcBad ? 'text-amber-700' : 'text-slate-700'}`}>
+                  <td className="px-4 py-2 text-cg-muted whitespace-nowrap">{r.weekEndingDate}</td>
+                  <td className="px-4 py-2 text-right text-cg-text tabular-nums">{money(r.foodSales)}</td>
+                  <td className="px-4 py-2 text-right text-cg-text tabular-nums">{money(r.foodCost)}</td>
+                  <td className={`px-4 py-2 text-right font-semibold tabular-nums ${fcBad ? 'text-amber-700' : 'text-cg-text'}`}>
                     {pct(r.foodCostPct)}
                   </td>
-                  <td className="px-4 py-2 text-right text-slate-700">{money(r.labour)}</td>
-                  <td className="px-4 py-2 text-right text-slate-500">{pct(r.labourPct)}</td>
-                  <td className="px-4 py-2 text-left text-slate-400 text-xs truncate max-w-[180px]" title={r.fileName}>{r.fileName}</td>
+                  <td className="px-4 py-2 text-right text-cg-text tabular-nums">{money(r.labour)}</td>
+                  <td className="px-4 py-2 text-right text-cg-muted tabular-nums">{pct(r.labourPct)}</td>
+                  <td className="px-4 py-2 text-left text-cg-faint text-xs truncate max-w-[180px]" title={r.fileName}>{r.fileName}</td>
                 </tr>
               );
             })}
@@ -702,10 +702,10 @@ function IngestReviewCard({
         </table>
       </div>
 
-      <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-3">
+      <div className="px-6 py-4 border-t border-cg-border flex items-center justify-end gap-3">
         <button
           onClick={onCancel}
-          className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium transition-colors"
+          className="flex items-center gap-2 px-4 py-2 text-cg-muted hover:bg-cg-surface2 hover:text-cg-text rounded-lg text-sm font-medium transition-colors"
         >
           <X className="w-4 h-4" />
           Cancel
@@ -713,7 +713,7 @@ function IngestReviewCard({
         <button
           onClick={onApprove}
           disabled={!weekEndingDate}
-          className="bg-slate-800 text-white px-6 py-2 rounded-lg font-medium hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+          className="bg-cg-accent text-white px-6 py-2 rounded-lg font-medium hover:bg-cg-accentHover disabled:bg-cg-surface3 disabled:text-cg-faint disabled:cursor-not-allowed transition-colors"
         >
           Approve &amp; Ingest {fileCount} File{fileCount !== 1 ? 's' : ''}
         </button>
@@ -728,25 +728,25 @@ function TrueUpVariancePanel({ trueUps }: { trueUps: LocationTrueUp[] }) {
   const pct = (v: number | null) => (v === null ? '—' : `${v.toFixed(2)}%`);
 
   return (
-    <div className="mt-6 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-      <div className="bg-slate-100 px-6 py-4 border-b border-slate-200">
-        <h2 className="text-lg font-semibold text-slate-800">Estimate vs Sage — True-Up Variance</h2>
-        <p className="text-xs text-slate-500 mt-1">
+    <div className="mt-6 bg-cg-surface rounded-xl shadow-cg border border-cg-border overflow-hidden">
+      <div className="bg-cg-surface2 px-6 py-4 border-b border-cg-border">
+        <h2 className="text-lg font-semibold text-cg-text">Estimate vs Sage — True-Up Variance</h2>
+        <p className="text-xs text-cg-muted mt-1">
           How each location's chef estimate compared to the reconciled Sage numbers you just uploaded.
           Variance = estimate − Sage; a positive COGs/Labour variance means the estimate ran higher than actual.
         </p>
       </div>
       <div className="p-6 space-y-6">
         {trueUps.map((t) => (
-          <div key={`${t.locationId}-${t.weekEndingDate}`} className="border border-slate-200 rounded-lg overflow-hidden">
-            <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
-              <span className="text-sm font-semibold text-slate-800">{t.locationName}</span>
-              <span className="text-xs text-slate-500">P{t.period} W{t.weekNumber} · WE {t.weekEndingDate}</span>
+          <div key={`${t.locationId}-${t.weekEndingDate}`} className="border border-cg-border rounded-lg overflow-hidden">
+            <div className="bg-cg-surface2 px-4 py-2 border-b border-cg-border flex items-center justify-between">
+              <span className="text-sm font-semibold text-cg-text">{t.locationName}</span>
+              <span className="text-xs text-cg-muted">P{t.period} W{t.weekNumber} · WE {t.weekEndingDate}</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-white">
-                  <tr className="text-slate-500">
+                <thead className="bg-cg-surface">
+                  <tr className="text-cg-faint">
                     <th className="px-4 py-2 text-left font-medium"></th>
                     <th className="px-4 py-2 text-right font-medium">Estimate</th>
                     <th className="px-4 py-2 text-right font-medium">Sage</th>
@@ -757,8 +757,8 @@ function TrueUpVariancePanel({ trueUps }: { trueUps: LocationTrueUp[] }) {
                 </thead>
                 <tbody>
                   {t.lines.map((l) => (
-                    <tr key={l.metric} className="border-t border-slate-100">
-                      <td className="px-4 py-2 text-slate-700 font-medium">
+                    <tr key={l.metric} className="border-t border-cg-border">
+                      <td className="px-4 py-2 text-cg-text font-medium">
                         {l.metric}
                         {l.metric === 'Sales' && t.salesIsPushBasis && (
                           <span className="ml-1 text-xs text-amber-600" title="Estimate is Push POS sales; Sage is the Food Sales line — different source systems.">
@@ -766,13 +766,13 @@ function TrueUpVariancePanel({ trueUps }: { trueUps: LocationTrueUp[] }) {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-2 text-right text-slate-700">{money(l.estimate)}</td>
-                      <td className="px-4 py-2 text-right text-slate-700">{money(l.sage)}</td>
-                      <td className={`px-4 py-2 text-right font-semibold ${Math.abs(l.variance) < 1 ? 'text-slate-400' : l.variance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      <td className="px-4 py-2 text-right text-cg-text tabular-nums">{money(l.estimate)}</td>
+                      <td className="px-4 py-2 text-right text-cg-text tabular-nums">{money(l.sage)}</td>
+                      <td className={`px-4 py-2 text-right font-semibold tabular-nums ${Math.abs(l.variance) < 1 ? 'text-cg-faint' : l.variance > 0 ? 'text-red-600' : 'text-green-600'}`}>
                         {l.variance > 0 ? '+' : ''}{money(l.variance)}
                       </td>
-                      <td className="px-4 py-2 text-right text-slate-500">{pct(l.estimatePct)}</td>
-                      <td className="px-4 py-2 text-right text-slate-500">{pct(l.sagePct)}</td>
+                      <td className="px-4 py-2 text-right text-cg-muted tabular-nums">{pct(l.estimatePct)}</td>
+                      <td className="px-4 py-2 text-right text-cg-muted tabular-nums">{pct(l.sagePct)}</td>
                     </tr>
                   ))}
                 </tbody>
