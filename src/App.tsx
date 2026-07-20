@@ -152,10 +152,10 @@ function AppContent() {
                   <button
                     key={item.id}
                     onClick={() => handleViewChange(item.id)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
                       view === item.id || (view === 'detail' && item.id === 'dashboard')
-                        ? 'bg-slate-800 text-white shadow-sm'
-                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'
+                        ? 'bg-cg-accentSoft text-cg-accent'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                     }`}
                   >
                     <Icon className="w-4 h-4" />
@@ -185,8 +185,8 @@ function AppContent() {
                     onClick={() => handleViewChange(item.id)}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                       view === item.id || (view === 'detail' && item.id === 'dashboard')
-                        ? 'bg-slate-800 text-white'
-                        : 'text-slate-600 hover:bg-slate-50'
+                        ? 'bg-cg-accentSoft text-cg-accent'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                     }`}
                   >
                     <Icon className="w-5 h-5" />
@@ -265,8 +265,8 @@ function AppContent() {
                 onClick={() => handleViewChange(item.id)}
                 className={`flex flex-col items-center gap-1 px-2 py-2 rounded-lg text-xs font-medium transition-colors ${
                   isActive
-                    ? 'bg-slate-800 text-white'
-                    : 'text-slate-600 hover:bg-slate-50'
+                    ? 'bg-cg-accentSoft text-cg-accent'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
                 <Icon className="w-5 h-5" />
