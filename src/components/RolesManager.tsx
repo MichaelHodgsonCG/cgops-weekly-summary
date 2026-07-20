@@ -139,12 +139,12 @@ export function RolesManager() {
               value={newRole}
               onChange={(e) => setNewRole(e.target.value)}
               placeholder="Enter new role name..."
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 focus:border-transparent"
             />
           </div>
           <button
             type="submit"
-            className="flex items-center gap-2 px-6 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors"
+            className="flex items-center gap-2 px-6 py-2 bg-cg-accent text-white rounded-lg hover:bg-cg-accentHover transition-colors"
           >
             <Plus className="w-5 h-5" />
             Add Role

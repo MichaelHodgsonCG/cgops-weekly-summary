@@ -472,7 +472,7 @@ export default function RankingsView({ weekEndingDate }: RankingsViewProps) {
                 <select
                   value={activeDate}
                   onChange={(e) => setActiveDate(e.target.value)}
-                  className="pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white text-slate-700 focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  className="pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white text-slate-700 focus:ring-2 focus:ring-cg-accent/40 focus:border-transparent"
                 >
                   {availableWeeks.map(w => (
                     <option key={w} value={w}>{new Date(w + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</option>
@@ -485,7 +485,7 @@ export default function RankingsView({ weekEndingDate }: RankingsViewProps) {
                 onClick={() => locationFilter.setIsFiltered(!locationFilter.isFiltered)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
                   locationFilter.isFiltered
-                    ? 'bg-slate-800 text-white border-slate-800'
+                    ? 'bg-cg-accent text-white border-cg-accent'
                     : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
                 }`}
               >
@@ -513,7 +513,7 @@ export default function RankingsView({ weekEndingDate }: RankingsViewProps) {
                     }}
                     className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                       selectedMetric === 'other'
-                        ? 'bg-slate-800 text-white'
+                        ? 'bg-cg-accent text-white'
                         : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
                     }`}
                   >
@@ -548,7 +548,7 @@ export default function RankingsView({ weekEndingDate }: RankingsViewProps) {
                 onClick={() => setSelectedMetric(metric.id)}
                 className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                   selectedMetric === metric.id
-                    ? 'bg-slate-800 text-white'
+                    ? 'bg-cg-accent text-white'
                     : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
                 }`}
               >
@@ -564,7 +564,7 @@ export default function RankingsView({ weekEndingDate }: RankingsViewProps) {
               <select
                 value={activeDate}
                 onChange={(e) => setActiveDate(e.target.value)}
-                className="pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg bg-white text-slate-700 focus:ring-2 focus:ring-slate-500 focus:border-transparent appearance-none cursor-pointer"
+                className="pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg bg-white text-slate-700 focus:ring-2 focus:ring-cg-accent/40 focus:border-transparent appearance-none cursor-pointer"
               >
                 {availableWeeks.map(w => (
                   <option key={w} value={w}>Week ending {new Date(w + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</option>
@@ -577,7 +577,7 @@ export default function RankingsView({ weekEndingDate }: RankingsViewProps) {
               onClick={() => locationFilter.setIsFiltered(!locationFilter.isFiltered)}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors border flex-shrink-0 ${
                 locationFilter.isFiltered
-                  ? 'bg-slate-800 text-white border-slate-800'
+                  ? 'bg-cg-accent text-white border-cg-accent'
                   : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
               }`}
             >
@@ -600,7 +600,7 @@ export default function RankingsView({ weekEndingDate }: RankingsViewProps) {
                 setSelectedMetric(val as MetricType);
               }
             }}
-            className="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-slate-800"
+            className="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-cg-accent/40"
           >
             {metrics.filter(m => m.id !== 'other').map(metric => (
               <option key={metric.id} value={metric.id}>{metric.label}</option>

@@ -327,7 +327,7 @@ export function LabourAdjustments() {
                             <button
                               onClick={() => saveAdjustment(week.week_ending_date, week.line_item_id)}
                               disabled={loading}
-                              className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-cg-accent text-white rounded hover:bg-cg-accentHover disabled:opacity-50"
                             >
                               <Save className="w-4 h-4" />
                               Save

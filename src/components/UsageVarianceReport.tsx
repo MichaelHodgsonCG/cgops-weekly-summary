@@ -161,7 +161,7 @@ export function UsageVarianceReport() {
           <select
             value={locationId}
             onChange={(e) => setLocationId(e.target.value)}
-            className="w-full md:w-96 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 bg-white"
+            className="w-full md:w-96 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 bg-white"
           >
             <option value="">Select a location…</option>
             {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -204,7 +204,7 @@ export function UsageVarianceReport() {
           <button
             onClick={run}
             disabled={selected.size === 0}
-            className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium text-sm hover:bg-slate-700 transition-colors disabled:opacity-50"
+            className="px-4 py-2 bg-cg-accent text-white rounded-lg font-medium text-sm hover:bg-cg-accentHover transition-colors disabled:opacity-50"
           >
             Run report
           </button>

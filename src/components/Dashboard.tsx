@@ -433,7 +433,7 @@ export default function Dashboard({
             {onOpenBulkUpload && (
               <button
                 onClick={onOpenBulkUpload}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-cg-accent text-white rounded-lg hover:bg-cg-accentHover transition-colors"
               >
                 <Upload className="w-5 h-5" />
                 <span>Upload P&amp;L (all at once)</span>
@@ -512,7 +512,7 @@ export default function Dashboard({
               <button
                 onClick={handleUpload}
                 disabled={uploading || !selectedLocation || !weekEndingDate}
-                className="w-full bg-slate-800 text-white py-2 rounded-lg font-medium hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors text-sm"
+                className="w-full bg-cg-accent text-white py-2 rounded-lg font-medium hover:bg-cg-accentHover disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors text-sm"
               >
                 {uploading ? 'Processing...' : 'Confirm Upload'}
               </button>
@@ -632,7 +632,7 @@ export default function Dashboard({
                       key={location.id}
                       className={`flex items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
                         selectedLocationIds.includes(location.id)
-                          ? 'border-slate-800 bg-slate-50'
+                          ? 'border-cg-accent bg-slate-50'
                           : 'border-slate-200 hover:border-slate-300'
                       }`}
                     >
@@ -678,10 +678,10 @@ export default function Dashboard({
 
               return (
                 <div key={location.id} className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-                  <div className="bg-slate-800 px-4 py-3">
-                    <h3 className="text-base font-semibold text-white truncate">{location.name}</h3>
+                  <div className="bg-cg-surface2 px-4 py-3 border-b border-cg-border">
+                    <h3 className="text-base font-semibold text-cg-text truncate">{location.name}</h3>
                     {location.region && (
-                      <span className="text-xs text-slate-300">{getRegionDisplayName(location.region)}</span>
+                      <span className="text-xs text-cg-muted">{getRegionDisplayName(location.region)}</span>
                     )}
                   </div>
 
@@ -744,11 +744,11 @@ export default function Dashboard({
 
               return (
                 <div key={location.id} className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-                  <div className="bg-slate-800 px-4 py-3 flex items-center justify-between">
+                  <div className="bg-cg-surface2 px-4 py-3 border-b border-cg-border flex items-center justify-between">
                     <div>
-                      <h3 className="text-base font-semibold text-white">{location.name}</h3>
+                      <h3 className="text-base font-semibold text-cg-text">{location.name}</h3>
                       {location.region && (
-                        <span className="text-xs text-slate-300">{getRegionDisplayName(location.region)}</span>
+                        <span className="text-xs text-cg-muted">{getRegionDisplayName(location.region)}</span>
                       )}
                     </div>
                   </div>

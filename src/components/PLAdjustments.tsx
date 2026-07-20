@@ -290,7 +290,7 @@ export function PLAdjustments() {
               setEditingWeek(null);
               setMessage(null);
             }}
-            className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-white text-slate-800"
+            className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 focus:border-transparent bg-white text-slate-800"
           >
             <option value="">Choose a location...</option>
             {locations.map((loc) => (
@@ -340,7 +340,7 @@ export function PLAdjustments() {
                               type="number"
                               value={adjustmentValue}
                               onChange={(e) => setAdjustmentValue(e.target.value)}
-                              className="w-36 px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent text-sm"
+                              className="w-36 px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 focus:border-transparent text-sm"
                               autoFocus
                             />
                           </div>
@@ -356,7 +356,7 @@ export function PLAdjustments() {
                             <button
                               onClick={() => saveAdjustment(week.week_ending_date, week.line_item_id)}
                               disabled={loading}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 text-white rounded-lg hover:bg-slate-700 disabled:opacity-50 text-sm font-medium transition-colors"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cg-accent text-white rounded-lg hover:bg-cg-accentHover disabled:opacity-50 text-sm font-medium transition-colors"
                             >
                               <Save className="w-3.5 h-3.5" />
                               Save

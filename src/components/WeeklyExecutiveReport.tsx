@@ -719,7 +719,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
         <button
           onClick={loadOrCreateReport}
           disabled={loading}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-slate-800 text-white rounded-lg hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="inline-flex items-center gap-2 px-6 py-3 bg-cg-accent text-white rounded-lg hover:bg-cg-accentHover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? (
             <>
@@ -768,7 +768,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
           <button
             onClick={generateStatements}
             disabled={generatingStatements}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-cg-accent text-white rounded-lg hover:bg-cg-accentHover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {generatingStatements ? (
               <>
@@ -785,7 +785,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
 
           <button
             onClick={exportReport}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-cg-accentHover transition-colors"
           >
             <Download className="w-4 h-4" />
             Export
@@ -799,7 +799,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
             onClick={() => setActiveTab('report')}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'report'
-                ? 'border-slate-800 text-slate-800'
+                ? 'border-cg-accent text-slate-800'
                 : 'border-transparent text-slate-600 hover:text-slate-800'
             }`}
           >
@@ -810,7 +810,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
             onClick={() => setActiveTab('summaries')}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'summaries'
-                ? 'border-slate-800 text-slate-800'
+                ? 'border-cg-accent text-slate-800'
                 : 'border-transparent text-slate-600 hover:text-slate-800'
             }`}
           >
@@ -820,7 +820,7 @@ export default function WeeklyExecutiveReport({ fiscalYear: propFiscalYear, peri
             onClick={() => setActiveTab('journals')}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'journals'
-                ? 'border-slate-800 text-slate-800'
+                ? 'border-cg-accent text-slate-800'
                 : 'border-transparent text-slate-600 hover:text-slate-800'
             }`}
           >
@@ -1435,7 +1435,7 @@ function RestaurantMetricsList({ fiscalYear, period, week }: { fiscalYear: numbe
                 </a>
                 <button
                   onClick={closeReport}
-                  className="px-3 py-1.5 text-sm font-medium text-white bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors"
+                  className="px-3 py-1.5 text-sm font-medium text-white bg-cg-accent rounded-lg hover:bg-cg-accentHover transition-colors"
                 >
                   Close
                 </button>
@@ -1778,7 +1778,7 @@ function JournalsTable({ fiscalYear, period, week }: { fiscalYear: number; perio
         <button
           onClick={generateAllSummaries}
           disabled={generatingAll || journals.length === 0}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-cg-accent text-white rounded-lg hover:bg-cg-accentHover disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
         >
           {generatingAll ? (
             <>
@@ -1913,7 +1913,7 @@ function ReportSection({
           <button
             onClick={onGenerate}
             disabled={generating}
-            className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            className="flex items-center gap-2 px-3 py-1.5 bg-cg-accent text-white rounded-lg hover:bg-cg-accentHover transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
             {generating ? (
               <>

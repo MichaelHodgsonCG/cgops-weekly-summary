@@ -924,7 +924,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
     return (
       <div className="min-h-screen bg-slate-50 p-6 flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-slate-800"></div>
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-cg-accent"></div>
           <p className="mt-4 text-slate-600">Loading summary...</p>
         </div>
       </div>
@@ -983,7 +983,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
             onClick={handleSave}
             disabled={saving}
             className={`flex items-center gap-2 px-5 py-2.5 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${
-              hasUnsavedChanges ? 'bg-amber-600 hover:bg-amber-500 ring-2 ring-amber-300' : 'bg-slate-800 hover:bg-slate-700'
+              hasUnsavedChanges ? 'bg-amber-600 hover:bg-amber-500 ring-2 ring-amber-300' : 'bg-cg-accent hover:bg-cg-accentHover'
             }`}
           >
             <Save className="w-5 h-5" />
@@ -1001,7 +1001,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
               <select
                 value={activeSummaryId || 'new'}
                 onChange={(e) => handleSelectSummary(e.target.value)}
-                className="w-full appearance-none pl-3 pr-10 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 bg-white text-slate-800 text-sm cursor-pointer"
+                className="w-full appearance-none pl-3 pr-10 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 bg-white text-slate-800 text-sm cursor-pointer"
               >
                 <option value="new">+ New Summary</option>
                 {savedSummaries.map((s) => (
@@ -1171,7 +1171,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   type="number"
                   value={formData.fiscal_year || ''}
                   onChange={(e) => handleInputChange('fiscal_year', parseInt(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <div>
@@ -1180,7 +1180,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   type="number"
                   value={formData.period_number || ''}
                   onChange={(e) => handleInputChange('period_number', parseInt(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <div>
@@ -1189,7 +1189,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   type="number"
                   value={formData.week_number || ''}
                   onChange={(e) => handleInputChange('week_number', parseInt(e.target.value) || 1)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
             </div>
@@ -1205,7 +1205,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   step="0.01"
                   value={formData.food_sales_labour_push || ''}
                   onChange={(e) => handleInputChange('food_sales_labour_push', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <div>
@@ -1215,7 +1215,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   step="0.01"
                   value={formData.food_sales_oc || ''}
                   onChange={(e) => handleInputChange('food_sales_oc', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <div>
@@ -1231,7 +1231,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   step="0.01"
                   value={formData.budget_food_sales_period || ''}
                   onChange={(e) => handleInputChange('budget_food_sales_period', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <div>
@@ -1253,7 +1253,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   step="0.01"
                   value={formData.sage_food_sales_qtd || ''}
                   onChange={(e) => handleInputChange('sage_food_sales_qtd', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <div>
@@ -1263,7 +1263,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   step="0.01"
                   value={formData.sage_sales_budget_qtd || ''}
                   onChange={(e) => handleInputChange('sage_sales_budget_qtd', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <div>
@@ -1297,7 +1297,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   step="0.01"
                   value={formData.petty_cash || ''}
                   onChange={(e) => handleInputChange('petty_cash', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <div>
@@ -1307,7 +1307,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   step="0.01"
                   value={formData.budget_food_cost_pct || ''}
                   onChange={(e) => handleInputChange('budget_food_cost_pct', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <div>
@@ -1359,7 +1359,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   step="0.01"
                   value={formData.labour_spent || ''}
                   onChange={(e) => handleInputChange('labour_spent', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <div>
@@ -1369,7 +1369,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   step="0.01"
                   value={formData.overtime_amount || ''}
                   onChange={(e) => handleInputChange('overtime_amount', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <div>
@@ -1385,7 +1385,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   step="0.01"
                   value={formData.labour_budget_pct || ''}
                   onChange={(e) => handleInputChange('labour_budget_pct', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <div>
@@ -1430,7 +1430,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   value={formData.labour_transfer_notes}
                   onChange={(e) => handleInputChange('labour_transfer_notes', e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
                 />
               </div>
               <div className="md:col-span-3">
@@ -1439,7 +1439,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   value={formData.overtime_notes}
                   onChange={(e) => handleInputChange('overtime_notes', e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
                 />
               </div>
               <div className="md:col-span-3">
@@ -1448,7 +1448,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   value={formData.labour_review_action_plan}
                   onChange={(e) => handleInputChange('labour_review_action_plan', e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
                 />
               </div>
             </div>
@@ -1476,7 +1476,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   step="0.01"
                   value={formData.teamshare_amount || ''}
                   onChange={(e) => handleInputChange('teamshare_amount', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <div>
@@ -1492,7 +1492,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   step="0.01"
                   value={formData.last_audit_score_pct || ''}
                   onChange={(e) => handleInputChange('last_audit_score_pct', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <div className="md:col-span-3 grid grid-cols-3 gap-4">
@@ -1503,7 +1503,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                     step="0.01"
                     value={formData.boh_promo_amount || ''}
                     onChange={(e) => handleInputChange('boh_promo_amount', parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </div>
                 <div>
@@ -1513,7 +1513,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                     step="0.01"
                     value={formData.promo_ptd || ''}
                     onChange={(e) => handleInputChange('promo_ptd', parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </div>
                 <div>
@@ -1523,7 +1523,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                     step="0.01"
                     value={formData.promo_qtd || ''}
                     onChange={(e) => handleInputChange('promo_qtd', parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </div>
               </div>
@@ -1533,7 +1533,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   value={formData.discount_review_notes}
                   onChange={(e) => handleInputChange('discount_review_notes', e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
                 />
               </div>
               <div className="md:col-span-3">
@@ -1542,7 +1542,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   value={formData.speed_of_service_notes}
                   onChange={(e) => handleInputChange('speed_of_service_notes', e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
                 />
               </div>
               <div className="md:col-span-3">
@@ -1551,7 +1551,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   value={formData.sales_action_plan}
                   onChange={(e) => handleInputChange('sales_action_plan', e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
                 />
               </div>
             </div>
@@ -1582,13 +1582,13 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                       type="number"
                       value={formData[ideal] || ''}
                       onChange={(e) => handleInputChange(ideal, parseInt(e.target.value) || 0)}
-                      className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <input
                       type="number"
                       value={formData[current] || ''}
                       onChange={(e) => handleInputChange(current, parseInt(e.target.value) || 0)}
-                      className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <div className={`px-3 py-2 border rounded-lg font-medium text-sm ${needed > 0 ? 'bg-amber-50 border-amber-200 text-amber-700' : needed < 0 ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-green-50 border-green-200 text-green-700'}`}>
                       {needed > 0 ? `+${needed} needed` : needed < 0 ? `${Math.abs(needed)} over` : 'Fully staffed'}
@@ -1610,7 +1610,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                       placeholder="Feature name"
                       value={item.name}
                       onChange={(e) => updateFeatureItem(index, 'name', e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
                     />
                   </div>
                   <div className="md:col-span-2">
@@ -1619,7 +1619,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                       placeholder="Sold"
                       value={item.sold || ''}
                       onChange={(e) => updateFeatureItem(index, 'sold', parseInt(e.target.value) || 0)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </div>
                   <div className="md:col-span-5">
@@ -1628,7 +1628,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                       placeholder="Notes"
                       value={item.notes}
                       onChange={(e) => updateFeatureItem(index, 'notes', e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
                     />
                   </div>
                   <div className="md:col-span-1">
@@ -1654,7 +1654,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   value={formData.features_notes}
                   onChange={(e) => handleInputChange('features_notes', e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
                 />
               </div>
             </div>
@@ -1710,7 +1710,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   value={formData.hiring_notes}
                   onChange={(e) => handleInputChange('hiring_notes', e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
                 />
               </div>
               <div>
@@ -1719,7 +1719,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   value={formData.tm_mots_of_note}
                   onChange={(e) => handleInputChange('tm_mots_of_note', e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
                 />
               </div>
               <div>
@@ -1728,7 +1728,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   value={formData.development_path_updates}
                   onChange={(e) => handleInputChange('development_path_updates', e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
                 />
               </div>
               <div>
@@ -1737,7 +1737,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   value={formData.rm_issues}
                   onChange={(e) => handleInputChange('rm_issues', e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
                 />
               </div>
               <div>
@@ -1746,7 +1746,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   value={formData.cleaning_focus}
                   onChange={(e) => handleInputChange('cleaning_focus', e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
                 />
               </div>
               <div>
@@ -1755,7 +1755,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   value={formData.audit_score_comment}
                   onChange={(e) => handleInputChange('audit_score_comment', e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
                 />
               </div>
               <div>
@@ -1764,7 +1764,7 @@ export function WeeklyChefSummary({ locationId, locationName, summaryId }: Weekl
                   value={formData.ai_summary}
                   onChange={(e) => handleInputChange('ai_summary', e.target.value)}
                   rows={5}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
                 />
               </div>
             </div>

@@ -170,14 +170,14 @@ export default function LocationsManager() {
                     placeholder="Location Name"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cg-accent/40 focus:border-transparent"
                   />
                   <input
                     type="text"
                     placeholder="Code (e.g., BARRIE)"
                     value={newCode}
                     onChange={(e) => setNewCode(e.target.value.toUpperCase())}
-                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cg-accent/40 focus:border-transparent"
                   />
                 </div>
                 <div className="mb-3">
@@ -186,7 +186,7 @@ export default function LocationsManager() {
                       type="checkbox"
                       checked={newExcludeFromReporting}
                       onChange={(e) => setNewExcludeFromReporting(e.target.checked)}
-                      className="rounded border-slate-300 text-slate-800 focus:ring-2 focus:ring-slate-500"
+                      className="rounded border-slate-300 text-slate-800 focus:ring-2 focus:ring-cg-accent/40"
                     />
                     Exclude from reporting
                   </label>
@@ -194,7 +194,7 @@ export default function LocationsManager() {
                 <div className="flex gap-2">
                   <button
                     onClick={handleAddLocation}
-                    className="flex items-center gap-1 px-3 py-2 bg-slate-800 text-white rounded-lg text-sm font-medium hover:bg-slate-700 transition-colors"
+                    className="flex items-center gap-1 px-3 py-2 bg-cg-accent text-white rounded-lg text-sm font-medium hover:bg-cg-accentHover transition-colors"
                   >
                     <Save className="w-4 h-4" />
                     Save
@@ -229,13 +229,13 @@ export default function LocationsManager() {
                             type="text"
                             value={editName}
                             onChange={(e) => setEditName(e.target.value)}
-                            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cg-accent/40 focus:border-transparent"
                           />
                           <input
                             type="text"
                             value={editCode}
                             onChange={(e) => setEditCode(e.target.value.toUpperCase())}
-                            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cg-accent/40 focus:border-transparent"
                           />
                         </div>
                         <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -243,7 +243,7 @@ export default function LocationsManager() {
                             type="checkbox"
                             checked={editExcludeFromReporting}
                             onChange={(e) => setEditExcludeFromReporting(e.target.checked)}
-                            className="rounded border-slate-300 text-slate-800 focus:ring-2 focus:ring-slate-500"
+                            className="rounded border-slate-300 text-slate-800 focus:ring-2 focus:ring-cg-accent/40"
                           />
                           Exclude from reporting
                         </label>
@@ -251,7 +251,7 @@ export default function LocationsManager() {
                       <div className="flex gap-2 ml-4">
                         <button
                           onClick={() => handleSaveEdit(location.id)}
-                          className="p-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors"
+                          className="p-2 bg-cg-accent text-white rounded-lg hover:bg-cg-accentHover transition-colors"
                         >
                           <Save className="w-4 h-4" />
                         </button>

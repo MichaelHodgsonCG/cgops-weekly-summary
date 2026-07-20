@@ -524,7 +524,7 @@ export default function PortfolioView({ weekEndingDate }: PortfolioViewProps) {
 
       <div className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-lg shadow-sm border border-slate-200 p-6">
         <div className="flex items-start gap-4">
-          <div className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center flex-shrink-0">
+          <div className="w-10 h-10 bg-cg-accent rounded-lg flex items-center justify-center flex-shrink-0">
             <AlertCircle className="w-5 h-5 text-white" />
           </div>
           <div className="flex-1">

@@ -230,7 +230,7 @@ export function ChefSummaryImporter() {
         <button
           onClick={handleUpload}
           disabled={!file || uploading}
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed font-medium"
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-cg-accent text-white rounded-lg hover:bg-cg-accentHover transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed font-medium"
         >
           {uploading ? (
             <>

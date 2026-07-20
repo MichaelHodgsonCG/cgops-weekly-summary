@@ -2108,7 +2108,7 @@ export function GuidedWeeklyPackage({
         <div className="max-w-2xl mx-auto mb-2 flex justify-end">
           <button
             onClick={onClose}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-slate-800/80 hover:bg-slate-700 rounded-lg transition-colors shadow"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-cg-accent/80 hover:bg-cg-accentHover rounded-lg transition-colors shadow"
             title="Close guide"
           >
             <X className="w-4 h-4" />
@@ -2133,7 +2133,7 @@ function StepGateHint({ ready, hint }: { ready: boolean; hint: string }) {
 }
 
 const GATED_NEXT_CLASS =
-  'px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+  'px-4 py-2 bg-cg-accent text-white rounded-lg font-medium hover:bg-cg-accentHover transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
 
 function StepProgressHeader({ meta }: { meta: StepMeta }) {
   const pct = Math.round((meta.overallIndex / TOTAL_STEPS) * 100);
@@ -2147,7 +2147,7 @@ function StepProgressHeader({ meta }: { meta: StepMeta }) {
         <span>{pct}%</span>
       </div>
       <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden mb-6">
-        <div className="h-full bg-slate-800 rounded-full" style={{ width: `${pct}%` }} />
+        <div className="h-full bg-cg-accent rounded-full" style={{ width: `${pct}%` }} />
       </div>
       <h2 className="text-xl font-bold text-slate-800">
         Step {meta.overallIndex}: {meta.stepLabel}
@@ -2242,7 +2242,7 @@ function GuidedPackageStart({
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-8">
       <div className="flex items-center gap-3 mb-2">
-        <div className="p-2 bg-slate-800 rounded-lg">
+        <div className="p-2 bg-cg-accent rounded-lg">
           <ClipboardCheck className="w-6 h-6 text-white" />
         </div>
         <div>
@@ -2274,7 +2274,7 @@ function GuidedPackageStart({
           <span>0%</span>
         </div>
         <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-          <div className="h-full bg-slate-800 rounded-full" style={{ width: '0%' }} />
+          <div className="h-full bg-cg-accent rounded-full" style={{ width: '0%' }} />
         </div>
       </div>
 
@@ -2341,7 +2341,7 @@ function GuidedPackageStart({
 
       <button
         onClick={onStart}
-        className="mt-8 w-full bg-slate-800 text-white font-medium py-3 rounded-lg hover:bg-slate-700 transition-colors"
+        className="mt-8 w-full bg-cg-accent text-white font-medium py-3 rounded-lg hover:bg-cg-accentHover transition-colors"
       >
         Start Package
       </button>
@@ -2421,7 +2421,7 @@ function GuidedSalesStep({
             value={salesBudget}
             onChange={(e) => onSalesBudgetChange(e.target.value)}
             placeholder="Enter sales budget"
-            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
+            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cg-accent/40"
           />
         </div>
         <div>
@@ -2433,7 +2433,7 @@ function GuidedSalesStep({
             value={labourBudgetPct}
             onChange={(e) => onLabourBudgetPctChange(e.target.value)}
             placeholder="Enter labour budget %"
-            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
+            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cg-accent/40"
           />
         </div>
       </div>
@@ -2457,12 +2457,12 @@ function GuidedSalesStep({
             handleFiles(e.dataTransfer.files);
           }}
           className={`mt-4 border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-            dragActive ? 'border-slate-800 bg-slate-50' : 'border-slate-300'
+            dragActive ? 'border-cg-accent bg-slate-50' : 'border-slate-300'
           }`}
         >
           <Upload className="w-8 h-8 text-slate-400 mx-auto mb-3" />
           <p className="text-slate-600 mb-3">Drag and drop your report here, or</p>
-          <label className="inline-block bg-slate-800 text-white px-4 py-2 rounded-lg cursor-pointer hover:bg-slate-700 transition-colors">
+          <label className="inline-block bg-cg-accent text-white px-4 py-2 rounded-lg cursor-pointer hover:bg-cg-accentHover transition-colors">
             Browse Files
             <input
               type="file"
@@ -2535,7 +2535,7 @@ function GuidedSalesStep({
                             step="0.01"
                             value={salesInputs[i] ?? ''}
                             onChange={(e) => handleSalesInputChange(i, e.target.value)}
-                            className="w-24 px-2 py-1 text-right border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-slate-800"
+                            className="w-24 px-2 py-1 text-right border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-cg-accent/40"
                           />
                         ) : (
                           formatCurrency(value)
@@ -2695,7 +2695,7 @@ function GuidedTransfersStep({
                     value={entry.annualWage}
                     onChange={(e) => updateEntry(entry.id, 'annualWage', e.target.value)}
                     placeholder="e.g. 52000"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cg-accent/40"
                   />
                 </div>
                 <div>
@@ -2705,7 +2705,7 @@ function GuidedTransfersStep({
                     value={entry.days}
                     onChange={(e) => updateEntry(entry.id, 'days', e.target.value)}
                     placeholder="e.g. 3"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cg-accent/40"
                   />
                 </div>
                 <div>
@@ -2713,7 +2713,7 @@ function GuidedTransfersStep({
                   <select
                     value={entry.destination}
                     onChange={(e) => updateEntry(entry.id, 'destination', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 bg-white"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cg-accent/40 bg-white"
                   >
                     {TRANSFER_DESTINATIONS.map((d) => (
                       <option key={d.value} value={d.value}>
@@ -2737,7 +2737,7 @@ function GuidedTransfersStep({
                     value={entry.reason}
                     onChange={(e) => updateEntry(entry.id, 'reason', e.target.value)}
                     placeholder="e.g. Chef on holidays 3 days, sous covered"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cg-accent/40"
                   />
                 </div>
               </div>
@@ -2793,7 +2793,7 @@ function GuidedTransfersStep({
         </button>
         <button
           onClick={onNext}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          className="px-4 py-2 bg-cg-accent text-white rounded-lg font-medium hover:bg-cg-accentHover transition-colors"
         >
           Next
         </button>
@@ -2894,7 +2894,7 @@ function GuidedOvertimeStep({
             onChange={(e) => onNotesChange(e.target.value)}
             rows={3}
             placeholder="Explain why overtime occurred this week"
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cg-accent/40"
           />
         </div>
       )}
@@ -2914,7 +2914,7 @@ function GuidedOvertimeStep({
         </button>
         <button
           onClick={onNext}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          className="px-4 py-2 bg-cg-accent text-white rounded-lg font-medium hover:bg-cg-accentHover transition-colors"
         >
           Next
         </button>
@@ -3117,7 +3117,7 @@ function GuidedLabourReviewStep({
           onChange={(e) => onActionPlanChange(e.target.value)}
           rows={4}
           placeholder="Based on the labour review above, what's the plan to address any variances?"
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cg-accent/40"
         />
       </div>
 
@@ -3130,7 +3130,7 @@ function GuidedLabourReviewStep({
         </button>
         <button
           onClick={onNext}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          className="px-4 py-2 bg-cg-accent text-white rounded-lg font-medium hover:bg-cg-accentHover transition-colors"
         >
           Next
         </button>
@@ -3201,12 +3201,12 @@ function GuidedDiscountsStep({
             handleFiles(e.dataTransfer.files);
           }}
           className={`mt-4 border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-            dragActive ? 'border-slate-800 bg-slate-50' : 'border-slate-300'
+            dragActive ? 'border-cg-accent bg-slate-50' : 'border-slate-300'
           }`}
         >
           <Upload className="w-8 h-8 text-slate-400 mx-auto mb-3" />
           <p className="text-slate-600 mb-3">Drag and drop your report here, or</p>
-          <label className="inline-block bg-slate-800 text-white px-4 py-2 rounded-lg cursor-pointer hover:bg-slate-700 transition-colors">
+          <label className="inline-block bg-cg-accent text-white px-4 py-2 rounded-lg cursor-pointer hover:bg-cg-accentHover transition-colors">
             Browse Files
             <input
               type="file"
@@ -3335,7 +3335,7 @@ function GuidedDiscountsStep({
               onChange={(e) => onNotesChange(e.target.value)}
               rows={3}
               placeholder="Comment on the items above — root causes, trends, or corrective action."
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
             />
           </div>
         )}
@@ -3531,7 +3531,7 @@ function GuidedSalesRecapStep({
           onChange={(e) => onActionPlanChange(e.target.value)}
           rows={4}
           placeholder="Based on sales, discounts, and line times above, what's the plan for the week ahead?"
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cg-accent/40"
         />
       </div>
 
@@ -3544,7 +3544,7 @@ function GuidedSalesRecapStep({
         </button>
         <button
           onClick={onNext}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          className="px-4 py-2 bg-cg-accent text-white rounded-lg font-medium hover:bg-cg-accentHover transition-colors"
         >
           Next
         </button>
@@ -3670,7 +3670,7 @@ function GuidedCogsStep({
                   type="checkbox"
                   checked={checkboxState[section.title][0]}
                   onChange={(e) => checkboxState[section.title][1](e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-slate-500"
+                  className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-cg-accent/40"
                 />
                 Done
               </label>
@@ -3683,7 +3683,7 @@ function GuidedCogsStep({
                   value={pettyCashAmount}
                   onChange={(e) => onPettyCashAmountChange(e.target.value)}
                   placeholder="0.00"
-                  className="w-40 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800"
+                  className="w-40 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cg-accent/40"
                 />
               </div>
             )}
@@ -3770,12 +3770,12 @@ function GuidedSpeedOfServiceStep({
             handleFiles(e.dataTransfer.files);
           }}
           className={`mt-4 border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-            dragActive ? 'border-slate-800 bg-slate-50' : 'border-slate-300'
+            dragActive ? 'border-cg-accent bg-slate-50' : 'border-slate-300'
           }`}
         >
           <Upload className="w-8 h-8 text-slate-400 mx-auto mb-3" />
           <p className="text-slate-600 mb-3">Drag and drop your report here, or</p>
-          <label className="inline-block bg-slate-800 text-white px-4 py-2 rounded-lg cursor-pointer hover:bg-slate-700 transition-colors">
+          <label className="inline-block bg-cg-accent text-white px-4 py-2 rounded-lg cursor-pointer hover:bg-cg-accentHover transition-colors">
             Browse Files
             <input
               type="file"
@@ -3853,7 +3853,7 @@ function GuidedSpeedOfServiceStep({
               onChange={(e) => onNotesChange(e.target.value)}
               rows={3}
               placeholder="Comment on speed of service performance — trends, bottlenecks, or corrective action."
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
             />
           </div>
         )}
@@ -3937,7 +3937,7 @@ function GuidedPurchasesStep({
             type="checkbox"
             checked={invoicesConfirmed}
             onChange={(e) => onInvoicesConfirmedChange(e.target.checked)}
-            className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-slate-500"
+            className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-cg-accent/40"
           />
           All invoices are on the invoice report
         </label>
@@ -3969,7 +3969,7 @@ function GuidedPurchasesStep({
             handleFiles(e.dataTransfer.files);
           }}
           className={`mt-4 border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-            !invoicesConfirmed ? 'opacity-50 border-slate-200' : dragActive ? 'border-slate-800 bg-slate-50' : 'border-slate-300'
+            !invoicesConfirmed ? 'opacity-50 border-slate-200' : dragActive ? 'border-cg-accent bg-slate-50' : 'border-slate-300'
           }`}
         >
           <Upload className="w-8 h-8 text-slate-400 mx-auto mb-3" />
@@ -3977,7 +3977,7 @@ function GuidedPurchasesStep({
           <label
             className={`inline-block px-4 py-2 rounded-lg transition-colors ${
               invoicesConfirmed
-                ? 'bg-slate-800 text-white cursor-pointer hover:bg-slate-700'
+                ? 'bg-cg-accent text-white cursor-pointer hover:bg-cg-accentHover'
                 : 'bg-slate-200 text-slate-400 cursor-not-allowed'
             }`}
           >
@@ -4045,7 +4045,7 @@ function GuidedPurchasesStep({
                           step="0.01"
                           value={category.amount}
                           onChange={(e) => onAmountChange(category.name, parseFloat(e.target.value) || 0)}
-                          className="w-32 px-2 py-1 border border-slate-200 rounded text-right text-slate-700 focus:ring-2 focus:ring-slate-500"
+                          className="w-32 px-2 py-1 border border-slate-200 rounded text-right text-slate-700 focus:ring-2 focus:ring-cg-accent/40"
                         />
                       </td>
                     </tr>
@@ -4125,12 +4125,12 @@ function UsageReportUploadZone({
           handleFiles(e.dataTransfer.files);
         }}
         className={`mt-4 border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-          dragActive ? 'border-slate-800 bg-slate-50' : 'border-slate-300'
+          dragActive ? 'border-cg-accent bg-slate-50' : 'border-slate-300'
         }`}
       >
         <Upload className="w-8 h-8 text-slate-400 mx-auto mb-3" />
         <p className="text-slate-600 mb-3">Drag and drop your report here, or</p>
-        <label className="inline-block px-4 py-2 rounded-lg bg-slate-800 text-white cursor-pointer hover:bg-slate-700 transition-colors">
+        <label className="inline-block px-4 py-2 rounded-lg bg-cg-accent text-white cursor-pointer hover:bg-cg-accentHover transition-colors">
           Browse Files
           <input type="file" accept=".csv" className="hidden" onChange={(e) => handleFiles(e.target.files)} />
         </label>
@@ -4229,7 +4229,7 @@ function GuidedUsageReviewStep({
             type="checkbox"
             checked={item.confirmed}
             onChange={(e) => onItemChange(flaggedItems.indexOf(item), { confirmed: e.target.checked })}
-            className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-slate-500"
+            className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-cg-accent/40"
           />
           Reviewed and confirmed
         </label>
@@ -4237,7 +4237,7 @@ function GuidedUsageReviewStep({
           value={item.comment}
           onChange={(e) => onItemChange(flaggedItems.indexOf(item), { comment: e.target.value })}
           placeholder="Comment (e.g. count error, missed invoice, waste, portioning issue)"
-          className="mt-2 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
+          className="mt-2 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cg-accent/40"
           rows={2}
         />
       </div>
@@ -4395,12 +4395,12 @@ function GuidedFinalFoodCostStep({
             handleFiles(e.dataTransfer.files);
           }}
           className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-            dragActive ? 'border-slate-800 bg-slate-50' : 'border-slate-300'
+            dragActive ? 'border-cg-accent bg-slate-50' : 'border-slate-300'
           }`}
         >
           <Upload className="w-8 h-8 text-slate-400 mx-auto mb-3" />
           <p className="text-slate-600 mb-3">Drag and drop your report here, or</p>
-          <label className="inline-block px-4 py-2 rounded-lg bg-slate-800 text-white cursor-pointer hover:bg-slate-700 transition-colors">
+          <label className="inline-block px-4 py-2 rounded-lg bg-cg-accent text-white cursor-pointer hover:bg-cg-accentHover transition-colors">
             Browse Files
             <input type="file" accept=".csv" className="hidden" onChange={(e) => handleFiles(e.target.files)} />
           </label>
@@ -4422,7 +4422,7 @@ function GuidedFinalFoodCostStep({
 
         {summary && (
           <>
-            <div className="mt-4 inline-flex items-baseline gap-2 bg-slate-800 text-white rounded-lg px-4 py-3">
+            <div className="mt-4 inline-flex items-baseline gap-2 bg-cg-accent text-white rounded-lg px-4 py-3">
               <span className="text-sm font-medium text-slate-300">Actual Total Food Cost:</span>
               <span className="text-lg font-semibold">{totals ? formatCurrency(totals.actualUsage) : '—'}</span>
               {totals && (
@@ -5126,7 +5126,7 @@ function GuidedFinalFoodCostRecapStep({
           onChange={(e) => onCommentsChange(e.target.value)}
           rows={3}
           placeholder="Comment on food cost performance — trends, drivers, or corrective action."
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
         />
       </div>
 
@@ -5148,12 +5148,12 @@ function GuidedFinalFoodCostRecapStep({
             onChange={(e) => setFcapPasteText(e.target.value)}
             rows={4}
             placeholder="Paste tab-separated rows here (Item, Cost, Variance Per Day, Reason, Action, Manager, Team Members, WK1-WK4)..."
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 font-mono text-xs"
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 font-mono text-xs"
           />
           <button
             onClick={handleImportPaste}
             disabled={!fcapPasteText.trim()}
-            className="mt-2 px-4 py-2 bg-slate-800 text-white rounded-lg font-medium text-sm hover:bg-slate-700 transition-colors disabled:opacity-50"
+            className="mt-2 px-4 py-2 bg-cg-accent text-white rounded-lg font-medium text-sm hover:bg-cg-accentHover transition-colors disabled:opacity-50"
           >
             Import Pasted Data
           </button>
@@ -5275,7 +5275,7 @@ function GuidedFinalFoodCostRecapStep({
               <button
                 onClick={handleSaveFcap}
                 disabled={fcapSaving || !locationId || !fiscalYear || !periodNumber}
-                className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium text-sm hover:bg-slate-700 transition-colors disabled:opacity-50"
+                className="px-4 py-2 bg-cg-accent text-white rounded-lg font-medium text-sm hover:bg-cg-accentHover transition-colors disabled:opacity-50"
               >
                 {fcapSaving ? 'Saving...' : 'Save Plan'}
               </button>
@@ -5309,7 +5309,7 @@ function GuidedFinalFoodCostRecapStep({
             onFinish();
           }}
           disabled={fcapSaving}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors disabled:opacity-50"
+          className="px-4 py-2 bg-cg-accent text-white rounded-lg font-medium hover:bg-cg-accentHover transition-colors disabled:opacity-50"
         >
           {fcapSaving ? 'Saving...' : 'Save Plan & Next'}
         </button>
@@ -5674,7 +5674,7 @@ function GuidedNextPeriodFcapStep({
               <button
                 onClick={handleSaveFcap}
                 disabled={fcapSaving || !locationId || !nextFiscalYear || !nextPeriodNumber}
-                className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium text-sm hover:bg-slate-700 transition-colors disabled:opacity-50"
+                className="px-4 py-2 bg-cg-accent text-white rounded-lg font-medium text-sm hover:bg-cg-accentHover transition-colors disabled:opacity-50"
               >
                 {fcapSaving ? 'Saving...' : 'Save Plan'}
               </button>
@@ -5693,7 +5693,7 @@ function GuidedNextPeriodFcapStep({
         <button
           onClick={handleNext}
           disabled={fcapSaving}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors disabled:opacity-50"
+          className="px-4 py-2 bg-cg-accent text-white rounded-lg font-medium hover:bg-cg-accentHover transition-colors disabled:opacity-50"
         >
           Next
         </button>
@@ -5777,13 +5777,13 @@ function GuidedTeamStep({
                 type="number"
                 value={idealValue}
                 onChange={(e) => onStaffingChange(ideal, e.target.value)}
-                className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
               <input
                 type="number"
                 value={currentValue}
                 onChange={(e) => onStaffingChange(current, e.target.value)}
-                className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
               <div className={`px-3 py-2 border rounded-lg font-medium text-sm ${needed > 0 ? 'bg-amber-50 border-amber-200 text-amber-700' : needed < 0 ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-green-50 border-green-200 text-green-700'}`}>
                 {needed > 0 ? `+${needed} needed` : needed < 0 ? `${Math.abs(needed)} over` : 'Fully staffed'}
@@ -5800,7 +5800,7 @@ function GuidedTeamStep({
             value={hiringNotes}
             onChange={(e) => onHiringNotesChange(e.target.value)}
             rows={3}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
           />
         </div>
         <div>
@@ -5809,7 +5809,7 @@ function GuidedTeamStep({
             value={tmMotsOfNote}
             onChange={(e) => onTmMotsOfNoteChange(e.target.value)}
             rows={3}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
           />
         </div>
         <div>
@@ -5818,7 +5818,7 @@ function GuidedTeamStep({
             value={developmentPathUpdates}
             onChange={(e) => onDevelopmentPathUpdatesChange(e.target.value)}
             rows={3}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
           />
         </div>
       </div>
@@ -5832,7 +5832,7 @@ function GuidedTeamStep({
         </button>
         <button
           onClick={onNext}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          className="px-4 py-2 bg-cg-accent text-white rounded-lg font-medium hover:bg-cg-accentHover transition-colors"
         >
           Next
         </button>
@@ -5867,7 +5867,7 @@ function GuidedFacilitiesStep({
             value={rmIssues}
             onChange={(e) => onRmIssuesChange(e.target.value)}
             rows={4}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
           />
         </div>
         <div>
@@ -5876,7 +5876,7 @@ function GuidedFacilitiesStep({
             value={cleaningFocus}
             onChange={(e) => onCleaningFocusChange(e.target.value)}
             rows={4}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
           />
         </div>
       </div>
@@ -5890,7 +5890,7 @@ function GuidedFacilitiesStep({
         </button>
         <button
           onClick={onNext}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          className="px-4 py-2 bg-cg-accent text-white rounded-lg font-medium hover:bg-cg-accentHover transition-colors"
         >
           Next
         </button>
@@ -5935,7 +5935,7 @@ function GuidedFeaturesStep({
                 placeholder="Feature name"
                 value={item.name}
                 onChange={(e) => updateItem(index, 'name', e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
               />
             </div>
             <div className="md:col-span-2">
@@ -5944,7 +5944,7 @@ function GuidedFeaturesStep({
                 placeholder="Sold"
                 value={item.sold || ''}
                 onChange={(e) => updateItem(index, 'sold', parseInt(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
             </div>
             <div className="md:col-span-5">
@@ -5953,7 +5953,7 @@ function GuidedFeaturesStep({
                 placeholder="Notes"
                 value={item.notes}
                 onChange={(e) => updateItem(index, 'notes', e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
               />
             </div>
             <div className="md:col-span-1">
@@ -5980,7 +5980,7 @@ function GuidedFeaturesStep({
             value={notes}
             onChange={(e) => onNotesChange(e.target.value)}
             rows={4}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
           />
         </div>
       </div>
@@ -5994,7 +5994,7 @@ function GuidedFeaturesStep({
         </button>
         <button
           onClick={onNext}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          className="px-4 py-2 bg-cg-accent text-white rounded-lg font-medium hover:bg-cg-accentHover transition-colors"
         >
           Next
         </button>
@@ -6039,7 +6039,7 @@ function GuidedAuditStep({
             type="number"
             value={score}
             onChange={(e) => onScoreChange(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
         </div>
         <div>
@@ -6048,7 +6048,7 @@ function GuidedAuditStep({
             value={comment}
             onChange={(e) => onCommentChange(e.target.value)}
             rows={4}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
           />
         </div>
       </div>
@@ -6062,7 +6062,7 @@ function GuidedAuditStep({
         </button>
         <button
           onClick={onNext}
-          className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+          className="px-4 py-2 bg-cg-accent text-white rounded-lg font-medium hover:bg-cg-accentHover transition-colors"
         >
           Next
         </button>
@@ -6382,7 +6382,7 @@ function GuidedRecapStep({
           <button
             onClick={handleDraftActions}
             disabled={draftingActions}
-            className="px-3 py-1.5 text-sm bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors disabled:opacity-50"
+            className="px-3 py-1.5 text-sm bg-cg-accent text-white rounded-lg font-medium hover:bg-cg-accentHover transition-colors disabled:opacity-50"
           >
             {draftingActions ? 'Drafting...' : 'Draft from this week’s notes'}
           </button>
@@ -6411,20 +6411,20 @@ function GuidedRecapStep({
                     onChange={(e) => handleActionFieldChange(action.id, 'action_text', e.target.value)}
                     rows={2}
                     placeholder="What will you do next week? (e.g. Retrain line on portioning for high-variance items)"
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
                   />
                   <div className="flex gap-2">
                     <input
                       value={action.owner}
                       onChange={(e) => handleActionFieldChange(action.id, 'owner', e.target.value)}
                       placeholder="Owner (e.g. Sous, Chef)"
-                      className="flex-1 px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                      className="flex-1 px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
                     />
                     <input
                       value={action.due_by}
                       onChange={(e) => handleActionFieldChange(action.id, 'due_by', e.target.value)}
                       placeholder="By when (e.g. Fri)"
-                      className="flex-1 px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                      className="flex-1 px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
                     />
                   </div>
                 </div>
@@ -6457,7 +6457,7 @@ function GuidedRecapStep({
             <button
               onClick={handleSaveActions}
               disabled={savingActions}
-              className="px-3 py-1.5 text-sm bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors disabled:opacity-50"
+              className="px-3 py-1.5 text-sm bg-cg-accent text-white rounded-lg font-medium hover:bg-cg-accentHover transition-colors disabled:opacity-50"
             >
               {savingActions ? 'Saving...' : 'Save Actions'}
             </button>
@@ -6471,7 +6471,7 @@ function GuidedRecapStep({
           <button
             onClick={onGenerate}
             disabled={generating}
-            className="px-3 py-1.5 text-sm bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors disabled:opacity-50"
+            className="px-3 py-1.5 text-sm bg-cg-accent text-white rounded-lg font-medium hover:bg-cg-accentHover transition-colors disabled:opacity-50"
           >
             {generating ? 'Generating...' : 'Generate Summary'}
           </button>
@@ -6481,7 +6481,7 @@ function GuidedRecapStep({
           value={aiSummary}
           onChange={(e) => onAiSummaryChange(e.target.value)}
           rows={6}
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40"
         />
       </div>
 
@@ -6506,7 +6506,7 @@ function GuidedRecapStep({
           </button>
           <button
             onClick={handleFinish}
-            className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+            className="px-4 py-2 bg-cg-accent text-white rounded-lg font-medium hover:bg-cg-accentHover transition-colors"
           >
             Finish
           </button>

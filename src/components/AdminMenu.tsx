@@ -28,7 +28,7 @@ export function AdminMenu({ onClose }: AdminMenuProps) {
       <div className="md:w-64 bg-white border-b md:border-r md:border-b-0 border-slate-200 flex flex-col">
         <div className="p-4 md:p-6 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center">
+            <div className="w-10 h-10 bg-cg-accent rounded-lg flex items-center justify-center">
               <Settings className="w-6 h-6 text-white" />
             </div>
             <h2 className="text-lg md:text-xl font-bold text-slate-900">Admin Panel</h2>
@@ -46,7 +46,7 @@ export function AdminMenu({ onClose }: AdminMenuProps) {
             onClick={() => setActiveSection('users')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
               activeSection === 'users'
-                ? 'bg-slate-800 text-white'
+                ? 'bg-cg-accent text-white'
                 : 'text-slate-700 hover:bg-slate-100'
             }`}
           >
@@ -57,7 +57,7 @@ export function AdminMenu({ onClose }: AdminMenuProps) {
             onClick={() => setActiveSection('locations')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
               activeSection === 'locations'
-                ? 'bg-slate-800 text-white'
+                ? 'bg-cg-accent text-white'
                 : 'text-slate-700 hover:bg-slate-100'
             }`}
           >
@@ -68,7 +68,7 @@ export function AdminMenu({ onClose }: AdminMenuProps) {
             onClick={() => setActiveSection('roles')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
               activeSection === 'roles'
-                ? 'bg-slate-800 text-white'
+                ? 'bg-cg-accent text-white'
                 : 'text-slate-700 hover:bg-slate-100'
             }`}
           >
@@ -79,7 +79,7 @@ export function AdminMenu({ onClose }: AdminMenuProps) {
             onClick={() => setActiveSection('permissions')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
               activeSection === 'permissions'
-                ? 'bg-slate-800 text-white'
+                ? 'bg-cg-accent text-white'
                 : 'text-slate-700 hover:bg-slate-100'
             }`}
           >
@@ -90,7 +90,7 @@ export function AdminMenu({ onClose }: AdminMenuProps) {
             onClick={() => setActiveSection('chef-summaries')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
               activeSection === 'chef-summaries'
-                ? 'bg-slate-800 text-white'
+                ? 'bg-cg-accent text-white'
                 : 'text-slate-700 hover:bg-slate-100'
             }`}
           >
@@ -101,7 +101,7 @@ export function AdminMenu({ onClose }: AdminMenuProps) {
             onClick={() => setActiveSection('fiscal-calendar')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
               activeSection === 'fiscal-calendar'
-                ? 'bg-slate-800 text-white'
+                ? 'bg-cg-accent text-white'
                 : 'text-slate-700 hover:bg-slate-100'
             }`}
           >
@@ -112,7 +112,7 @@ export function AdminMenu({ onClose }: AdminMenuProps) {
             onClick={() => setActiveSection('pl-adjustments')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
               activeSection === 'pl-adjustments'
-                ? 'bg-slate-800 text-white'
+                ? 'bg-cg-accent text-white'
                 : 'text-slate-700 hover:bg-slate-100'
             }`}
           >

@@ -208,7 +208,7 @@ export default function UserSettings() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Enter your name"
-                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 focus:border-transparent"
                 />
               </div>
               <p className="text-xs text-slate-500 mt-1">
@@ -235,7 +235,7 @@ export default function UserSettings() {
                       onChange={(e) => setPin(e.target.value)}
                       placeholder="Enter 4-8 digit PIN"
                       maxLength={8}
-                      className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                      className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 focus:border-transparent"
                     />
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
@@ -255,7 +255,7 @@ export default function UserSettings() {
                       onChange={(e) => setConfirmPin(e.target.value)}
                       placeholder="Re-enter PIN"
                       maxLength={8}
-                      className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                      className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cg-accent/40 focus:border-transparent"
                     />
                   </div>
                 </div>
@@ -266,7 +266,7 @@ export default function UserSettings() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex items-center gap-2 px-6 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-6 py-2 bg-cg-accent text-white rounded-lg hover:bg-cg-accentHover transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
               >
                 {saving ? (
                   <>
@@ -369,7 +369,7 @@ export default function UserSettings() {
                 <button
                   onClick={handleSaveLocations}
                   disabled={savingLocations}
-                  className="flex items-center gap-2 px-5 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm"
+                  className="flex items-center gap-2 px-5 py-2 bg-cg-accent text-white rounded-lg hover:bg-cg-accentHover transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm"
                 >
                   {savingLocations ? (
                     <>
