@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChefHat, ArrowLeft, CreditCard as Edit2, Calendar, Upload } from 'lucide-react';
+import { ChefHat, ArrowLeft, CreditCard as Edit2, Calendar, Upload, Trash2, AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { WeeklyChefSummary } from './WeeklyChefSummary';
 import { ChefSummaryImporter } from './ChefSummaryImporter';
@@ -25,6 +25,10 @@ export function ChefSummariesManager() {
   const [selectedSummary, setSelectedSummary] = useState<ChefSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [showNewSummary, setShowNewSummary] = useState(false);
+  // Admin-only delete of a whole weekly package, behind an "are you sure" confirm.
+  const [pendingDelete, setPendingDelete] = useState<ChefSummary | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     loadLocations();
@@ -69,6 +73,40 @@ export function ChefSummariesManager() {
       console.error('Error loading summaries:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Permanently delete a weekly package: the chef_summary row plus that week's
+  // committed week-ahead actions. Period-level FCAP and P&L uploads are left
+  // alone (they are not week-scoped).
+  const handleConfirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      const { location_id, fiscal_year, period_number, week_number } = pendingDelete;
+
+      const { error: actionsError } = await supabase
+        .from('weekly_summary_actions')
+        .delete()
+        .eq('location_id', location_id)
+        .eq('fiscal_year', fiscal_year)
+        .eq('period_number', period_number)
+        .eq('week_number', week_number);
+      if (actionsError) throw actionsError;
+
+      const { error: summaryError } = await supabase
+        .from('weekly_summary_chef_summary')
+        .delete()
+        .eq('id', pendingDelete.id);
+      if (summaryError) throw summaryError;
+
+      setPendingDelete(null);
+      if (selectedLocation) await loadSummaries(selectedLocation.id);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete the weekly package.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -190,15 +228,60 @@ export function ChefSummariesManager() {
                     </div>
                   </div>
                 </div>
-                <button
-                  onClick={() => setSelectedSummary(summary)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-cg-accent text-white rounded-lg hover:bg-cg-accentHover transition-colors"
-                >
-                  <Edit2 className="w-4 h-4" />
-                  Edit Summary
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setSelectedSummary(summary)}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-cg-accent text-white rounded-lg hover:bg-cg-accentHover transition-colors"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    Edit Summary
+                  </button>
+                  <button
+                    onClick={() => { setDeleteError(''); setPendingDelete(summary); }}
+                    title="Delete this weekly package"
+                    className="flex items-center justify-center px-3 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {pendingDelete && selectedLocation && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="bg-white rounded-xl shadow-cg-md border border-cg-border max-w-md w-full p-6">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center flex-none">
+                  <AlertTriangle className="w-5 h-5 text-red-600" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-lg font-semibold text-cg-text">Delete this weekly package?</h3>
+                  <p className="text-sm text-cg-muted mt-1">
+                    This permanently deletes <span className="font-semibold text-cg-text">{selectedLocation.name} — FY {pendingDelete.fiscal_year} P{pendingDelete.period_number} W{pendingDelete.week_number}</span>: the chef summary and that week's committed actions. Period-level plans and P&L uploads are not affected. <span className="font-semibold text-cg-text">This cannot be undone.</span>
+                  </p>
+                  {deleteError && <p className="text-sm text-red-600 mt-2">{deleteError}</p>}
+                </div>
+              </div>
+              <div className="mt-6 flex items-center justify-end gap-3">
+                <button
+                  onClick={() => setPendingDelete(null)}
+                  disabled={deleting}
+                  className="px-4 py-2 text-cg-muted hover:bg-cg-surface2 hover:text-cg-text rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmDelete}
+                  disabled={deleting}
+                  className="flex items-center gap-2 bg-red-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  {deleting ? 'Deleting…' : 'Delete package'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
